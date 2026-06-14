@@ -72,9 +72,15 @@ function MetaBadge({ label, color }: { label: string; color: string }) {
 function RecCard({
   rec,
   onSetStatus,
+  onQueue,
+  isQueuing,
+  isQueued,
 }: {
   rec: Recommendation;
   onSetStatus: (id: string, status: RecStatus) => void;
+  onQueue: (id: string) => void;
+  isQueuing: boolean;
+  isQueued: boolean;
 }) {
   const statusColor = STATUS_COLOR[rec.status] ?? "#9ca3af";
   const riskColor   = RISK_COLOR[rec.risk]   ?? "#9ca3af";
@@ -154,6 +160,15 @@ function RecCard({
         </div>
       ) : (
         <div className="rec-action-row">
+          {rec.status === "accepted" && (
+            <button
+              className="rec-action-btn queue"
+              disabled={isQueuing || isQueued}
+              onClick={() => onQueue(rec.id)}
+            >
+              {isQueuing ? "Queuing…" : isQueued ? "Queued ✓" : "Queue Action"}
+            </button>
+          )}
           <button
             className="rec-action-btn reopen"
             onClick={() => onSetStatus(rec.id, "pending")}
@@ -172,11 +187,13 @@ const FILTERS = ["all", "pending", "accepted", "deferred", "rejected"] as const;
 type FilterValue = (typeof FILTERS)[number];
 
 export function Recommendations() {
-  const [recs, setRecs]           = useState<Recommendation[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [generating, setGenerating] = useState<RecMode | null>(null);
-  const [error, setError]         = useState<string | null>(null);
-  const [filter, setFilter]       = useState<FilterValue>("all");
+  const [recs, setRecs]               = useState<Recommendation[]>([]);
+  const [loading, setLoading]         = useState(true);
+  const [generating, setGenerating]   = useState<RecMode | null>(null);
+  const [error, setError]             = useState<string | null>(null);
+  const [filter, setFilter]           = useState<FilterValue>("all");
+  const [queuing, setQueuing]         = useState<string | null>(null);
+  const [queuedIds, setQueuedIds]     = useState<Set<string>>(new Set());
 
   const fetchRecs = useCallback(async () => {
     try {
@@ -231,6 +248,24 @@ export function Recommendations() {
     }
   }
 
+  async function queueRec(id: string) {
+    if (queuing) return;
+    setQueuing(id);
+    setError(null);
+    try {
+      const r = await fetch(`${API}/recommendations/${id}/queue`, { method: "POST" });
+      if (!r.ok) {
+        const detail = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(detail?.detail ?? `HTTP ${r.status}`);
+      }
+      setQueuedIds((prev) => new Set([...prev, id]));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setQueuing(null);
+    }
+  }
+
   const filtered     = filter === "all" ? recs : recs.filter((r) => r.status === filter);
   const pendingCount = recs.filter((r) => r.status === "pending").length;
 
@@ -280,7 +315,14 @@ export function Recommendations() {
           </div>
         )}
         {filtered.map((rec) => (
-          <RecCard key={rec.id} rec={rec} onSetStatus={setStatus} />
+          <RecCard
+            key={rec.id}
+            rec={rec}
+            onSetStatus={setStatus}
+            onQueue={queueRec}
+            isQueuing={queuing === rec.id}
+            isQueued={queuedIds.has(rec.id)}
+          />
         ))}
       </div>
     </div>

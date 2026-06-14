@@ -1775,3 +1775,161 @@ body {
   text-align: center;
   padding: 32px 0;
 }
+
+/* ── Action Queue ─────────────────────────────────────────────────────── */
+
+.wq-action-section {
+  border-top: 1px solid #1f2937;
+  margin-top: 8px;
+  padding-top: 4px;
+}
+
+.wq-refresh-btn {
+  background: transparent;
+  border: none;
+  color: #6b7280;
+  font-size: 14px;
+  cursor: pointer;
+  margin-left: 8px;
+  padding: 0 4px;
+  line-height: 1;
+  vertical-align: middle;
+}
+.wq-refresh-btn:hover { color: #d1d5db; }
+
+.wq-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wq-action-card {
+  background: #0d1117;
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wq-action-card.wq-action-executed { border-color: #14532d; }
+.wq-action-card.wq-action-failed   { border-color: #450a0a; }
+.wq-action-card.wq-action-dry-run-ready { border-color: #1e3a5f; }
+
+.wq-action-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wq-action-desc {
+  font-size: 13px;
+  font-weight: 500;
+  color: #e5e7eb;
+  flex: 1;
+}
+
+.wq-action-badge {
+  font-size: 11px;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.wq-badge-pending       { color: #6b8cff; border-color: #6b8cff; }
+.wq-badge-dry-run-ready { color: #60a5fa; border-color: #60a5fa; }
+.wq-badge-executed      { color: #4ade80; border-color: #4ade80; }
+.wq-badge-failed        { color: #f87171; border-color: #f87171; }
+
+.wq-action-proposed {
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.5;
+}
+
+.wq-action-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wq-action-btn {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #374151;
+  background: #1f2937;
+  color: #d1d5db;
+  transition: background 0.15s;
+}
+.wq-action-btn:hover:not(:disabled) { background: #374151; }
+.wq-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.wq-action-btn.primary {
+  background: #1e3a5f;
+  border-color: #3b82f6;
+  color: #93c5fd;
+}
+.wq-action-btn.primary:hover:not(:disabled) { background: #1d4ed8; color: #e0f2fe; }
+
+.wq-action-btn.secondary {
+  border-color: #374151;
+  color: #9ca3af;
+}
+
+.wq-action-done {
+  font-size: 12px;
+  color: #4ade80;
+}
+
+.wq-rollback-note {
+  color: #6b7280;
+  font-size: 11px;
+}
+
+.wq-action-failed {
+  font-size: 12px;
+  color: #f87171;
+}
+
+/* Dry-run preview panel */
+.wq-preview-panel {
+  background: #070c12;
+  border: 1px solid #1f2937;
+  border-radius: 4px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wq-preview-summary {
+  font-size: 12px;
+  color: #60a5fa;
+  font-weight: 500;
+}
+
+.wq-preview-content {
+  font-family: monospace;
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Queue Action button in Recommendations */
+.rec-action-btn.queue {
+  border-color: #3b82f6;
+  color: #60a5fa;
+  background: transparent;
+}
+.rec-action-btn.queue:hover:not(:disabled) { background: #1e3a5f; }
+.rec-action-btn.queue:disabled { opacity: 0.55; cursor: default; }

@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Eight next
+Status: active — Chunk Nine next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -37,8 +37,8 @@ For material or risk-triggering work:
 | Chunk Five — decision ledger | Complete | 2026-06-14 | POST/GET/PATCH /decisions; Decisions tab; Map badges |
 | Chunk Six — recommendation queue | Complete | 2026-06-14 | POST/GET/PATCH /recommendations; Ollama synthesis; Recommendations tab |
 | Chunk Seven — steady work mode | Complete | 2026-06-14 | POST/GET /missions; cancel; background threading; Work Queue tab |
-| Chunk Eight — approved actions | Active | — | Next |
-| Chunk Nine — GitHub packaging | Planned | — | |
+| Chunk Eight — approved actions | Complete | 2026-06-14 | POST/GET /actions; dry-run gate; execute; Work Queue action panel |
+| Chunk Nine — GitHub packaging | Active | — | Next |
 
 ---
 
@@ -292,7 +292,7 @@ Stop condition: stop before approved action execution. Output is cards only.
 
 ## Chunk Eight - Approved Actions
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Draft complete
 
@@ -316,10 +316,10 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Dry-run preview works before execution
-- [ ] Approve button required before execution (no auto-execute)
-- [ ] Execution report written to action record
-- [ ] Destructive and external actions remain disabled
+- [x] Dry-run preview works before execution
+- [x] Approve button required before execution (no auto-execute)
+- [x] Execution report written to action record
+- [x] Destructive and external actions remain disabled
 
 Stop condition: stop before GitHub publishing or public release.
 
@@ -399,3 +399,9 @@ date -Iseconds
 | 2026-06-14 | POST /missions/{id}/cancel (rank-builds) | Pass | status=cancelled immediately; cards_generated=0 |
 | 2026-06-14 | GET /recommendations after mission | Pass | Mission card visible alongside Chunk Six cards |
 | 2026-06-14 | Frontend typecheck after WorkQueue tab — tsc --noEmit | Pass | Zero errors |
+| 2026-06-14 | GET /actions (empty) | Pass | Returns empty array |
+| 2026-06-14 | POST /recommendations/{id}/queue (accepted rec) | Pass | Action record created, status=pending |
+| 2026-06-14 | POST /actions/{id}/dry-run | Pass | Preview generated, would_create=True, status=dry-run-ready |
+| 2026-06-14 | POST /actions/{id}/execute {confirmed:true} | Pass | File created in workspace/state/notes/; result.success=True |
+| 2026-06-14 | Execute without dry-run guard | Pass | 422 "Dry-run must be completed before execution." |
+| 2026-06-14 | Frontend typecheck after Chunk Eight — tsc --noEmit | Pass | Zero errors |

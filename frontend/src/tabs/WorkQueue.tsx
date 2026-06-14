@@ -5,6 +5,41 @@ import { useState, useEffect, useRef, useCallback } from "react";
 type MissionType = "archive-candidates" | "rank-builds" | "weak-coverage" | "duplicates";
 type MissionStatus = "running" | "completed" | "cancelled" | "failed";
 
+type ActionStatus = "pending" | "dry-run-ready" | "executed" | "failed";
+
+interface DryRunPreview {
+  target_path: string;
+  file_exists: boolean;
+  would_create: boolean;
+  preview_content: string;
+  summary: string;
+}
+
+interface ActionResult {
+  success: boolean;
+  file_created?: string;
+  message: string;
+}
+
+interface QueuedAction {
+  id: string;
+  source_recommendation_id: string;
+  action_type: string;
+  description: string;
+  target_path: string;
+  proposed_action_text: string;
+  rec_title: string;
+  rec_summary: string;
+  dry_run_preview: DryRunPreview | null;
+  dry_run_at: string | null;
+  approved_at: string | null;
+  executed_at: string | null;
+  result: ActionResult | null;
+  rollback_note: string;
+  status: ActionStatus;
+  created_at: string;
+}
+
 interface Mission {
   id: string;
   type: MissionType;
@@ -74,12 +109,18 @@ function relTime(iso: string): string {
 // ── Main component ────────────────────────────────────────────────────────
 
 export function WorkQueue() {
-  const [missions, setMissions] = useState<Mission[]>([]);
-  const [starting, setStarting] = useState<MissionType | null>(null);
-  const [focusId, setFocusId]   = useState<string | null>(null);
-  const [error, setError]       = useState<string | null>(null);
-  const pollingRef              = useRef<ReturnType<typeof setInterval> | null>(null);
-  const logRef                  = useRef<HTMLDivElement>(null);
+  const [missions, setMissions]   = useState<Mission[]>([]);
+  const [starting, setStarting]   = useState<MissionType | null>(null);
+  const [focusId, setFocusId]     = useState<string | null>(null);
+  const [error, setError]         = useState<string | null>(null);
+  const pollingRef                = useRef<ReturnType<typeof setInterval> | null>(null);
+  const logRef                    = useRef<HTMLDivElement>(null);
+
+  // Action queue state
+  const [actions, setActions]           = useState<QueuedAction[]>([]);
+  const [expandedAction, setExpanded]   = useState<string | null>(null);
+  const [actionWorking, setActionWorking] = useState<string | null>(null);
+  const [actionError, setActionError]   = useState<string | null>(null);
 
   // ── Polling ──────────────────────────────────────────────────────────
 
@@ -121,6 +162,16 @@ export function WorkQueue() {
 
   // ── Initial load ─────────────────────────────────────────────────────
 
+  const fetchActions = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/actions`);
+      if (!r.ok) return;
+      setActions(await r.json());
+    } catch {
+      // backend may not be up yet
+    }
+  }, []);
+
   useEffect(() => {
     async function load() {
       try {
@@ -140,6 +191,7 @@ export function WorkQueue() {
       }
     }
     load();
+    fetchActions();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ──────────────────────────────────────────────────────────
@@ -177,6 +229,49 @@ export function WorkQueue() {
       stopPolling();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  // ── Action handlers ──────────────────────────────────────────────────
+
+  async function runDryRun(id: string) {
+    setActionWorking(id);
+    setActionError(null);
+    try {
+      const r = await fetch(`${API}/actions/${id}/dry-run`, { method: "POST" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(d.detail ?? `HTTP ${r.status}`);
+      }
+      const updated: QueuedAction = await r.json();
+      setActions((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      setExpanded(id);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionWorking(null);
+    }
+  }
+
+  async function runExecute(id: string) {
+    setActionWorking(id);
+    setActionError(null);
+    try {
+      const r = await fetch(`${API}/actions/${id}/execute`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ confirmed: true }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(d.detail ?? `HTTP ${r.status}`);
+      }
+      const updated: QueuedAction = await r.json();
+      setActions((prev) => prev.map((a) => (a.id === id ? updated : a)));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setActionWorking(null);
     }
   }
 
@@ -290,6 +385,93 @@ export function WorkQueue() {
           No missions run yet this session. Pick one above to start.
         </div>
       )}
+
+      {/* ── Action Queue ──────────────────────────────────────────── */}
+      <div className="wq-section wq-action-section">
+        <div className="wq-section-title">
+          Action Queue
+          <button className="wq-refresh-btn" onClick={fetchActions} title="Refresh actions">↻</button>
+        </div>
+
+        {actionError && <div className="wq-error">{actionError}</div>}
+
+        {actions.length === 0 ? (
+          <div className="wq-empty">
+            No actions queued. Accept a recommendation in the Recommendations tab, then click "Queue Action".
+          </div>
+        ) : (
+          <div className="wq-action-list">
+            {actions.map((action) => {
+              const isWorking  = actionWorking === action.id;
+              const isExpanded = expandedAction === action.id;
+              return (
+                <div key={action.id} className={`wq-action-card wq-action-${action.status}`}>
+                  <div className="wq-action-head">
+                    <div className="wq-action-desc">{action.description}</div>
+                    <span className={`wq-action-badge wq-badge-${action.status}`}>
+                      {action.status === "dry-run-ready" ? "dry-run ready" : action.status}
+                    </span>
+                  </div>
+
+                  <div className="wq-action-proposed">{action.proposed_action_text}</div>
+
+                  <div className="wq-action-footer">
+                    {action.status === "pending" && (
+                      <button
+                        className="wq-action-btn"
+                        disabled={isWorking}
+                        onClick={() => runDryRun(action.id)}
+                      >
+                        {isWorking ? "Running…" : "Dry Run"}
+                      </button>
+                    )}
+
+                    {action.status === "dry-run-ready" && (
+                      <>
+                        <button
+                          className="wq-action-btn secondary"
+                          onClick={() => setExpanded(isExpanded ? null : action.id)}
+                        >
+                          {isExpanded ? "Hide Preview" : "Show Preview"}
+                        </button>
+                        <button
+                          className="wq-action-btn primary"
+                          disabled={isWorking}
+                          onClick={() => runExecute(action.id)}
+                        >
+                          {isWorking ? "Executing…" : "Approve & Execute"}
+                        </button>
+                      </>
+                    )}
+
+                    {action.status === "executed" && action.result?.success && (
+                      <span className="wq-action-done">
+                        ✓ {action.result.message}
+                        {" — "}
+                        <span className="wq-rollback-note">{action.rollback_note}</span>
+                      </span>
+                    )}
+
+                    {(action.status === "failed" || (action.status === "executed" && !action.result?.success)) && (
+                      <span className="wq-action-failed">
+                        ✗ {action.result?.message ?? "Unknown error"}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dry-run preview panel */}
+                  {isExpanded && action.dry_run_preview && (
+                    <div className="wq-preview-panel">
+                      <div className="wq-preview-summary">{action.dry_run_preview.summary}</div>
+                      <pre className="wq-preview-content">{action.dry_run_preview.preview_content}</pre>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
