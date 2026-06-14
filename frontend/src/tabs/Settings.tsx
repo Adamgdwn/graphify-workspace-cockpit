@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { API } from "../config";
+import { useToast } from "../components/Toast";
 
 interface AppSettings {
   version: string;
   graph_path: string;
   graph_name: string;
   node_count: number;
+  edge_count: number;
   state_dir: string;
   api_key_required: boolean;
 }
@@ -41,6 +43,7 @@ export function Settings() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [activating, setActivating] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const { addToast } = useToast();
 
   function loadAll() {
     fetch(`${API}/settings`)
@@ -79,10 +82,13 @@ export function Settings() {
       const data = await r.json();
       if (!r.ok) throw new Error(data.detail ?? "Upload failed");
       setUploadMsg(`Activated ${data.filename} (${data.node_count} nodes)`);
+      addToast(`Graph activated — ${data.node_count} nodes`, "success");
       if (fileRef.current) fileRef.current.value = "";
       loadAll();
     } catch (err: unknown) {
-      setUploadError(err instanceof Error ? err.message : "Upload failed");
+      const msg = err instanceof Error ? err.message : "Upload failed";
+      setUploadError(msg);
+      addToast(msg, "error");
     } finally {
       setUploading(false);
     }
@@ -96,9 +102,12 @@ export function Settings() {
         const data = await r.json().catch(() => ({})) as { detail?: string };
         throw new Error(data.detail ?? `HTTP ${r.status}`);
       }
+      addToast(`Graph "${name}" activated`, "success");
       loadAll();
     } catch (err: unknown) {
-      setUploadError(err instanceof Error ? err.message : "Activation failed");
+      const msg = err instanceof Error ? err.message : "Activation failed";
+      setUploadError(msg);
+      addToast(msg, "error");
     } finally {
       setActivating(null);
     }
@@ -115,6 +124,8 @@ export function Settings() {
     });
   }
 
+  const edgesZero = settings !== null && settings.edge_count === 0;
+
   return (
     <div className="settings-pane">
       <h2 className="settings-heading">Settings</h2>
@@ -129,8 +140,11 @@ export function Settings() {
               <span className="settings-value">{settings.graph_name}</span>
             </div>
             <div className="settings-row">
-              <span className="settings-label">Nodes</span>
-              <span className="settings-value">{settings.node_count}</span>
+              <span className="settings-label">Nodes / Edges</span>
+              <span className={`settings-value${edgesZero ? " settings-warn" : ""}`}>
+                {settings.node_count} nodes / {settings.edge_count} edges
+                {edgesZero && <span className="settings-warn-tag"> ⚠ no edges — run graphify update to rebuild</span>}
+              </span>
             </div>
             <div className="settings-row">
               <span className="settings-label">Path</span>

@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { API } from "../config";
+import { Skeleton } from "../components/Skeleton";
+import { useToast } from "../components/Toast";
 
 type Mode = "query" | "path" | "explain";
 
@@ -33,7 +35,12 @@ const MODE_HINTS: Record<Mode, string> = {
   explain: "Node detail — connections and metadata for a named node",
 };
 
-export function Ask() {
+interface AskProps {
+  focusTrigger?: number;
+  askRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
+}
+
+export function Ask({ focusTrigger = 0, askRef }: AskProps) {
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<Mode>("query");
   const [nodeA, setNodeA] = useState("");
@@ -41,6 +48,20 @@ export function Ask() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<AskResponse | null>(null);
+  const { addToast } = useToast();
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Wire the shared ref so App can forward focus
+  useEffect(() => {
+    if (askRef) askRef.current = textareaRef.current;
+  });
+
+  // Ctrl+K fires this
+  useEffect(() => {
+    if (focusTrigger > 0) {
+      textareaRef.current?.focus();
+    }
+  }, [focusTrigger]);
 
   async function submit(q: string, m: Mode, a?: string, b?: string) {
     setLoading(true);
@@ -65,7 +86,9 @@ export function Ask() {
       }
       setResponse(await res.json());
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     } finally {
       setLoading(false);
     }
@@ -129,6 +152,7 @@ export function Ask() {
           />
         ) : (
           <textarea
+            ref={textareaRef}
             className="ask-textarea"
             rows={3}
             placeholder="What projects are in this workspace?"
@@ -143,9 +167,19 @@ export function Ask() {
         </button>
       </form>
 
-      {error && <div className="ask-error">{error}</div>}
+      {/* Loading skeleton in answer area */}
+      {loading && (
+        <div className="ask-skeleton-area">
+          <Skeleton height={14} width="80%" style={{ marginBottom: 10 }} />
+          <Skeleton height={12} style={{ marginBottom: 8 }} />
+          <Skeleton height={12} width="90%" style={{ marginBottom: 8 }} />
+          <Skeleton height={12} width="65%" />
+        </div>
+      )}
 
-      {response && (
+      {error && !loading && <div className="ask-error">{error}</div>}
+
+      {response && !loading && (
         <div className="ask-result">
           <div className="ask-answer">
             <pre className="ask-answer-text">{response.answer}</pre>
@@ -196,6 +230,16 @@ export function Ask() {
           )}
 
           <p className="ask-session-id">Session {response.session_id}</p>
+        </div>
+      )}
+
+      {/* Empty state — shown before any interaction */}
+      {!loading && !response && !error && (
+        <div className="ask-empty">
+          <p className="ask-empty-hint">
+            Ask anything about your workspace — projects, dependencies, decisions, or relationships.
+          </p>
+          <p className="ask-empty-shortcut">Tip: <kbd>Ctrl+K</kbd> focuses this tab from anywhere.</p>
         </div>
       )}
     </div>

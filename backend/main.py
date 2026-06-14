@@ -1227,9 +1227,11 @@ def execute_action(action_id: str, req: ExecuteActionRequest) -> dict:
 def get_settings() -> dict:
     graph_path = _graph_path()
     node_count = 0
+    edge_count = 0
     try:
         data = _load_graph()
         node_count = len(data.get("nodes", []))
+        edge_count = len(data.get("edges", []))
     except Exception:
         pass
     return {
@@ -1237,6 +1239,7 @@ def get_settings() -> dict:
         "graph_path": graph_path,
         "graph_name": Path(graph_path).name,
         "node_count": node_count,
+        "edge_count": edge_count,
         "state_dir": str(WORKSPACE_STATE),
         "api_key_required": bool(API_KEY),
     }

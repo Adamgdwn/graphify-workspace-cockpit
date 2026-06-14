@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { API } from "../config";
+import { SkeletonCard } from "../components/Skeleton";
+import { useToast } from "../components/Toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -47,6 +49,16 @@ function formatDate(iso: string) {
   });
 }
 
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 const BLANK = { target_id: "", classification: "" as Classification | "", rationale: "" };
@@ -61,6 +73,7 @@ export function Decisions() {
   const [areas, setAreas] = useState<string[]>([]);
   const [showRetired, setShowRetired] = useState(false);
   const etagRef = useRef<string>("");
+  const { addToast } = useToast();
 
   async function fetchDecisions() {
     try {
@@ -81,7 +94,6 @@ export function Decisions() {
 
   useEffect(() => {
     fetchDecisions();
-    // Fetch known graph areas for autocomplete datalist
     fetch(`${API}/graph/summary`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -114,6 +126,7 @@ export function Decisions() {
           body: JSON.stringify({ classification: form.classification, rationale: form.rationale }),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        addToast("Decision updated", "success");
       } else {
         const r = await fetch(`${API}/decisions`, {
           method: "POST",
@@ -126,11 +139,14 @@ export function Decisions() {
           }),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        addToast("Decision saved", "success");
       }
       cancelForm();
       await fetchDecisions();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     } finally {
       setSaving(false);
     }
@@ -143,9 +159,12 @@ export function Decisions() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "retired" }),
       });
+      addToast("Decision retired", "info");
       await fetchDecisions();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     }
   }
 
@@ -156,10 +175,18 @@ export function Decisions() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "active" }),
       });
+      addToast("Decision reactivated", "success");
       await fetchDecisions();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     }
+  }
+
+  function handleExport() {
+    downloadJson(decisions, "decisions.json");
+    addToast("Decisions exported", "info");
   }
 
   const activeDecisions = decisions.filter((d) => d.status === "active");
@@ -257,13 +284,25 @@ export function Decisions() {
           {activeDecisions.length > 0 && (
             <span className="dec-count">{activeDecisions.length}</span>
           )}
+          {!loading && decisions.length > 0 && (
+            <button type="button" className="export-btn" onClick={handleExport}>
+              Export JSON
+            </button>
+          )}
         </div>
 
-        {loading && <div className="dec-empty">Loading…</div>}
+        {loading && (
+          <div className="dec-skeleton-list">
+            <SkeletonCard lines={3} />
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={3} />
+          </div>
+        )}
 
         {!loading && activeDecisions.length === 0 && (
           <div className="dec-empty">
-            No decisions yet. Use the form to classify your first project area.
+            <p className="dec-empty-msg">No decisions yet.</p>
+            <p className="dec-empty-hint">Use the form to classify your first project area and track what to invest in, archive, or monitor.</p>
           </div>
         )}
 

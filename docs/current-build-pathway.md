@@ -42,7 +42,7 @@ For material or risk-triggering work:
 | Chunk Ten — network-ready deployment | Complete | 2026-06-14 | API key auth, graph upload, Settings tab, Caddy, responsive, deployment guide |
 | Chunk Eleven — shared state / company-wide source of truth | Complete | 2026-06-14 | Storage abstraction, Supabase backend, ETag polling, created_by, graph list, UAOS handoff, integration guide |
 | Chunk Twelve — real graph foundation | Complete | 2026-06-14 | graphify-out/graph.json: 533 nodes, 645 edges; demo_mode flag in /health; dismissible frontend banner; all five tabs validated against live data |
-| Chunk Thirteen — demo polish and UX quality | Planned | — | Loading skeletons, empty states, toast notifications, connection status, export, typography pass |
+| Chunk Thirteen — demo polish and UX quality | Complete | 2026-06-14 | Toast system, skeleton shimmer, connection status dot, Ctrl+K, Export JSON/UAOS, empty states, edge-count warning, typography pass |
 | Chunk Fourteen — cloud knowledge base connectors | Planned | — | Microsoft Graph API auth, SharePoint + OneNote ingestion, connector UI, sync scheduling |
 
 ---
@@ -610,7 +610,7 @@ migration until this is validated locally.
 
 ## Chunk Thirteen - Demo Polish And UX Quality
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Integration complete
 
@@ -660,19 +660,37 @@ Outputs:
 - **Keyboard shortcut**: `Ctrl+K` / `Cmd+K` opens the Ask tab and focuses
   the question input from anywhere in the app
 
+Outcomes — 2026-06-14:
+
+- `src/components/Toast.tsx` — ToastProvider + useToast hook; auto-dismiss
+  after 4 s; success/error/info variants; dismissible; renders top-right
+- `src/components/Skeleton.tsx` — shimmer skeleton + SkeletonCard; used in
+  Decisions, Recommendations, and Ask answer area
+- Connection status dot in header: green (backend + Ollama), amber (backend
+  only), red (offline); polls /health + /status/ollama every 15 s
+- `Ctrl+K` / `Cmd+K` global shortcut → switches to Ask tab + focuses textarea
+- Decisions: skeleton list on load, toast on save/retire/reactivate, Export JSON
+- Recommendations: skeleton list on load, toast on generate/status/queue, Export JSON
+- WorkQueue: toast on mission start/complete/cancel/dry-run/execute, Export UAOS Handoff button
+- Settings: "N nodes / M edges" display; red warning + rebuild hint when edges = 0;
+  toast on graph upload/activate; backend adds edge_count to /settings response
+- Ask: skeleton shimmer in answer area during loading; empty state with Ctrl+K tip
+- styles.css: shimmer animation, toast styles, conn-dot, export-btn,
+  empty-state helpers, typography pass with consistent card padding (14px 16px)
+
 Acceptance criteria:
 
-- [ ] No tab shows a blank screen on first load — skeleton or empty state
+- [x] No tab shows a blank screen on first load — skeleton or empty state
       appears within 200ms
-- [ ] Every mutation (save, accept, reject, execute, activate) shows a toast
+- [x] Every mutation (save, accept, reject, execute, activate) shows a toast
       confirmation or error message
-- [ ] Connection status in header reflects real backend + Ollama state
-- [ ] Export buttons produce valid, parseable JSON / UAOS envelope files
-- [ ] Edge-count warning appears in Settings when active graph has 0 edges
-- [ ] `Ctrl+K` focuses Ask from any tab
-- [ ] Typography pass: consistent scale, no visual regressions on desktop
+- [x] Connection status in header reflects real backend + Ollama state
+- [x] Export buttons produce valid, parseable JSON / UAOS envelope files
+- [x] Edge-count warning appears in Settings when active graph has 0 edges
+- [x] `Ctrl+K` focuses Ask from any tab
+- [x] Typography pass: consistent scale, no visual regressions on desktop
       and tablet (768px)
-- [ ] `tsc --noEmit` zero errors after this chunk
+- [x] `tsc --noEmit` zero errors after this chunk
 
 Stop condition: stop before adding new data features or connectors. This
 chunk touches presentation only — no new endpoints, no new state, no new

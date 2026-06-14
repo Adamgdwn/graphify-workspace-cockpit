@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { API } from "../config";
+import { useToast } from "../components/Toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -105,6 +106,16 @@ function relTime(iso: string): string {
   return `${Math.floor(m / 60)}h ago`;
 }
 
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Main component ────────────────────────────────────────────────────────
 
 export function WorkQueue() {
@@ -114,6 +125,7 @@ export function WorkQueue() {
   const [error, setError]         = useState<string | null>(null);
   const pollingRef                = useRef<ReturnType<typeof setInterval> | null>(null);
   const logRef                    = useRef<HTMLDivElement>(null);
+  const { addToast } = useToast();
 
   // Action queue state
   const [actions, setActions]           = useState<QueuedAction[]>([]);
@@ -137,11 +149,18 @@ export function WorkQueue() {
       if (!r.ok) return;
       const m: Mission = await r.json();
       setMissions((prev) => prev.map((x) => (x.id === id ? m : x)));
-      if (m.status !== "running") stopPolling();
+      if (m.status !== "running") {
+        stopPolling();
+        if (m.status === "completed") {
+          addToast(`Mission completed — ${m.cards_generated} card${m.cards_generated !== 1 ? "s" : ""} added`, "success");
+        } else if (m.status === "failed") {
+          addToast("Mission failed", "error");
+        }
+      }
     } catch {
       // network blip — keep polling
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startPolling(id: string) {
     stopPolling();
@@ -219,8 +238,11 @@ export function WorkQueue() {
       setMissions((prev) => [m, ...prev]);
       setFocusId(m.id);
       startPolling(m.id);
+      addToast(`${missionLabel(type)} mission started`, "info");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     } finally {
       setStarting(null);
     }
@@ -233,8 +255,11 @@ export function WorkQueue() {
       const m: Mission = await r.json();
       setMissions((prev) => prev.map((x) => (x.id === id ? m : x)));
       stopPolling();
+      addToast("Mission cancelled", "info");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     }
   }
 
@@ -252,8 +277,11 @@ export function WorkQueue() {
       const updated: QueuedAction = await r.json();
       setActions((prev) => prev.map((a) => (a.id === id ? updated : a)));
       setExpanded(id);
+      addToast("Dry run complete — review preview below", "success");
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setActionError(msg);
+      addToast(msg, "error");
     } finally {
       setActionWorking(null);
     }
@@ -274,10 +302,26 @@ export function WorkQueue() {
       }
       const updated: QueuedAction = await r.json();
       setActions((prev) => prev.map((a) => (a.id === id ? updated : a)));
+      addToast("Action executed successfully", "success");
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setActionError(msg);
+      addToast(msg, "error");
     } finally {
       setActionWorking(null);
+    }
+  }
+
+  async function handleUaosExport() {
+    try {
+      const r = await fetch(`${API}/actions?format=uaos`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      downloadJson(data, "uaos-handoff.json");
+      addToast("UAOS handoff exported", "info");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      addToast(msg, "error");
     }
   }
 
@@ -397,13 +441,21 @@ export function WorkQueue() {
         <div className="wq-section-title">
           Action Queue
           <button className="wq-refresh-btn" onClick={fetchActions} title="Refresh actions">↻</button>
+          {actions.length > 0 && (
+            <button type="button" className="export-btn" onClick={handleUaosExport}>
+              Export UAOS Handoff
+            </button>
+          )}
         </div>
 
         {actionError && <div className="wq-error">{actionError}</div>}
 
         {actions.length === 0 ? (
           <div className="wq-empty">
-            No actions queued. Accept a recommendation in the Recommendations tab, then click "Queue Action".
+            <p style={{ margin: "0 0 6px" }}>No actions queued.</p>
+            <p style={{ margin: 0, opacity: 0.6, fontSize: "0.8rem" }}>
+              Accept a recommendation in the Recommendations tab, then click "Queue Action".
+            </p>
           </div>
         ) : (
           <div className="wq-action-list">

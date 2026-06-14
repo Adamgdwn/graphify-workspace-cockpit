@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { API } from "../config";
+import { SkeletonCard } from "../components/Skeleton";
+import { useToast } from "../components/Toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -43,6 +45,18 @@ const RISK_COLOR: Record<string, string> = {
   medium: "#f5d280",
   high:   "#f87171",
 };
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // ── Sub-components ────────────────────────────────────────────────────────
 
@@ -198,6 +212,7 @@ export function Recommendations() {
   const [queuing, setQueuing]         = useState<string | null>(null);
   const [queuedIds, setQueuedIds]     = useState<Set<string>>(new Set());
   const etagRef = useRef<string>("");
+  const { addToast } = useToast();
 
   const fetchRecs = useCallback(async () => {
     try {
@@ -238,8 +253,11 @@ export function Recommendations() {
       const newRec: Recommendation = await r.json();
       setRecs((prev) => [newRec, ...prev]);
       setFilter("pending");
+      addToast(`${MODE_LABELS[mode]} recommendation generated`, "success");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     } finally {
       setGenerating(null);
     }
@@ -255,8 +273,11 @@ export function Recommendations() {
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const updated: Recommendation = await r.json();
       setRecs((prev) => prev.map((rec) => (rec.id === id ? updated : rec)));
+      addToast(`Recommendation ${status}`, "success");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     }
   }
 
@@ -271,11 +292,20 @@ export function Recommendations() {
         throw new Error(detail?.detail ?? `HTTP ${r.status}`);
       }
       setQueuedIds((prev) => new Set([...prev, id]));
+      addToast("Action queued — check Work Queue", "success");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
+      addToast(msg, "error");
     } finally {
       setQueuing(null);
     }
+  }
+
+  function handleExport() {
+    const exportData = filter === "all" ? recs : recs.filter((r) => r.status === filter);
+    downloadJson(exportData, "recommendations.json");
+    addToast("Recommendations exported", "info");
   }
 
   const filtered     = filter === "all" ? recs : recs.filter((r) => r.status === filter);
@@ -312,18 +342,34 @@ export function Recommendations() {
             )}
           </button>
         ))}
+        {!loading && recs.length > 0 && (
+          <button type="button" className="export-btn" onClick={handleExport}>
+            Export JSON
+          </button>
+        )}
       </div>
 
       {error && <div className="rec-error">{error}</div>}
 
       {/* Card list */}
       <div className="rec-list">
-        {loading && <div className="rec-empty">Loading…</div>}
+        {loading && (
+          <>
+            <SkeletonCard lines={4} />
+            <SkeletonCard lines={3} />
+            <SkeletonCard lines={4} />
+          </>
+        )}
         {!loading && filtered.length === 0 && (
           <div className="rec-empty">
-            {filter === "all"
-              ? "No recommendations yet. Use the buttons above to generate your first card."
-              : `No ${filter} recommendations.`}
+            {filter === "all" ? (
+              <>
+                <p className="rec-empty-msg">No recommendations yet.</p>
+                <p className="rec-empty-hint">Use the Generate buttons above to create your first recommendation from the workspace graph.</p>
+              </>
+            ) : (
+              <p className="rec-empty-msg">No {filter} recommendations.</p>
+            )}
           </div>
         )}
         {filtered.map((rec) => (

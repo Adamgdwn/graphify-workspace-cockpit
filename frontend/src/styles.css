@@ -19,6 +19,9 @@ body {
   padding: 12px 20px;
   background: #1a1d27;
   border-bottom: 1px solid #2a2d3a;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 .cockpit-title {
@@ -2317,3 +2320,281 @@ body {
   color: #64748b;
   font-size: 11px;
 }
+
+/* ── Connection status dot ───────────────────────────────────────────────── */
+
+.conn-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+
+.conn-ok {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.6);
+}
+
+.conn-degraded {
+  background: #f5a623;
+  box-shadow: 0 0 6px rgba(245, 166, 35, 0.6);
+}
+
+.conn-offline {
+  background: #f87171;
+  box-shadow: 0 0 6px rgba(248, 113, 113, 0.6);
+}
+
+/* ── Toast notifications ─────────────────────────────────────────────────── */
+
+.toast-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 0.855rem;
+  font-weight: 500;
+  max-width: 340px;
+  pointer-events: all;
+  animation: toast-in 0.18s ease-out;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.toast-msg {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.6;
+  flex-shrink: 0;
+  transition: opacity 0.12s;
+}
+
+.toast-close:hover {
+  opacity: 1;
+}
+
+.toast-success {
+  background: #0d1f12;
+  border-color: #166534;
+  color: #86efac;
+}
+
+.toast-success .toast-close { color: #86efac; }
+
+.toast-error {
+  background: #1f0d0d;
+  border-color: #7f1d1d;
+  color: #fca5a5;
+}
+
+.toast-error .toast-close { color: #fca5a5; }
+
+.toast-info {
+  background: #0d1030;
+  border-color: #1e3a8a;
+  color: #93c5fd;
+}
+
+.toast-info .toast-close { color: #93c5fd; }
+
+/* ── Skeleton shimmer ────────────────────────────────────────────────────── */
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.skeleton {
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    #1a1d27 25%,
+    #242838 50%,
+    #1a1d27 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+  display: block;
+}
+
+.skeleton-card {
+  padding: 14px 0;
+  border-bottom: 1px solid #1e2030;
+}
+
+.skeleton-card:last-child {
+  border-bottom: none;
+}
+
+.dec-skeleton-list {
+  padding: 4px 0;
+}
+
+/* ── Export button ───────────────────────────────────────────────────────── */
+
+.export-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid #2a2d3a;
+  border-radius: 4px;
+  background: transparent;
+  color: #5a6380;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.export-btn:hover {
+  color: #c8cfe0;
+  border-color: #404460;
+  background: #1e2030;
+}
+
+/* ── Settings warn ───────────────────────────────────────────────────────── */
+
+.settings-warn {
+  color: #f87171;
+}
+
+.settings-warn-tag {
+  display: block;
+  font-size: 0.775rem;
+  margin-top: 4px;
+  color: #f87171;
+  opacity: 0.85;
+}
+
+/* ── Ask empty state ─────────────────────────────────────────────────────── */
+
+.ask-skeleton-area {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #1e2030;
+  border-radius: 8px;
+  background: #131620;
+}
+
+.ask-empty {
+  margin-top: 32px;
+  padding: 24px;
+  border: 1px dashed #2a2d3a;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.ask-empty-hint {
+  margin: 0 0 10px;
+  color: #5a6380;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.ask-empty-shortcut {
+  margin: 0;
+  color: #3a4260;
+  font-size: 0.8rem;
+}
+
+.ask-empty-shortcut kbd {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  background: #1e2030;
+  border: 1px solid #2a2d3a;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #6b8cff;
+}
+
+/* ── Decisions empty state ───────────────────────────────────────────────── */
+
+.dec-empty {
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.dec-empty-msg {
+  margin: 0 0 8px;
+  color: #5a6380;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.dec-empty-hint {
+  margin: 0;
+  color: #3a4260;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* ── Recommendations empty state ─────────────────────────────────────────── */
+
+.rec-empty {
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.rec-empty-msg {
+  margin: 0 0 8px;
+  color: #5a6380;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.rec-empty-hint {
+  margin: 0;
+  color: #3a4260;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+/* ── Typography pass — consistent font scale ─────────────────────────────── */
+/* Base body font is system-ui 14px (set above).
+   Headings: 1.25rem (h2). Labels: 0.875rem. Meta/hints: 0.8rem. */
+
+.settings-heading,
+.ask-heading {
+  font-size: 1.25rem;
+}
+
+.ask-subheading,
+.settings-dim {
+  font-size: 0.875rem;
+}
+
+/* Ensure consistent card padding across decisions / rec / wq cards */
+.dec-card,
+.rec-card,
+.wq-action-card,
+.wq-mission-card {
+  padding: 14px 16px;
+}
+
