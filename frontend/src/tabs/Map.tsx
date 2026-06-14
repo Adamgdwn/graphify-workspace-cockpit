@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API } from "../config";
 import cytoscape from "cytoscape";
 import type { Core } from "cytoscape";
 // @ts-ignore
@@ -389,7 +390,7 @@ export function Map() {
 
   // Fetch decisions (non-critical — silently ignored if backend down)
   useEffect(() => {
-    fetch("http://localhost:8000/decisions")
+    fetch(`${API}/decisions`)
       .then((r) => (r.ok ? r.json() : []))
       .then((list: Array<{ target_id: string; classification: string; status: string }>) => {
         const map: Record<string, string> = {};
@@ -411,7 +412,7 @@ export function Map() {
     setPathNoRoute(false);
     try {
       const qs = project ? `?project=${encodeURIComponent(project)}` : "";
-      const res = await fetch(`http://localhost:8000/graph/summary${qs}`);
+      const res = await fetch(`${API}/graph/summary${qs}`);
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error((body as any).detail ?? `HTTP ${res.status}`);

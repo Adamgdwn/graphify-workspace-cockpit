@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { API } from "../config";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -44,8 +45,6 @@ function formatDate(iso: string) {
     year: "numeric",
   });
 }
-
-const API = "http://localhost:8000";
 
 // ── Component ─────────────────────────────────────────────────────────────
 

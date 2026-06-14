@@ -11,5 +11,13 @@ frontend/dist/
 # State (user data — not committed)
 workspace/state/
 
+# Env files (copy .env.example and fill in values — never commit real values)
+.env
+backend/.env
+frontend/.env
+
+# Private graph output — only workspace/demo/graph.json is committed
+workspace/out/
+
 # OS
 .DS_Store

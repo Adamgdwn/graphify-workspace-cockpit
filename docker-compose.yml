@@ -1,0 +1,25 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./workspace/state:/app/workspace/state
+    environment:
+      GRAPH_PATH: ${GRAPH_PATH:-workspace/demo/graph.json}
+      STATE_DIR: workspace/state
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend

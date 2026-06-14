@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { API } from "../config";
 
 type Mode = "query" | "path" | "explain";
 
@@ -53,7 +54,7 @@ export function Ask() {
       } else if (m === "explain") {
         body.node_a = a || q;
       }
-      const res = await fetch("http://localhost:8000/ask", {
+      const res = await fetch(`${API}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

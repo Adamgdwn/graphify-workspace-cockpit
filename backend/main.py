@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import uuid
@@ -15,12 +16,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-WORKSPACE_STATE = Path(__file__).parent.parent / "workspace" / "state"
+_STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
+WORKSPACE_STATE = (
+    Path(_STATE_DIR_ENV) if _STATE_DIR_ENV
+    else Path(__file__).parent.parent / "workspace" / "state"
+)
 SESSIONS_DIR = WORKSPACE_STATE / "sessions"
 SETTINGS_FILE = WORKSPACE_STATE / "settings.json"
 DECISIONS_FILE = WORKSPACE_STATE / "decisions.json"
 
-DEFAULT_GRAPH = "/home/adamgoodwin/code/Tools/graphify/workspace/out/graph.json"
+_DEMO_GRAPH = str(Path(__file__).parent.parent / "workspace" / "demo" / "graph.json")
+DEFAULT_GRAPH = os.environ.get("GRAPH_PATH", _DEMO_GRAPH)
 
 # In-memory cache — loaded once per server lifetime
 _graph_cache: dict | None = None
@@ -28,9 +34,14 @@ _summary_cache: dict[str, dict] = {}
 
 app = FastAPI(title="Graphify Workspace Cockpit", version="0.1.0")
 
+_cors_origins = [
+    o.strip()
+    for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if o.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -558,8 +569,9 @@ def _call_ollama(prompt: str, model: str, timeout: int = 120) -> str:
         "stream": False,
         "format": "json",
     }).encode("utf-8")
+    _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
     request = _req.Request(
-        "http://localhost:11434/api/generate",
+        f"{_ollama_base}/api/generate",
         data=payload,
         headers={"Content-Type": "application/json"},
         method="POST",

@@ -71,9 +71,26 @@ See `docs/specs/` for full schemas. Summary:
 | Cytoscape.js | Graph visualization | Yes |
 | Ollama | Local model synthesis | Optional (degrades gracefully) |
 
+## Environment Variables (Chunk Nine+)
+
+All hardcoded paths and service URLs are now configurable via environment variables. See `backend/.env.example` and `frontend/.env.example` for documentation.
+
+| Variable | Where | Default | Purpose |
+|----------|-------|---------|---------|
+| `GRAPH_PATH` | backend | `workspace/demo/graph.json` | Path to graph.json |
+| `STATE_DIR` | backend | `workspace/state` | Persistent state root |
+| `CORS_ORIGINS` | backend | `http://localhost:5173` | Allowed frontend origins |
+| `OLLAMA_URL` | backend | `http://localhost:11434` | Ollama server base URL |
+| `VITE_API_URL` | frontend | `http://localhost:8000` | Backend URL for browser requests |
+
+## Authentication Note
+
+**The API has no authentication in this release.** It is designed for `localhost` use only. Do not expose the backend port to a network without first adding the API key gate defined in Chunk Ten (`API_KEY` env var, `Authorization: Bearer` header). Running on a public port without auth allows any client on the network to read decisions, queue actions, and trigger Ollama calls.
+
 ## Key Decisions
 
 - ADR-001: Standalone repo rather than Graphify subfolder (GitHub-ready scope, cleaner install path)
 - ADR-002: FastAPI over Flask (async, typed, auto-generated OpenAPI docs)
 - ADR-003: Cytoscape.js over Sigma.js or D3 (interactive graph workflows, good click/expand model)
 - ADR-004: JSON files over SQLite for MVP state (minimal setup, inspectable, Git-friendly; revisit at scale)
+- ADR-005: Env-var configuration over config files (Docker-friendly, no private paths in committed files, consistent with Chunk Ten API key and Chunk Eleven Supabase additions)

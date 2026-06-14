@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { API } from "../config";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -22,8 +23,6 @@ interface Recommendation {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
-
-const API = "http://localhost:8000";
 
 const MODE_LABELS: Record<RecMode, string> = {
   "next-build":         "Next Build",

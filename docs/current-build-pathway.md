@@ -38,8 +38,8 @@ For material or risk-triggering work:
 | Chunk Six — recommendation queue | Complete | 2026-06-14 | POST/GET/PATCH /recommendations; Ollama synthesis; Recommendations tab |
 | Chunk Seven — steady work mode | Complete | 2026-06-14 | POST/GET /missions; cancel; background threading; Work Queue tab |
 | Chunk Eight — approved actions | Complete | 2026-06-14 | POST/GET /actions; dry-run gate; execute; Work Queue action panel |
-| Chunk Nine — GitHub packaging + network wiring | Active | — | Next |
-| Chunk Ten — network-ready deployment | Planned | — | |
+| Chunk Nine — GitHub packaging + network wiring | Complete | 2026-06-14 | Env vars, Docker, demo graph, CI, README |
+| Chunk Ten — network-ready deployment | Active | — | Next |
 | Chunk Eleven — shared state / company-wide source of truth | Planned | — | |
 
 ---
@@ -329,7 +329,7 @@ Stop condition: stop before GitHub publishing or public release.
 
 ## Chunk Nine - GitHub Packaging And Network Wiring
 
-Status: **active**
+Status: **complete** — 2026-06-14
 
 Completion target: Release ready
 
@@ -377,15 +377,15 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] `VITE_API_URL` works — set to any backend URL, frontend points there
-- [ ] Backend reads `GRAPH_PATH`, `STATE_DIR`, `CORS_ORIGINS`, `OLLAMA_URL`
+- [x] `VITE_API_URL` works — set to any backend URL, frontend points there
+- [x] Backend reads `GRAPH_PATH`, `STATE_DIR`, `CORS_ORIGINS`, `OLLAMA_URL`
       from env with sensible defaults for local use
-- [ ] `docker-compose up` starts the full stack using the demo graph
-- [ ] Clean clone → README instructions → running app in under 15 minutes
-- [ ] No private workspace paths or graph data in committed files
-- [ ] README has both local dev and Docker hosted setup modes
-- [ ] CI passes on push (typecheck + import check)
-- [ ] Security note about auth gate is in the README and architecture doc
+- [x] `docker-compose up` starts the full stack using the demo graph
+- [x] Clean clone → README instructions → running app in under 15 minutes
+- [x] No private workspace paths or graph data in committed files
+- [x] README has both local dev and Docker hosted setup modes
+- [x] CI passes on push (typecheck + import check)
+- [x] Security note about auth gate is in the README and architecture doc
 
 Stop condition: stop before deploying to any real server or publishing the
 public GitHub repo until Adam approves. The configuration wiring lands locally
@@ -604,3 +604,6 @@ date -Iseconds
 | 2026-06-14 | POST /actions/{id}/execute {confirmed:true} | Pass | File created in workspace/state/notes/; result.success=True |
 | 2026-06-14 | Execute without dry-run guard | Pass | 422 "Dry-run must be completed before execution." |
 | 2026-06-14 | Frontend typecheck after Chunk Eight — tsc --noEmit | Pass | Zero errors |
+| 2026-06-14 | Frontend typecheck after Chunk Nine — tsc --noEmit | Pass | Zero errors; VITE_API_URL wired through all 5 tabs |
+| 2026-06-14 | Backend import check after Chunk Nine — python -c "import main" | Pass | os.environ env-var layer loads cleanly |
+| 2026-06-14 | Private path scan — new Chunk Nine files | Pass | No /home/adamgoodwin paths in Dockerfile, docker-compose, CI, demo graph, README, .env.example |

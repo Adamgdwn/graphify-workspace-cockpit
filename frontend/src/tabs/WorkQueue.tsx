@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { API } from "../config";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -51,8 +52,6 @@ interface Mission {
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
-
-const API = "http://localhost:8000";
 
 const MISSION_DEFS: { type: MissionType; label: string; description: string }[] = [
   {
