@@ -1,0 +1,151 @@
+# Vision: Cockpit As Knowledge Backbone
+
+Created: 2026-06-14
+Owner: Adam Goodwin
+Status: active strategic direction
+
+## What This Cockpit Is Becoming
+
+The Graphify Workspace Cockpit started as a personal tool for exploring one
+workspace graph on one Linux machine. That framing is already too small.
+
+The cockpit is the knowledge and decision layer of Adam's AI-native operating
+system. It is the place where:
+
+- workspace knowledge is made readable (Ask, Map)
+- human decisions about that knowledge are made durable (Decisions)
+- model-backed recommendations are reviewed and accepted (Recommendations)
+- approved changes are previewed, confirmed, and recorded (Work Queue)
+
+Every one of those outputs — a decision, an accepted recommendation, an executed
+action — is a governed artifact that other agents and devices should be able to
+read without re-deriving it.
+
+## The Three-Layer Architecture
+
+```
+Layer 1 — Knowledge Extraction
+  Graphify CLI + graph.json
+  Reads repos, docs, and workspace structure
+  Produces a semantic workspace graph
+
+Layer 2 — Decision Intelligence (this cockpit)
+  Graphify Workspace Cockpit
+  Reads the graph
+  Answers questions, shows relationships, proposes recommendations
+  Records human decisions, accepted recommendations, approved actions
+  Exports durable governed artifacts
+
+Layer 3 — Mission Execution
+  User AI Operating System (UAOS)
+  Reads cockpit artifacts through the handoff contract
+  Proposes missions from accepted recommendations
+  Executes through policy-gated tool adapters
+  Records evidence, validation, and learning
+```
+
+The cockpit sits between knowledge extraction and mission execution. It is a
+human review and decision surface, not an autonomous executor.
+
+## The Multi-Device Picture
+
+Guided AI Labs operates across:
+
+- Adam's Linux workstation (primary build machine)
+- A Windows laptop (Microsoft 365 business environment)
+- An Android tablet (mobile operator cockpit)
+- Future additional machines and team members
+
+Each device has a role:
+
+| Device | Role in the cockpit architecture |
+|---|---|
+| Linux workstation | Trusted worker — runs graphify extraction, hosts cockpit backend, executes approved local actions |
+| Windows laptop | Operator cockpit + business workspace — reviews decisions, approves recommendations, accesses Microsoft 365 surfaces |
+| Android tablet | Operator cockpit — inspects map, reads recommendations, approves or rejects, checks mission status |
+| Future team members | Role-based reviewers and approvers via shared state backend |
+
+After Chunk Ten, any of these devices can reach the cockpit backend over HTTPS.
+After Chunk Eleven, the same decision state is visible and consistent on all of
+them without manual sync.
+
+## Why The Cockpit Is The Right Backbone
+
+An AI operating system needs memory. Not model memory — governed, auditable,
+durable record-keeping of what decisions have been made, what was recommended,
+what was approved, and what was executed.
+
+The cockpit provides exactly that:
+
+- **Decision ledger** — what has been classified, and why, with timestamps
+- **Recommendation queue** — what the model proposed, what was accepted or deferred
+- **Action log** — what was approved, dry-run, executed, and how to undo it
+
+These records do not live in a chat thread. They do not disappear when a
+context window closes. They are JSON files today, a shared database in Chunk
+Eleven, but the schema and the governance rules are already in place.
+
+When UAOS needs to know "what has Adam decided about the agents/ workspace
+area?" it reads the cockpit's decision ledger. When it needs a mission
+candidate, it reads the handoff endpoint. When it needs to know what actions
+have already been taken, it reads the action log. The cockpit answers all of
+these without being asked to invent new facts.
+
+## The Handoff Contract
+
+The connection between the cockpit and UAOS is explicit and read-only.
+
+The cockpit exports executed actions in UAOS mission envelope format via:
+
+```
+GET /actions?status=executed&format=uaos
+```
+
+Each record in the payload includes:
+
+- `source_recommendation_id` — the recommendation that led to this action
+- `evidence` — the graph nodes that supported the recommendation
+- `decision_classification` — the human classification of the target area
+- `confidence`, `risk` — from the recommendation card
+- `proposed_mission_title` — derived from the action description
+- `stop_triggers` — inherited from the recommendation; what UAOS must not do
+  without further approval
+- `action_log` — what was actually executed, with rollback note
+
+UAOS reads this endpoint, validates against its own policy gate, and proposes
+a mission. It does not execute automatically. The handoff is read-only. The
+approval boundary remains in UAOS.
+
+## What Is Not The Cockpit's Job
+
+The cockpit does not:
+
+- execute autonomous commits, pushes, or destructive actions
+- make decisions on Adam's behalf
+- consume external services (GitHub, Microsoft 365, Stripe, email) directly
+- serve as the execution engine for UAOS missions
+- replace Codex or Claude as a coding assistant
+- grant other users access without a separate governance decision
+
+Those responsibilities belong to UAOS and its governed tool adapters.
+
+## Build Sequence
+
+```
+Chunks 1–8  — feature complete local tool
+Chunk 9     — portable: installable anywhere, env-var configured, Dockerized
+Chunk 10    — network-ready: any device can reach it, auth-gated, HTTPS
+Chunk 11    — shared truth: decisions sync across devices, UAOS handoff live
+```
+
+The cockpit becomes company-wide infrastructure at Chunk Eleven. Everything
+before that is preparation and progressive hardening.
+
+## Related Documents
+
+- `docs/current-build-pathway.md` — the active build plan
+- `docs/roadmap.md` — the full feature progression
+- `docs/architecture.md` — component and data flow detail
+- `docs/integration-guide.md` — Graphify → UAOS handoff contract (created in Chunk Eleven)
+- `user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md` — how UAOS sees the cockpit
+- `user-ai-operating-system/docs/specs/cross-device-source-of-truth-foundation.md` — device roles and sync rules

@@ -38,7 +38,9 @@ For material or risk-triggering work:
 | Chunk Six — recommendation queue | Complete | 2026-06-14 | POST/GET/PATCH /recommendations; Ollama synthesis; Recommendations tab |
 | Chunk Seven — steady work mode | Complete | 2026-06-14 | POST/GET /missions; cancel; background threading; Work Queue tab |
 | Chunk Eight — approved actions | Complete | 2026-06-14 | POST/GET /actions; dry-run gate; execute; Work Queue action panel |
-| Chunk Nine — GitHub packaging | Active | — | Next |
+| Chunk Nine — GitHub packaging + network wiring | Active | — | Next |
+| Chunk Ten — network-ready deployment | Planned | — | |
+| Chunk Eleven — shared state / company-wide source of truth | Planned | — | |
 
 ---
 
@@ -325,35 +327,232 @@ Stop condition: stop before GitHub publishing or public release.
 
 ---
 
-## Chunk Nine - GitHub Packaging
+## Chunk Nine - GitHub Packaging And Network Wiring
 
-Status: **planned**
+Status: **active**
 
 Completion target: Release ready
 
-Budget class: Strategic
+Budget class: Medium
 
-Objective: Prepare the cockpit for public sharing on GitHub.
+Objective: Publish the cockpit as a clean GitHub repo AND lay the configuration
+wiring for multi-device access. Both together — publishing without the env-var
+layer bakes in assumptions that block Chunks Ten and Eleven.
+
+Context: the cockpit is the knowledge backbone of the User AI Operating System.
+It needs to be installable anywhere — any laptop, any OS, any server — so that
+the decisions, recommendations, and actions it produces can become the
+company-wide source of truth described in
+`user-ai-operating-system/docs/specs/cross-device-source-of-truth-foundation.md`.
+
+Inputs:
+
+- Current codebase (all eight chunks complete)
+- `docs/architecture.md`
+- `docs/risks/risk-register.md`
+- `user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md`
 
 Outputs:
 
-- Public-safe `README.md` with screenshots and "why this exists" story
-- Demo graph (no private workspace data)
-- Clean install and run instructions for Linux first
-- `LICENSE` confirmed
-- `.gitignore` reviewed — no private paths, graphs, or secrets committed
-- `.github/workflows/` CI (lint, tests)
-- All private workspace paths removed from public docs where inappropriate
+- `VITE_API_URL` environment variable in frontend — replaces all hardcoded
+  `http://localhost:8000` references so the frontend can point at any backend
+- `GRAPH_PATH`, `STATE_DIR`, `CORS_ORIGINS`, `OLLAMA_URL` environment variables
+  in backend with sensible defaults so no private paths are hardcoded
+- `.env.example` files for frontend and backend (no actual values, template only)
+- `Dockerfile` for backend — standard multi-stage Python build
+- `docker-compose.yml` for the full stack — backend + frontend served as static build
+- Public-safe `README.md` with two setup modes side by side:
+  - **Local dev** (current): clone, install deps, run start.sh
+  - **Hosted Docker**: clone, set env vars, docker-compose up
+- Demo `graph.json` bundled in `workspace/demo/` — synthetic data, no private
+  workspace paths, usable out of the box so new users see a working cockpit
+- `LICENSE` (MIT)
+- `.gitignore` reviewed — no private paths, graphs, secrets, or local state committed
+- `.github/workflows/ci.yml` — TypeScript typecheck (`tsc --noEmit`) + Python
+  import check (`python -c "import main"`) on push
+- Architecture note added to `docs/architecture.md`: "Add auth before network
+  exposure — the API has no authentication; do not expose it to a non-local
+  network without adding the API key gate defined in Chunk Ten"
+- All private workspace paths removed from committed files
 
 Acceptance criteria:
 
-- [ ] Clean clone + setup test passes
-- [ ] Tests pass
-- [ ] No private graph data or secrets committed
-- [ ] README works for a new user
-- [ ] GitHub release plan reviewed by Adam before publishing
+- [ ] `VITE_API_URL` works — set to any backend URL, frontend points there
+- [ ] Backend reads `GRAPH_PATH`, `STATE_DIR`, `CORS_ORIGINS`, `OLLAMA_URL`
+      from env with sensible defaults for local use
+- [ ] `docker-compose up` starts the full stack using the demo graph
+- [ ] Clean clone → README instructions → running app in under 15 minutes
+- [ ] No private workspace paths or graph data in committed files
+- [ ] README has both local dev and Docker hosted setup modes
+- [ ] CI passes on push (typecheck + import check)
+- [ ] Security note about auth gate is in the README and architecture doc
 
-Stop condition: stop at owner approval before creating or publishing a public repository.
+Stop condition: stop before deploying to any real server or publishing the
+public GitHub repo until Adam approves. The configuration wiring lands locally
+and passes CI before any public action.
+
+---
+
+## Chunk Ten - Network-Ready Deployment
+
+Status: **planned**
+
+Completion target: Integration complete
+
+Budget class: Large
+
+Objective: Make the cockpit reachable from any device on the network —
+Android tablet, Windows laptop, second Linux machine — without touching the
+code. All configuration must be env vars and the app must be functional at any
+screen width.
+
+Context: the cockpit's role as a "knowledge spoke" in the UAOS requires that
+any device can serve as the operator cockpit surface (read decisions, approve
+recommendations, check action status). That requires genuine network access, not
+localhost-only. This chunk proves the cockpit works across the device types Adam
+already uses before Chunk Eleven builds shared state on top of it.
+
+Inputs:
+
+- Docker image and env-var layer from Chunk Nine
+- `user-ai-operating-system/docs/specs/cross-device-source-of-truth-foundation.md`
+  (device roles, sync rules, operator cockpit vs. worker machine distinction)
+- `user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md`
+  (knowledge spoke boundary)
+
+Outputs:
+
+- **API key authentication**: `API_KEY` env var; when set, all non-health
+  endpoints require `Authorization: Bearer <key>` or `X-API-Key: <key>`;
+  unset by default so local single-user use needs no config change; 401 on
+  missing/wrong key when set
+- **Caddy reverse proxy config** at `config/Caddyfile` — HTTPS termination,
+  HTTP→HTTPS redirect, proxy to backend container; `DOMAIN` env var triggers
+  Let's Encrypt; localhost self-signed fallback when no domain set
+- **`OLLAMA_URL` env var active** — points to wherever Ollama runs (local
+  machine, another machine on the network, or a future hosted endpoint);
+  backend gracefully falls back to graph-only cards when Ollama is unreachable
+- **Graph upload API**: `POST /graph/upload` accepts a `graph.json` file,
+  stores it in `STATE_DIR/graphs/`, activates it as the current graph without
+  restart; eliminates the requirement to SSH into the server to update the
+  graph
+- **Settings panel** in the frontend (new Settings tab or slide-out): shows
+  active graph name + node count, Ollama connection status, backend version,
+  API URL; allows uploading a new graph; shows connected Ollama model list
+- **Responsive layout audit**: all five tabs plus Settings are usable at
+  >= 768px (Android tablet landscape) with no horizontal scroll and no
+  truncated controls; buttons and inputs reflow correctly
+- **Windows setup guide** added to `docs/deployment-guide.md` — Docker
+  Desktop install, env var config, docker-compose up, browser access; tested
+- Tested from a second physical device (tablet or second laptop) on same
+  network
+
+Acceptance criteria:
+
+- [ ] Android tablet browser can use all five tabs without horizontal scroll
+- [ ] Windows machine can run `docker-compose up` and reach the app in its browser
+- [ ] API key required when `API_KEY` env var is set; unrestricted when unset
+- [ ] HTTPS works via Caddy when `DOMAIN` env var is set
+- [ ] Graph upload via Settings panel works — no SSH or file copy to server required
+- [ ] Settings panel shows Ollama status (connected/disconnected + model name)
+- [ ] Ollama URL is configurable without a code change
+- [ ] `docs/deployment-guide.md` has tested Windows + Docker instructions
+
+Stop condition: stop before adding multi-user identity or organization-level
+shared state. Each authenticated session still represents Adam only at this
+stage — multi-user comes in Chunk Eleven.
+
+Security note: with `API_KEY` set, the cockpit is safe to run on a local
+network or a VPS behind Caddy. It is not yet safe for public internet exposure
+without additional hardening (rate limiting, session management, audit logging)
+which are Chunk Eleven concerns.
+
+---
+
+## Chunk Eleven - Shared State And Company-Wide Source Of Truth
+
+Status: **planned**
+
+Completion target: Integration complete
+
+Budget class: Strategic
+
+Objective: Elevate the cockpit from a single-machine tool to a company-wide
+shared intelligence layer where decisions, recommendations, and actions are
+visible and actionable from any device — Android tablet, Windows laptop, Linux
+workstation — and where the cockpit becomes the durable knowledge spoke that
+the User AI Operating System consumes through an explicit handoff contract.
+
+Context: Guided AI Labs operates across multiple builds, laptops, and operating
+systems. The cockpit's decision ledger, recommendation queue, and action log
+must persist across devices and be consistent. This is the realization of the
+"source of truth is not a device" principle from
+`user-ai-operating-system/docs/specs/cross-device-source-of-truth-foundation.md`.
+It also enables the Graphify handoff contract described in
+`user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md`
+— executed cockpit actions become UAOS mission candidates through a governed
+read-only export endpoint.
+
+Inputs:
+
+- Network-ready deployment from Chunk Ten (auth, HTTPS, graph upload)
+- `user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md`
+  (handoff contract shape: source, evidence, decision ID, confidence, risk,
+  proposed mission title, stop triggers)
+- `user-ai-operating-system/docs/specs/cross-device-source-of-truth-foundation.md`
+  (sync rules, conflict behavior, offline/draft behavior)
+
+Outputs:
+
+- **Storage backend abstraction**: `STORAGE_BACKEND` env var — `file` (default,
+  current behavior) or `supabase`; all endpoints behave identically regardless
+  of backend; file backend remains the default so existing installs need no
+  migration
+- **Supabase backend option**: decisions, recommendations, actions, and sessions
+  stored in hosted Supabase DB using the same JSON contract as the file backend;
+  `SUPABASE_URL` and `SUPABASE_KEY` env vars; migrations in `db/migrations/`
+- **`created_by` field**: populated on all new records using the authenticated
+  user identity (API key → named user from a `config/users.json` mapping); shown
+  on each decision and recommendation card
+- **Real-time refresh**: `GET /decisions`, `GET /recommendations`,
+  `GET /actions` return `ETag` header; frontend polls every 15s and reloads on
+  stale `ETag`; optional WebSocket upgrade path documented for future use
+- **Multiple named graphs**: `POST /graph/upload` associates a graph with a
+  name and upload timestamp; `GET /graphs` lists available graphs;
+  `POST /graphs/{name}/activate` switches the active graph; Settings panel
+  shows all available graphs and the active one
+- **Organization settings endpoint**: `GET /settings/org` returns active graph,
+  Ollama endpoint, storage backend, last-seen device list (by API key + user
+  name + timestamp); surfaces in the Settings panel
+- **Graphify handoff contract endpoint**: `GET /actions?status=executed&format=uaos`
+  exports executed action records in UAOS mission envelope format — includes
+  `source_recommendation_id`, evidence nodes, decision classification, confidence,
+  risk, proposed mission title derived from the action description, and stop
+  triggers inherited from the recommendation; read-only, no execution authority
+- Documentation in `docs/integration-guide.md` of how UAOS reads the handoff
+  endpoint and what the consuming agent must validate before proposing a mission
+
+Acceptance criteria:
+
+- [ ] Decision made on the Linux machine appears on Android tablet browser
+      within 30 seconds without manual page refresh
+- [ ] Each decision, recommendation, and action shows `created_by` correctly
+- [ ] Supabase backend is a drop-in replacement for file backend — all
+      endpoints behave identically; no frontend changes required
+- [ ] Multiple named graphs can be uploaded and the active graph switched from
+      the Settings panel
+- [ ] `GET /actions?format=uaos` returns a valid UAOS-compatible payload for
+      all executed actions
+- [ ] A UAOS agent can read the handoff endpoint, parse the payload, and
+      propose a mission without any cockpit code changes
+- [ ] `docs/integration-guide.md` covers the handoff contract, consumer
+      validation requirements, and stop triggers
+
+Stop condition: stop before public launch, client workspace access, or granting
+other humans access to the shared state. This remains an internal Guided AI Labs
+tool until Adam makes a separate governance decision to open access. The
+Supabase schema, access rules, and row-level security must be reviewed before
+any production data is stored.
 
 ---
 
