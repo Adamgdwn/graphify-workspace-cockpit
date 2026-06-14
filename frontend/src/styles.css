@@ -28,6 +28,47 @@ body {
   letter-spacing: 0.03em;
 }
 
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px;
+  background: #2a1f0a;
+  border-bottom: 1px solid #6b4c0a;
+  color: #e0a84a;
+  font-size: 0.85rem;
+}
+
+.demo-banner-link {
+  background: none;
+  border: none;
+  color: #f0c060;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.demo-banner-link:hover {
+  color: #ffe090;
+}
+
+.demo-banner-close {
+  background: none;
+  border: none;
+  color: #a07030;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  line-height: 1;
+}
+
+.demo-banner-close:hover {
+  background: #3a2a0a;
+  color: #e0a84a;
+}
+
 .cockpit-tabs {
   display: flex;
   gap: 2px;

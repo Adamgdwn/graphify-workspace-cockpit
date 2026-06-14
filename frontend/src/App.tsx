@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { API } from "./config";
 import { Ask } from "./tabs/Ask";
 import { Decisions } from "./tabs/Decisions";
 import { Map } from "./tabs/Map";
@@ -17,14 +18,52 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
+const BANNER_KEY = "demo_banner_dismissed";
+
 export default function App() {
   const [active, setActive] = useState<Tab>("ask");
+  const [demoMode, setDemoMode] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(
+    () => sessionStorage.getItem(BANNER_KEY) === "1"
+  );
+
+  useEffect(() => {
+    fetch(`${API}/health`)
+      .then((r) => r.json())
+      .then((d) => setDemoMode(!!d.demo_mode))
+      .catch(() => {});
+  }, []);
+
+  function dismissBanner() {
+    sessionStorage.setItem(BANNER_KEY, "1");
+    setBannerDismissed(true);
+  }
+
+  const showBanner = demoMode && !bannerDismissed;
 
   return (
     <div className="cockpit">
       <header className="cockpit-header">
         <span className="cockpit-title">Graphify Workspace Cockpit</span>
       </header>
+      {showBanner && (
+        <div className="demo-banner">
+          <span>
+            Demo graph active — upload a real graph in{" "}
+            <button
+              type="button"
+              className="demo-banner-link"
+              onClick={() => setActive("settings")}
+            >
+              Settings
+            </button>{" "}
+            to get started.
+          </span>
+          <button type="button" className="demo-banner-close" onClick={dismissBanner} aria-label="Dismiss">
+            ✕
+          </button>
+        </div>
+      )}
       <nav className="cockpit-tabs">
         {TABS.map((t) => (
           <button

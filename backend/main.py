@@ -263,7 +263,9 @@ def _suggestions(question: str, mode: Mode, evidence: list[dict]) -> list[str]:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "version": "0.1.0"}
+    graph = _graph_path()
+    demo_mode = Path(graph).resolve() == Path(_DEMO_GRAPH).resolve()
+    return {"status": "ok", "version": "0.1.0", "demo_mode": demo_mode}
 
 
 @app.post("/ask", response_model=AskResponse)
