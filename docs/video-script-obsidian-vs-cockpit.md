@@ -1,0 +1,114 @@
+# Video Script: "I Skipped Obsidian Entirely"
+
+Reference video: https://www.youtube.com/watch?v=mWLDn49_8HA
+("Graphify + Obsidian + Claude Code = CHEAT CODE")
+
+Context: That video shows Graphify → Obsidian → Claude Code as a cross-repo
+knowledge workflow. This script demos the cockpit as the simpler alternative:
+one unified graph, one UI, no Obsidian install required. Cloud connectors
+(Chunk 14) will extend this to OneDrive/SharePoint/OneNote.
+
+---
+
+## YouTube Comment (short-form, drop anytime)
+
+> Great breakdown. Worth noting — if you want the cross-repo aggregation without
+> Obsidian as the middle layer, that's actually solvable with Graphify alone. Run
+> `graphify update` against your workspace root (not just a single repo) and you
+> get one unified graph spanning everything. I built a cockpit UI on top of that —
+> browser-based, no Obsidian install needed — with Ask, Map, Decisions,
+> Recommendations, and a Work Queue all querying the same live graph. Cloud sources
+> (OneDrive, SharePoint, OneNote) are next. Happy to share more when it's ready to show.
+
+---
+
+## Full Video Script
+
+### Hook (0:00–0:30)
+
+You just saw a video that shows you how to combine Graphify with Obsidian to get
+a cross-repo knowledge layer Claude Code can query. It works. But it's three
+moving parts — Graphify, Obsidian, and Claude Code — and Obsidian is doing one
+specific job: aggregating multiple graphs into one place you can query.
+
+I built something that removes that middle step entirely. Let me show you.
+
+---
+
+### The Problem It Solves (0:30–1:00)
+
+The Obsidian layer exists because Graphify, out of the box, is repo-scoped. You
+run it on one folder, you get one graph. If you have ten repos, you have ten
+graphs and no single place to ask questions across all of them.
+
+The fix isn't Obsidian. The fix is pointing Graphify at your workspace root —
+the parent folder that contains all your repos — and building one graph from
+everything. That's already a Graphify feature. Nobody's talking about it.
+
+---
+
+### The Cockpit Demo (1:00–3:30)
+
+[open browser — show the cockpit UI]
+
+This is the Graphify Workspace Cockpit. It's a local web app — no account, no
+cloud, no Obsidian install.
+
+[Ask tab] Watch this. I'm going to ask a question that spans multiple repos.
+"What decisions have been made about the authentication layer across my projects?"
+[show result — real graph-backed answer, node citations]
+
+[Map tab] Here's the graph view — this isn't a single repo. These are real edges
+across the workspace. Every node is a concept, file, or decision. Every edge is a
+real relationship Graphify found.
+
+[Decisions tab] These aren't notes I wrote. These were extracted from the graph —
+architectural decisions surfaced automatically.
+
+[Recommendations tab] Actionable next steps, grounded in what the graph actually shows.
+
+[Work Queue] And this exports directly in a format my AI agents can consume — no
+copy-paste into Obsidian, no manual wikilinks.
+
+---
+
+### The Obsidian Comparison (3:30–4:15)
+
+What does Obsidian give you that this doesn't? A pretty graph view, backlinks,
+and a place to write your own notes alongside the auto-generated ones. That's
+genuinely useful — I'm not saying Obsidian is wrong.
+
+But if what you actually need is: ask questions across all your repos, get
+structured answers, and pipe the output into the next step of your workflow —
+you don't need Obsidian in that chain. You need a graph that spans everything
+and a UI that queries it. That's this.
+
+---
+
+### What's Coming (4:15–4:45)
+
+The next step is cloud connectors. OneDrive, SharePoint, OneNote — same
+interface, same Ask tab, but your questions now span your code and your
+documents. No new software. It folds into the same graph.
+
+That's the thing Obsidian can't easily do — pull live cloud content into the
+same queryable structure as your codebase.
+
+---
+
+### Close (4:45–5:00)
+
+Everything you saw here is open-source and running locally. Link in the
+description. If you already use Graphify, you're one command away from this.
+
+---
+
+## Recording Notes
+
+- The workspace graph needs its edge rebuild before the Map tab can show true
+  cross-repo edges (currently the cockpit's own graph has 645 edges; the broader
+  workspace graph has 0).
+- Chunk 14 (cloud connectors) is planned but not yet built — either record after
+  it ships or position it as "coming next" in the close.
+- The rest of the cockpit (Ask, Decisions, Recommendations, Work Queue, demo-mode
+  banner) is demo-ready now against the real graph.
