@@ -3,9 +3,10 @@ import { Ask } from "./tabs/Ask";
 import { Decisions } from "./tabs/Decisions";
 import { Map } from "./tabs/Map";
 import { Recommendations } from "./tabs/Recommendations";
+import { Settings } from "./tabs/Settings";
 import { WorkQueue } from "./tabs/WorkQueue";
 
-type Tab = "ask" | "map" | "decisions" | "recommendations" | "work-queue";
+type Tab = "ask" | "map" | "decisions" | "recommendations" | "work-queue" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "ask", label: "Ask" },
@@ -13,6 +14,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "decisions", label: "Decisions" },
   { id: "recommendations", label: "Recommendations" },
   { id: "work-queue", label: "Work Queue" },
+  { id: "settings", label: "Settings" },
 ];
 
 export default function App() {
@@ -41,6 +43,7 @@ export default function App() {
         {active === "decisions" && <Decisions />}
         {active === "recommendations" && <Recommendations />}
         {active === "work-queue" && <WorkQueue />}
+        {active === "settings" && <Settings />}
       </main>
     </div>
   );

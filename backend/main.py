@@ -12,9 +12,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 _STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
 WORKSPACE_STATE = (
@@ -24,9 +26,11 @@ WORKSPACE_STATE = (
 SESSIONS_DIR = WORKSPACE_STATE / "sessions"
 SETTINGS_FILE = WORKSPACE_STATE / "settings.json"
 DECISIONS_FILE = WORKSPACE_STATE / "decisions.json"
+GRAPHS_DIR = WORKSPACE_STATE / "graphs"
 
 _DEMO_GRAPH = str(Path(__file__).parent.parent / "workspace" / "demo" / "graph.json")
 DEFAULT_GRAPH = os.environ.get("GRAPH_PATH", _DEMO_GRAPH)
+API_KEY = os.environ.get("API_KEY", "")
 
 # In-memory cache — loaded once per server lifetime
 _graph_cache: dict | None = None
@@ -45,6 +49,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class _APIKeyMiddleware(BaseHTTPMiddleware):
+    """When API_KEY is set, require Authorization: Bearer <key> or X-API-Key: <key>.
+    OPTIONS requests and /health are always allowed so CORS preflight and health
+    checks work without credentials."""
+
+    async def dispatch(self, request: Request, call_next):
+        if (
+            API_KEY
+            and request.method != "OPTIONS"
+            and request.url.path not in ("/health",)
+        ):
+            provided = (
+                request.headers.get("authorization", "").removeprefix("Bearer ").strip()
+                or request.headers.get("x-api-key", "")
+            )
+            if provided != API_KEY:
+                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        return await call_next(request)
+
+
+app.add_middleware(_APIKeyMiddleware)
 
 
 def _load_graph() -> dict:
@@ -1020,3 +1047,75 @@ def execute_action(action_id: str, req: ExecuteActionRequest) -> dict:
     action["updated_at"]  = now
     _save_action(action)
     return action
+
+
+# ---------------------------------------------------------------------------
+# Chunk Ten — Settings, Ollama status, graph upload
+# ---------------------------------------------------------------------------
+
+@app.get("/settings")
+def get_settings() -> dict:
+    graph_path = _graph_path()
+    node_count = 0
+    try:
+        data = _load_graph()
+        node_count = len(data.get("nodes", []))
+    except Exception:
+        pass
+    return {
+        "version": app.version,
+        "graph_path": graph_path,
+        "graph_name": Path(graph_path).name,
+        "node_count": node_count,
+        "state_dir": str(WORKSPACE_STATE),
+        "api_key_required": bool(API_KEY),
+    }
+
+
+@app.get("/status/ollama")
+def ollama_status() -> dict:
+    import urllib.request as _req2
+    _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+    try:
+        with _req2.urlopen(f"{_ollama_base}/api/tags", timeout=3) as r:
+            data = json.load(r)
+            models = [m["name"] for m in data.get("models", [])]
+            return {"connected": True, "models": models, "url": _ollama_base}
+    except Exception:
+        return {"connected": False, "models": [], "url": _ollama_base}
+
+
+@app.post("/graph/upload", status_code=201)
+async def upload_graph(file: UploadFile = File(...)) -> dict:
+    """Accept a graph.json file, validate it, store it, and activate it without restart."""
+    global _graph_cache, _summary_cache
+    content = await file.read()
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid JSON: {exc}")
+    if not isinstance(data.get("nodes"), list):
+        raise HTTPException(
+            status_code=422, detail="graph.json must contain a 'nodes' array"
+        )
+    GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
+    name = file.filename or "uploaded_graph.json"
+    dest = GRAPHS_DIR / name
+    dest.write_bytes(content)
+    settings: dict = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    settings["graph_path"] = str(dest)
+    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+    _graph_cache = None
+    _summary_cache = {}
+    return {
+        "filename": name,
+        "node_count": len(data["nodes"]),
+        "path": str(dest),
+        "active": True,
+    }

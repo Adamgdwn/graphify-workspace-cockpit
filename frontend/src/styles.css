@@ -1933,3 +1933,285 @@ body {
 }
 .rec-action-btn.queue:hover:not(:disabled) { background: #1e3a5f; }
 .rec-action-btn.queue:disabled { opacity: 0.55; cursor: default; }
+
+/* ── Settings tab ───────────────────────────────────────────────────────── */
+
+.settings-pane {
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.settings-heading {
+  margin: 0 0 4px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #c8cfe0;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  background: #0d1020;
+  border: 1px solid #1a2238;
+  border-radius: 8px;
+}
+
+.settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #3a4a68;
+}
+
+.settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-label {
+  min-width: 96px;
+  flex-shrink: 0;
+  color: #4a5a78;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+}
+
+.settings-value {
+  color: #b8c8e8;
+  word-break: break-word;
+}
+
+.settings-mono {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+}
+
+.settings-break {
+  word-break: break-all;
+}
+
+.settings-dim {
+  color: #3a4a68;
+  font-size: 12px;
+  margin: 0;
+}
+
+.settings-connected {
+  color: #4ade80;
+}
+
+.settings-disconnected {
+  color: #f87171;
+}
+
+.settings-ok {
+  margin: 0;
+  font-size: 12px;
+  color: #4ade80;
+  padding: 6px 10px;
+  background: rgba(74, 222, 128, 0.07);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 5px;
+}
+
+.settings-err {
+  margin: 0;
+  font-size: 12px;
+  color: #f87171;
+  padding: 6px 10px;
+  background: rgba(248, 113, 113, 0.07);
+  border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 5px;
+}
+
+.settings-upload-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.settings-file-input {
+  font-size: 12px;
+  color: #7a8aaa;
+  background: #0a0d1a;
+  border: 1px solid #1a2238;
+  border-radius: 5px;
+  padding: 5px 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.settings-file-input::file-selector-button {
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid #1e2e50;
+  border-radius: 4px;
+  background: #111e38;
+  color: #7a9ad8;
+  cursor: pointer;
+  margin-right: 8px;
+  transition: background 0.13s;
+}
+
+.settings-file-input::file-selector-button:hover {
+  background: #162848;
+}
+
+.settings-upload-btn {
+  padding: 6px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #111e38;
+  border: 1px solid #1e3055;
+  border-radius: 6px;
+  color: #7a9ad8;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.13s, color 0.13s;
+  flex-shrink: 0;
+}
+
+.settings-upload-btn:hover:not(:disabled) {
+  background: #162848;
+  color: #9ab8f0;
+}
+
+.settings-upload-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.settings-refresh-btn {
+  margin-left: auto;
+  padding: 2px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+  border: 1px solid #1a2238;
+  border-radius: 4px;
+  color: #3a4a68;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+
+.settings-refresh-btn:hover {
+  color: #7a8aaa;
+  border-color: #2a3a58;
+}
+
+/* ── Responsive — 768px (tablet portrait / Android landscape) ───────────── */
+
+@media (max-width: 768px) {
+  .cockpit-tabs {
+    flex-wrap: wrap;
+    padding: 6px 10px 0;
+    gap: 2px;
+  }
+
+  .tab-btn {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+  }
+
+  .cockpit-content {
+    padding: 16px 16px;
+  }
+
+  /* Ask tab */
+  .ask-pane {
+    max-width: 100%;
+  }
+
+  .ask-path-row {
+    flex-wrap: wrap;
+  }
+
+  /* Map tab — hide panel when canvas is narrow */
+  .map-panel {
+    width: 220px;
+  }
+
+  .map-toolbar {
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: unset;
+    padding: 8px 10px;
+  }
+
+  .map-toolbar-right {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  /* Decisions tab — stack columns */
+  .decisions-pane {
+    flex-direction: column;
+    height: auto;
+    overflow: visible;
+  }
+
+  .decisions-form-col {
+    width: 100%;
+    min-width: unset;
+    border-right: none;
+    border-bottom: 1px solid #131826;
+    padding: 16px;
+  }
+
+  .decisions-list-col {
+    padding: 16px;
+  }
+
+  /* Work Queue */
+  .wq-pane {
+    max-width: 100%;
+    padding: 14px 16px;
+  }
+
+  .wq-missions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .wq-history-item {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+  }
+
+  .wq-history-cards,
+  .wq-history-time {
+    font-size: 10px;
+  }
+
+  /* Settings tab */
+  .settings-pane {
+    max-width: 100%;
+  }
+
+  .settings-upload-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .settings-upload-btn {
+    width: 100%;
+  }
+}

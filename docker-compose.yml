@@ -12,6 +12,7 @@ services:
       STATE_DIR: workspace/state
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
+      API_KEY: ${API_KEY:-}
 
   frontend:
     build:
@@ -23,3 +24,28 @@ services:
       - "5173:80"
     depends_on:
       - backend
+
+  # Optional HTTPS via Caddy.  Start with: docker-compose --profile https up --build
+  # Requires DOMAIN env var for Let's Encrypt; falls back to localhost (self-signed).
+  # When using Caddy set VITE_API_URL=/api and rebuild the frontend image so the
+  # browser sends API calls through Caddy rather than directly to port 8000.
+  caddy:
+    image: caddy:2-alpine
+    profiles:
+      - https
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  caddy_data:
+  caddy_config:

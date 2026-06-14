@@ -1,0 +1,25 @@
+# Graphify Workspace Cockpit — Caddy reverse proxy
+#
+# Usage:
+#   Set DOMAIN in your environment (or .env) before starting the Caddy service.
+#   When DOMAIN is set:  Caddy obtains a Let's Encrypt TLS certificate automatically.
+#   When DOMAIN is unset: falls back to "localhost" (self-signed, browser warning).
+#
+# VITE_API_URL for the browser must point at the Caddy address when using HTTPS.
+# Example: VITE_API_URL=https://cockpit.example.com (rebuild the frontend image after changing).
+#
+# The frontend (nginx) is proxied through Caddy so everything is accessible on
+# one port. Set CORS_ORIGINS on the backend to match the Caddy domain.
+
+{$DOMAIN:localhost} {
+    # Frontend — nginx SPA
+    handle {
+        reverse_proxy frontend:80
+    }
+
+    # Backend API — strip /api prefix before forwarding
+    handle /api/* {
+        uri strip_prefix /api
+        reverse_proxy backend:8000
+    }
+}

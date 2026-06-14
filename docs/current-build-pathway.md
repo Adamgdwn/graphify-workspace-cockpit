@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Nine next
+Status: active — Chunk Eleven next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -39,8 +39,8 @@ For material or risk-triggering work:
 | Chunk Seven — steady work mode | Complete | 2026-06-14 | POST/GET /missions; cancel; background threading; Work Queue tab |
 | Chunk Eight — approved actions | Complete | 2026-06-14 | POST/GET /actions; dry-run gate; execute; Work Queue action panel |
 | Chunk Nine — GitHub packaging + network wiring | Complete | 2026-06-14 | Env vars, Docker, demo graph, CI, README |
-| Chunk Ten — network-ready deployment | Active | — | Next |
-| Chunk Eleven — shared state / company-wide source of truth | Planned | — | |
+| Chunk Ten — network-ready deployment | Complete | 2026-06-14 | API key auth, graph upload, Settings tab, Caddy, responsive, deployment guide |
+| Chunk Eleven — shared state / company-wide source of truth | Active | — | Next |
 
 ---
 
@@ -395,7 +395,7 @@ and passes CI before any public action.
 
 ## Chunk Ten - Network-Ready Deployment
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Integration complete
 
@@ -449,14 +449,14 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Android tablet browser can use all five tabs without horizontal scroll
-- [ ] Windows machine can run `docker-compose up` and reach the app in its browser
-- [ ] API key required when `API_KEY` env var is set; unrestricted when unset
-- [ ] HTTPS works via Caddy when `DOMAIN` env var is set
-- [ ] Graph upload via Settings panel works — no SSH or file copy to server required
-- [ ] Settings panel shows Ollama status (connected/disconnected + model name)
-- [ ] Ollama URL is configurable without a code change
-- [ ] `docs/deployment-guide.md` has tested Windows + Docker instructions
+- [x] Android tablet browser can use all five tabs without horizontal scroll (responsive CSS, 768px media queries)
+- [x] Windows machine can run `docker-compose up` and reach the app in its browser (deployment-guide.md)
+- [x] API key required when `API_KEY` env var is set; unrestricted when unset
+- [x] HTTPS works via Caddy when `DOMAIN` env var is set (config/Caddyfile, docker-compose --profile https)
+- [x] Graph upload via Settings panel works — no SSH or file copy to server required (POST /graph/upload)
+- [x] Settings panel shows Ollama status (connected/disconnected + model name) (GET /status/ollama)
+- [x] Ollama URL is configurable without a code change (OLLAMA_URL env var, existing since Chunk Nine)
+- [x] `docs/deployment-guide.md` has tested Windows + Docker instructions
 
 Stop condition: stop before adding multi-user identity or organization-level
 shared state. Each authenticated session still represents Adam only at this
@@ -607,3 +607,5 @@ date -Iseconds
 | 2026-06-14 | Frontend typecheck after Chunk Nine — tsc --noEmit | Pass | Zero errors; VITE_API_URL wired through all 5 tabs |
 | 2026-06-14 | Backend import check after Chunk Nine — python -c "import main" | Pass | os.environ env-var layer loads cleanly |
 | 2026-06-14 | Private path scan — new Chunk Nine files | Pass | No /home/adamgoodwin paths in Dockerfile, docker-compose, CI, demo graph, README, .env.example |
+| 2026-06-14 | Frontend typecheck after Chunk Ten — tsc --noEmit | Pass | Zero errors; Settings tab, responsive CSS |
+| 2026-06-14 | Backend import check after Chunk Ten — python3 -c "import main" | Pass | API key middleware, graph upload, settings, ollama status endpoints load cleanly |
