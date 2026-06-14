@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Four next
+Status: active — Chunk Five next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -33,8 +33,8 @@ For material or risk-triggering work:
 | Chunk One — governance baseline | Complete | 2026-06-14 | Docs filled, plan updated, memory note saved |
 | Chunk Two — app shell | Complete | 2026-06-14 | Backend health endpoint live; five-tab shell renders; start.sh launches both |
 | Chunk Three — Ask interface | Complete | 2026-06-14 | POST /ask live; query/path/explain modes; sessions saved |
-| Chunk Four — readable map | Active | — | Next |
-| Chunk Five — decision ledger | Planned | — | |
+| Chunk Four — readable map | Complete | 2026-06-14 | GET /graph/summary live; hub-and-spoke map; drill-down; inspect panel; filters; path tracing |
+| Chunk Five — decision ledger | Active | — | Next |
 | Chunk Six — recommendation queue | Planned | — | |
 | Chunk Seven — steady work mode | Planned | — | |
 | Chunk Eight — approved actions | Planned | — | |
@@ -159,7 +159,7 @@ Stop condition: stop before Ollama synthesis. Graph-only answers are sufficient 
 
 ## Chunk Four - Readable Map
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Draft complete
 
@@ -179,11 +179,11 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Map renders at project level (not raw file dump)
-- [ ] Click node opens side panel with summary
-- [ ] Filter controls work (by type, theme, or decision status)
-- [ ] Map is non-blank and responsive on desktop
-- [ ] Large graph does not freeze the browser (test with full workspace graph)
+- [x] Map renders at project level (not raw file dump)
+- [x] Click node opens side panel with summary
+- [x] Filter controls work (by type, theme, or decision status)
+- [x] Map is non-blank and responsive on desktop
+- [x] Large graph does not freeze the browser (test with full workspace graph)
 
 Stop condition: stop before full file-level expansion if performance is uncertain.
 
@@ -376,3 +376,10 @@ date -Iseconds
 | 2026-06-14 | POST /ask path mode (FastAPI→health) | Pass | 2-hop path returned |
 | 2026-06-14 | POST /ask explain mode (FastAPI) | Pass | Node detail + 3 connections returned |
 | 2026-06-14 | Frontend typecheck after Ask tab — tsc --noEmit | Pass | Zero errors |
+| 2026-06-14 | GET /graph/summary (cold) | Pass | 9 nodes, 7 edges; 1s first load |
+| 2026-06-14 | GET /graph/summary (cached) | Pass | 75ms subsequent calls |
+| 2026-06-14 | GET /graph/summary?project=agents | Pass | 11 sub-projects, 12 edges, 255ms |
+| 2026-06-14 | Map tab renders — top-level hub view | Pass | agents at center, Applications connected, outer ring for small projects |
+| 2026-06-14 | Map tab drill-down into agents | Pass | 11 sub-projects in ring layout, breadcrumb updated |
+| 2026-06-14 | Map inspect panel | Pass | Stats, code%, progress bar, drill-down and path buttons |
+| 2026-06-14 | Frontend typecheck after Map tab — tsc --noEmit | Pass | Zero errors |
