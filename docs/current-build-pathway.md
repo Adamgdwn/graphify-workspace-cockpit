@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-14T10:00:00-06:00
-Status: active — Chunk Three next
+Last Updated: 2026-06-14
+Status: active — Chunk Four next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -32,8 +32,8 @@ For material or risk-triggering work:
 |------|--------|-----------|-------|
 | Chunk One — governance baseline | Complete | 2026-06-14 | Docs filled, plan updated, memory note saved |
 | Chunk Two — app shell | Complete | 2026-06-14 | Backend health endpoint live; five-tab shell renders; start.sh launches both |
-| Chunk Three — Ask interface | Active | — | Next |
-| Chunk Four — readable map | Planned | — | |
+| Chunk Three — Ask interface | Complete | 2026-06-14 | POST /ask live; query/path/explain modes; sessions saved |
+| Chunk Four — readable map | Active | — | Next |
 | Chunk Five — decision ledger | Planned | — | |
 | Chunk Six — recommendation queue | Planned | — | |
 | Chunk Seven — steady work mode | Planned | — | |
@@ -119,7 +119,7 @@ Known gaps:
 
 ## Chunk Three - Ask Interface
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Task complete
 
@@ -141,11 +141,11 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Broad question returns graph-backed answer with evidence nodes
-- [ ] Relationship question (`path`) returns path result
-- [ ] Focused explain question returns node explanation
-- [ ] Follow-up buttons run new requests (not clipboard-copy)
-- [ ] Session saved to state
+- [x] Broad question returns graph-backed answer with evidence nodes
+- [x] Relationship question (`path`) returns path result
+- [x] Focused explain question returns node explanation
+- [x] Follow-up buttons run new requests (not clipboard-copy)
+- [x] Session saved to state
 
 Validation:
 
@@ -372,3 +372,7 @@ date -Iseconds
 | 2026-06-14T10:00:00-06:00 | Document review — Chunk One | Pass | All placeholder docs replaced with cockpit-specific content |
 | 2026-06-14 | Backend smoke test — GET /health | Pass | 200 {"status":"ok","version":"0.1.0"} |
 | 2026-06-14 | Frontend typecheck — tsc --noEmit | Pass | Zero errors |
+| 2026-06-14 | POST /ask query mode | Pass | Evidence nodes returned, session saved |
+| 2026-06-14 | POST /ask path mode (FastAPI→health) | Pass | 2-hop path returned |
+| 2026-06-14 | POST /ask explain mode (FastAPI) | Pass | Node detail + 3 connections returned |
+| 2026-06-14 | Frontend typecheck after Ask tab — tsc --noEmit | Pass | Zero errors |

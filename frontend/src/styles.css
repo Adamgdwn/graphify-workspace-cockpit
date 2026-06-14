@@ -81,3 +81,271 @@ body {
   color: #5a6380;
   font-size: 0.9rem;
 }
+
+/* Ask tab */
+
+.ask-pane {
+  max-width: 720px;
+}
+
+.ask-heading {
+  margin: 0 0 4px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #c8cfe0;
+}
+
+.ask-subheading {
+  margin: 0 0 20px;
+  color: #5a6380;
+  font-size: 0.875rem;
+}
+
+.ask-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ask-mode-row {
+  display: flex;
+  gap: 6px;
+}
+
+.mode-btn {
+  padding: 5px 14px;
+  border: 1px solid #2a2d3a;
+  border-radius: 4px;
+  background: transparent;
+  color: #7a8399;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+.mode-btn:hover {
+  color: #c8cfe0;
+  border-color: #404460;
+}
+
+.mode-btn.active {
+  color: #6b8cff;
+  border-color: #6b8cff;
+  background: rgba(107, 140, 255, 0.08);
+}
+
+.ask-mode-hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #4a5272;
+}
+
+.ask-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #2a2d3a;
+  border-radius: 6px;
+  background: #161921;
+  color: #e8eaf0;
+  font-size: 0.9rem;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.ask-textarea:focus {
+  border-color: #6b8cff;
+}
+
+.ask-single-input,
+.ask-node-input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid #2a2d3a;
+  border-radius: 6px;
+  background: #161921;
+  color: #e8eaf0;
+  font-size: 0.875rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.ask-single-input:focus,
+.ask-node-input:focus {
+  border-color: #6b8cff;
+}
+
+.ask-single-input {
+  width: 100%;
+}
+
+.ask-path-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ask-path-arrow {
+  color: #4a5272;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.ask-submit {
+  align-self: flex-start;
+  padding: 9px 22px;
+  border: none;
+  border-radius: 6px;
+  background: #6b8cff;
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.ask-submit:hover:not(:disabled) {
+  background: #7d9bff;
+}
+
+.ask-submit:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ask-error {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border: 1px solid #8b3a3a;
+  border-radius: 6px;
+  background: rgba(139, 58, 58, 0.12);
+  color: #f08080;
+  font-size: 0.85rem;
+}
+
+.ask-result {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ask-answer {
+  padding: 14px 16px;
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  background: #161921;
+}
+
+.ask-answer-text {
+  margin: 0;
+  font-size: 0.82rem;
+  font-family: "JetBrains Mono", "Fira Mono", monospace;
+  color: #c8cfe0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+}
+
+.ask-evidence {
+  border: 1px solid #2a2d3a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ask-evidence-summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #7a8399;
+  background: #161921;
+  user-select: none;
+  list-style: none;
+}
+
+.ask-evidence-summary:hover {
+  color: #c8cfe0;
+}
+
+.ask-evidence-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.ask-evidence-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  border-top: 1px solid #1e2130;
+}
+
+.evidence-label {
+  font-size: 0.85rem;
+  color: #9ab0e0;
+  font-weight: 500;
+}
+
+.evidence-src {
+  font-size: 0.75rem;
+  color: #4a5272;
+  font-family: monospace;
+}
+
+.evidence-relation {
+  font-size: 0.75rem;
+  color: #5a7060;
+  font-style: italic;
+}
+
+.ask-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-suggestions-label {
+  font-size: 0.78rem;
+  color: #4a5272;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ask-suggestions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestion-btn {
+  padding: 6px 12px;
+  border: 1px solid #2a3550;
+  border-radius: 4px;
+  background: rgba(107, 140, 255, 0.06);
+  color: #8aa4e0;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.suggestion-btn:hover {
+  background: rgba(107, 140, 255, 0.15);
+  border-color: #6b8cff;
+  color: #c8cfe0;
+}
+
+.ask-session-id {
+  margin: 0;
+  font-size: 0.7rem;
+  color: #2e3450;
+  font-family: monospace;
+}
