@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { API } from "../config";
 import { useToast } from "../components/Toast";
 
@@ -33,6 +33,32 @@ interface OrgSettings {
   last_seen_devices: { user: string; last_seen: string }[];
 }
 
+interface ConnectorSync {
+  status: string;
+  started_at?: string;
+  finished_at?: string;
+  item_count?: number;
+  error?: string | null;
+}
+
+interface ConnectorInfo {
+  id: string;
+  display_name: string;
+  source: string;
+  configured: boolean;
+  authenticated: boolean;
+  site_urls?: string[];
+  sync: ConnectorSync;
+}
+
+type AuthFlowState = "idle" | "started" | "polling" | "complete" | "error";
+
+interface DeviceFlow {
+  user_code: string;
+  verification_uri: string;
+  message: string;
+}
+
 export function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
@@ -44,6 +70,20 @@ export function Settings() {
   const [activating, setActivating] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
+
+  // Cloud connectors
+  const [connectors, setConnectors] = useState<ConnectorInfo[]>([]);
+  const [authFlow, setAuthFlow] = useState<DeviceFlow | null>(null);
+  const [authState, setAuthState] = useState<AuthFlowState>("idle");
+  const [syncing, setSyncing] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const loadConnectors = useCallback(() => {
+    fetch(`${API}/connectors`)
+      .then((r) => r.json())
+      .then(setConnectors)
+      .catch(() => {});
+  }, []);
 
   function loadAll() {
     fetch(`${API}/settings`)
@@ -62,10 +102,109 @@ export function Settings() {
       .then((r) => r.json())
       .then(setOrg)
       .catch(() => {});
+    loadConnectors();
   }
 
   useEffect(() => {
     loadAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleMicrosoftAuth() {
+    setAuthState("started");
+    setAuthFlow(null);
+    try {
+      const r = await fetch(`${API}/connectors/microsoft/auth`, { method: "POST" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(d.detail ?? `HTTP ${r.status}`);
+      }
+      const flow: DeviceFlow = await r.json();
+      setAuthFlow(flow);
+      setAuthState("polling");
+      // Start polling
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const pr = await fetch(`${API}/connectors/microsoft/auth/poll`, { method: "POST" });
+          const pd = await pr.json() as { status: string; detail?: string };
+          if (pd.status === "complete") {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setAuthState("complete");
+            setAuthFlow(null);
+            addToast("Microsoft account connected", "success");
+            loadConnectors();
+          } else if (pd.status === "error") {
+            clearInterval(pollRef.current!);
+            pollRef.current = null;
+            setAuthState("error");
+            addToast(pd.detail ?? "Auth error", "error");
+          }
+        } catch {
+          // keep polling
+        }
+      }, 3000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Auth failed";
+      setAuthState("error");
+      addToast(msg, "error");
+    }
+  }
+
+  async function handleRevoke() {
+    try {
+      const r = await fetch(`${API}/connectors/microsoft/auth`, { method: "DELETE" });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setAuthState("idle");
+      addToast("Microsoft account disconnected", "info");
+      loadConnectors();
+    } catch (err: unknown) {
+      addToast(err instanceof Error ? err.message : "Revoke failed", "error");
+    }
+  }
+
+  async function handleSync(connectorId: string) {
+    setSyncing(connectorId);
+    try {
+      const r = await fetch(`${API}/connectors/${connectorId}/sync`, { method: "POST" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(d.detail ?? `HTTP ${r.status}`);
+      }
+      addToast(`${connectorId} sync started`, "info");
+      // Poll for completion
+      const poll = setInterval(async () => {
+        try {
+          const sr = await fetch(`${API}/connectors/${connectorId}/status`);
+          const sd = await sr.json() as ConnectorSync;
+          if (sd.status !== "syncing") {
+            clearInterval(poll);
+            setSyncing(null);
+            if (sd.status === "complete") {
+              addToast(`${connectorId} sync complete — ${sd.item_count ?? 0} items ingested`, "success");
+              loadAll();
+            } else if (sd.status === "error") {
+              addToast(`${connectorId} sync error: ${sd.error ?? "unknown"}`, "error");
+            }
+            loadConnectors();
+          }
+        } catch {
+          clearInterval(poll);
+          setSyncing(null);
+        }
+      }, 3000);
+    } catch (err: unknown) {
+      setSyncing(null);
+      addToast(err instanceof Error ? err.message : "Sync failed", "error");
+    }
+  }
+
+  // Cleanup poll on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   async function handleUpload(e: FormEvent<HTMLFormElement>) {
@@ -313,6 +452,112 @@ export function Settings() {
           </div>
         ) : (
           <p className="settings-dim">Loading…</p>
+        )}
+      </section>
+
+      {/* Connected Sources */}
+      <section className="settings-section">
+        <div className="settings-section-title">
+          Connected Sources
+          <button className="settings-refresh-btn" type="button" onClick={loadConnectors}>
+            Refresh
+          </button>
+        </div>
+        <p className="settings-dim" style={{ marginBottom: 12 }}>
+          Cloud knowledge sources ingested into the active graph.
+          Requires <code>MICROSOFT_CLIENT_ID</code> and <code>MICROSOFT_TENANT_ID</code> env vars.
+        </p>
+
+        {connectors.length === 0 ? (
+          <p className="settings-dim">No connectors available — set MICROSOFT_CLIENT_ID to enable.</p>
+        ) : (
+          <div className="connector-list">
+            {connectors.map((c) => {
+              const syncStatus = c.sync?.status;
+              const lastSync = c.sync?.finished_at
+                ? fmtTime(c.sync.finished_at)
+                : null;
+              const isThisSyncing = syncing === c.id;
+              return (
+                <div key={c.id} className="connector-row">
+                  <div className="connector-info">
+                    <span className="connector-name">{c.display_name}</span>
+                    <span className={`connector-status ${c.authenticated ? "conn-ok-text" : "conn-off-text"}`}>
+                      {c.authenticated ? "Connected" : "Not connected"}
+                    </span>
+                    {syncStatus && syncStatus !== "never_synced" && (
+                      <span className="connector-meta">
+                        {syncStatus === "syncing" ? "Syncing…" : (
+                          <>
+                            {lastSync && `Last sync: ${lastSync}`}
+                            {c.sync?.item_count != null && ` · ${c.sync.item_count} items`}
+                            {c.sync?.error && (
+                              <span className="settings-warn"> · {c.sync.error}</span>
+                            )}
+                          </>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  <div className="connector-actions">
+                    {c.authenticated && (
+                      <button
+                        className="settings-upload-btn"
+                        style={{ padding: "4px 12px", fontSize: 12 }}
+                        disabled={isThisSyncing || syncStatus === "syncing"}
+                        onClick={() => handleSync(c.id)}
+                      >
+                        {isThisSyncing ? "Syncing…" : "Sync Now"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Microsoft auth flow */}
+        {connectors.some((c) => c.source === "microsoft") && (
+          <div className="connector-auth-panel">
+            {authState === "idle" || authState === "error" ? (
+              connectors.find((c) => c.source === "microsoft")?.authenticated ? (
+                <button
+                  className="settings-upload-btn connector-disconnect-btn"
+                  onClick={handleRevoke}
+                >
+                  Disconnect Microsoft Account
+                </button>
+              ) : (
+                <button
+                  className="settings-upload-btn"
+                  onClick={handleMicrosoftAuth}
+                  disabled={!connectors.find((c) => c.source === "microsoft")?.configured}
+                >
+                  Connect Microsoft Account
+                </button>
+              )
+            ) : authState === "started" ? (
+              <p className="settings-dim">Starting device flow…</p>
+            ) : authState === "polling" && authFlow ? (
+              <div className="connector-device-flow">
+                <p className="connector-device-instruction">
+                  Go to <strong>{authFlow.verification_uri}</strong> and enter code:
+                </p>
+                <div className="connector-device-code">{authFlow.user_code}</div>
+                <p className="settings-dim connector-device-hint">
+                  Waiting for sign-in…
+                </p>
+              </div>
+            ) : authState === "complete" ? (
+              <p className="settings-ok">Microsoft account connected.</p>
+            ) : null}
+            {!connectors.find((c) => c.source === "microsoft")?.configured && (
+              <p className="settings-dim" style={{ marginTop: 8, fontSize: 12 }}>
+                Set <code>MICROSOFT_CLIENT_ID</code> in backend env to enable.
+              </p>
+            )}
+          </div>
         )}
       </section>
     </div>

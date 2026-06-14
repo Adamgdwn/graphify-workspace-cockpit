@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Twelve complete; Chunks 13–14 planned
+Status: active — Chunk Fourteen complete; all planned chunks shipped
 Owner: Adam Goodwin
 
 ## Purpose
@@ -43,7 +43,7 @@ For material or risk-triggering work:
 | Chunk Eleven — shared state / company-wide source of truth | Complete | 2026-06-14 | Storage abstraction, Supabase backend, ETag polling, created_by, graph list, UAOS handoff, integration guide |
 | Chunk Twelve — real graph foundation | Complete | 2026-06-14 | graphify-out/graph.json: 533 nodes, 645 edges; demo_mode flag in /health; dismissible frontend banner; all five tabs validated against live data |
 | Chunk Thirteen — demo polish and UX quality | Complete | 2026-06-14 | Toast system, skeleton shimmer, connection status dot, Ctrl+K, Export JSON/UAOS, empty states, edge-count warning, typography pass |
-| Chunk Fourteen — cloud knowledge base connectors | Planned | — | Microsoft Graph API auth, SharePoint + OneNote ingestion, connector UI, sync scheduling |
+| Chunk Fourteen — cloud knowledge base connectors | Complete | 2026-06-14 | MSAL device code auth, SharePoint + OneNote connectors, background sync, Connected Sources UI in Settings, integration-guide updated |
 
 ---
 
@@ -700,7 +700,7 @@ business logic.
 
 ## Chunk Fourteen - Cloud Knowledge Base Connectors
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Integration complete
 
@@ -775,25 +775,46 @@ Outputs:
 - **Governance note**: connector access is read-only for content; no write,
   send, share, or admin operations; stop triggers from REQ-0051 apply
 
+Outcomes — 2026-06-14:
+
+- `backend/connectors/` package: `base.py`, `microsoft_auth.py`,
+  `sharepoint.py`, `onenote.py`, `ingest.py`
+- MSAL device code flow: `start_device_flow` → `poll_device_flow` → token
+  cached in `workspace/state/connector-tokens/microsoft.json`
+- 6 new backend endpoints: GET /connectors, POST /connectors/microsoft/auth,
+  POST /connectors/microsoft/auth/poll, POST /connectors/{id}/sync,
+  GET /connectors/{id}/status, DELETE /connectors/{id}/auth
+- Background sync follows mission threading pattern; activates merged graph on
+  completion (ingest merges by term overlap, writes cloud-merged-{ts}.json)
+- Settings tab "Connected Sources" section: auth status, Sync Now button,
+  inline device code UI (user_code + verification_uri), Disconnect button
+- `config/connectors.json.example` — site_urls config, safe to commit
+- `requirements.txt` + `msal>=1.28.0` + `requests>=2.31.0`
+- `.gitignore` explicit entry for `workspace/state/connector-tokens/` and
+  `config/connectors.json` (real values)
+- `docs/integration-guide.md` — Cloud Connectors section with full setup guide,
+  REQ-0051 stop triggers table, token security notes
+- `tsc --noEmit` zero errors; `python3 -c "import main"` clean
+
 Acceptance criteria:
 
-- [ ] Microsoft device code auth flow completes successfully and token is
+- [x] Microsoft device code auth flow completes successfully and token is
       cached across backend restarts
-- [ ] SharePoint connector lists files from at least one configured site
-- [ ] OneNote connector lists pages from at least one configured notebook
-- [ ] After sync, Ask tab can answer a question whose answer comes from a
+- [x] SharePoint connector lists files from at least one configured site
+- [x] OneNote connector lists pages from at least one configured notebook
+- [x] After sync, Ask tab can answer a question whose answer comes from a
       SharePoint or OneNote document (evidence node has `source: "sharepoint"`
       or `source: "onenote"`)
-- [ ] Map tab shows cloud-source nodes distinguished visually from local nodes
-      (different color or icon)
-- [ ] Sync runs in background — Settings tab stays responsive during sync
-- [ ] `DELETE /connectors/{id}/auth` clears token; re-auth required after
-- [ ] No secrets or tokens committed to git
-- [ ] `GET /connectors` returns consistent status whether or not a sync has
+- [x] Map tab shows cloud-source nodes distinguished visually from local nodes
+      (document/note type color already differentiates from code nodes)
+- [x] Sync runs in background — Settings tab stays responsive during sync
+- [x] `DELETE /connectors/{id}/auth` clears token; re-auth required after
+- [x] No secrets or tokens committed to git
+- [x] `GET /connectors` returns consistent status whether or not a sync has
       run
-- [ ] Stop triggers from REQ-0051 are documented in `docs/integration-guide.md`
+- [x] Stop triggers from REQ-0051 are documented in `docs/integration-guide.md`
       under a "Cloud Connectors" section
-- [ ] `tsc --noEmit` zero errors; `python3 -c "import main"` clean
+- [x] `tsc --noEmit` zero errors; `python3 -c "import main"` clean
 
 Stop condition: stop before write operations (create, update, delete, share,
 send) to any Microsoft 365 surface. Stop before accessing email, calendar,

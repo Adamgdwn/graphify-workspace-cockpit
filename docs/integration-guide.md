@@ -226,3 +226,113 @@ UAOS pulls from the cockpit; the cockpit never pushes to UAOS.
 Before proposing a mission from a handoff record, the UAOS agent must stop for
 Adam approval if any of the `uaos_mission_hint.stop_triggers` would be
 crossed — even if all other validation checks pass.
+
+---
+
+## Cloud Connectors (SharePoint + OneNote)
+
+The cockpit can ingest cloud knowledge sources into the active graph. Cloud
+nodes become first-class graph citizens: they appear in `GET /graph/summary`,
+surface as evidence in recommendations, and can be referenced in decisions.
+
+This section covers the governance constraints defined in REQ-0051.
+
+### Connector endpoints
+
+```
+GET    /connectors                       # list configured connectors with status
+POST   /connectors/microsoft/auth        # start Microsoft device code auth flow
+POST   /connectors/microsoft/auth/poll   # poll until sign-in completes
+POST   /connectors/{id}/sync             # trigger background sync (202 Accepted)
+GET    /connectors/{id}/status           # last sync status and item count
+DELETE /connectors/{id}/auth             # revoke token and clear token cache
+```
+
+All connector endpoints require the same API key auth as other non-health
+endpoints when `API_KEY` is configured.
+
+### Setup
+
+1. **Register an Azure AD app** at [portal.azure.com](https://portal.azure.com) →
+   App registrations → New registration.
+   - Platform: Mobile and desktop applications
+   - Redirect URI: `https://login.microsoftonline.com/common/oauth2/nativeclient`
+   - API permissions (delegated): `Files.Read.All`, `Notes.Read.All`
+   - No client secret required (public client / device code flow)
+
+2. **Set env vars** in `backend/.env`:
+   ```
+   MICROSOFT_CLIENT_ID=your-azure-app-client-id
+   MICROSOFT_TENANT_ID=common
+   ```
+
+3. **Configure connector targets** by copying `config/connectors.json.example`
+   to `config/connectors.json` and adding real site URLs:
+   ```json
+   {
+     "sharepoint": {
+       "site_urls": ["https://your-tenant.sharepoint.com/sites/team-site"]
+     }
+   }
+   ```
+
+4. **Authenticate** via the Settings tab → Connected Sources → Connect Microsoft
+   Account. The device code UI shows a 8-character code and a URL. Sign in on
+   any device. The token is cached in `workspace/state/connector-tokens/` and
+   refreshed automatically — the code flow only needs to be repeated if the
+   token is revoked.
+
+5. **Sync** with the "Sync Now" button in Settings, or call
+   `POST /connectors/sharepoint/sync`. The sync runs in the background;
+   `GET /connectors/sharepoint/status` returns progress.
+
+### What sync does
+
+- **SharePoint**: discovers drive files in configured site collections (top-level
+  listing, up to 200 files per drive). Converts each file to a graph node with
+  `source: "sharepoint"`, `site_url`, `file_path`, `modified_at`.
+- **OneNote**: lists all notebooks and sections accessible to the authenticated
+  user, fetches all pages (up to 100 per section). Converts each page to a
+  graph node with `source: "onenote"`, `notebook`, `section`.
+- **Ingestion**: new nodes are merged into the active graph. Lightweight
+  term-overlap edges connect cloud nodes to existing local nodes where ≥ 2
+  shared tokens are found. The merged graph is written as
+  `workspace/state/graphs/cloud-merged-{timestamp}.json` and activated
+  automatically. The prior graph is not deleted.
+- **Deduplication**: nodes are keyed by `source:item_id`. Re-syncing does not
+  add duplicates.
+
+### Map tab — cloud node visual distinction
+
+Cloud nodes (`source: "sharepoint"` or `source: "onenote"`) are distinguished
+from local nodes in the Map tab by node type color. Existing type badges
+(`document` → teal, `note` → amber) already differentiate them from local
+`code` nodes (blue).
+
+### REQ-0051 stop triggers (verbatim from UAOS integration spec)
+
+The following actions are outside the scope of cloud connector access and must
+never be added without a new governance decision from Adam:
+
+| Stop trigger | Applies to |
+|---|---|
+| No write, update, delete, or share operations | All Microsoft 365 surfaces |
+| No access to email, calendar, Teams, or Planner | All M365 surfaces |
+| No admin or tenant settings access | Azure AD, SharePoint admin, Exchange |
+| No reading content from accounts other than the authenticated user | SharePoint sites, OneNote notebooks |
+| No reading content from sites not listed in `config/connectors.json` | SharePoint only |
+| No storing raw page/file content in committed files or the graph | All connectors |
+
+Raw content (document text, page HTML) is used only to compute edges. It is
+not stored in the merged graph — only metadata (name, URL, source, timestamps)
+is persisted as node attributes.
+
+### Token security
+
+- Token cache: `workspace/state/connector-tokens/microsoft.json` — excluded
+  from git via `.gitignore`
+- Token is never printed, logged, or committed
+- Revoke at any time via Settings → Disconnect Microsoft Account, or
+  `DELETE /connectors/microsoft/auth`
+- `workspace/state/` is already excluded from git; the connector-tokens
+  subdirectory is additionally called out explicitly in `.gitignore` for clarity

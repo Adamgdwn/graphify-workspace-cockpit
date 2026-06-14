@@ -11,6 +11,12 @@ frontend/dist/
 # State (user data — not committed)
 workspace/state/
 
+# Connector auth tokens — never commit (also covered by workspace/state/ above)
+workspace/state/connector-tokens/
+
+# Connector config with real values (commit only .example)
+config/connectors.json
+
 # Env files (copy .env.example and fill in values — never commit real values)
 .env
 backend/.env

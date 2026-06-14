@@ -2598,3 +2598,106 @@ body {
   padding: 14px 16px;
 }
 
+/* ── Cloud Connectors (Chunk Fourteen) ───────────────────────────────────── */
+
+.connector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.connector-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #1e2330;
+  gap: 12px;
+}
+
+.connector-row:last-child {
+  border-bottom: none;
+}
+
+.connector-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.connector-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #c8cfe0;
+}
+
+.connector-status {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.conn-ok-text  { color: #4ade80; }
+.conn-off-text { color: #6b7280; }
+
+.connector-meta {
+  font-size: 11px;
+  color: #4a5a78;
+}
+
+.connector-actions {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.connector-auth-panel {
+  padding-top: 10px;
+  border-top: 1px solid #1e2330;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.connector-disconnect-btn {
+  border-color: #4a1010 !important;
+  color: #f87171 !important;
+}
+
+.connector-disconnect-btn:hover:not(:disabled) {
+  background: #1f0d0d !important;
+}
+
+.connector-device-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  background: #0a0d1a;
+  border: 1px solid #1e2a45;
+  border-radius: 6px;
+}
+
+.connector-device-instruction {
+  font-size: 12px;
+  color: #8aa0c8;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.connector-device-code {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: #6b8cff;
+  text-align: center;
+  padding: 8px 0;
+}
+
+.connector-device-hint {
+  text-align: center;
+  margin: 0 !important;
+}
+

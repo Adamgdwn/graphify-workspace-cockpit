@@ -1,0 +1,9 @@
+{
+  "sharepoint": {
+    "site_urls": [
+      "https://your-tenant.sharepoint.com/sites/team-site"
+    ]
+  },
+  "onenote": {},
+  "sync_interval_hours": 0
+}

@@ -30,6 +30,7 @@ SETTINGS_FILE = WORKSPACE_STATE / "settings.json"
 DECISIONS_FILE = WORKSPACE_STATE / "decisions.json"
 GRAPHS_DIR = WORKSPACE_STATE / "graphs"
 DEVICES_FILE = WORKSPACE_STATE / "devices.json"
+CONNECTORS_DIR = WORKSPACE_STATE / "connectors"
 _USERS_FILE = Path(__file__).parent.parent / "config" / "users.json"
 
 _DEMO_GRAPH = str(Path(__file__).parent.parent / "workspace" / "demo" / "graph.json")
@@ -1389,3 +1390,217 @@ def get_org_settings() -> dict:
             for user, ts in sorted(devices.items(), key=lambda x: x[1], reverse=True)
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Chunk Fourteen — Cloud Knowledge Base Connectors
+# ---------------------------------------------------------------------------
+
+import sys as _sys  # noqa: E402
+
+_connectors_path = Path(__file__).parent / "connectors"
+if str(_connectors_path.parent) not in _sys.path:
+    _sys.path.insert(0, str(_connectors_path.parent))
+
+from connectors import microsoft_auth as _ms_auth  # noqa: E402
+from connectors.ingest import merge_nodes_into_graph as _ingest  # noqa: E402
+from connectors.sharepoint import SharePointConnector  # noqa: E402
+from connectors.onenote import OneNoteConnector  # noqa: E402
+
+_SYNC_STATUS: dict[str, dict] = {}
+_SYNC_LOCK = _threading.Lock()
+
+_CONNECTOR_CONFIG_PATH = Path(__file__).parent.parent / "config" / "connectors.json"
+
+
+def _load_connector_config() -> dict:
+    if _CONNECTOR_CONFIG_PATH.exists():
+        try:
+            return json.loads(_CONNECTOR_CONFIG_PATH.read_text())
+        except Exception:
+            pass
+    return {"sharepoint": {"site_urls": []}, "sync_interval_hours": 0}
+
+
+def _connector_status_path() -> Path:
+    CONNECTORS_DIR.mkdir(parents=True, exist_ok=True)
+    return CONNECTORS_DIR / "sync-status.json"
+
+
+def _load_sync_status() -> dict:
+    p = _connector_status_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text())
+        except Exception:
+            pass
+    return {}
+
+
+def _save_sync_status(status: dict) -> None:
+    _connector_status_path().write_text(json.dumps(status, indent=2))
+
+
+def _run_connector_sync(connector_id: str) -> None:
+    """Background sync job — mirrors mission pattern."""
+    now = datetime.now(tz=timezone.utc).isoformat()
+    with _SYNC_LOCK:
+        _SYNC_STATUS[connector_id] = {
+            "status": "syncing",
+            "started_at": now,
+            "finished_at": None,
+            "item_count": 0,
+            "error": None,
+        }
+
+    try:
+        cfg = _load_connector_config()
+        graph_path = Path(_graph_path())
+        item_count = 0
+
+        if connector_id == "sharepoint":
+            site_urls = cfg.get("sharepoint", {}).get("site_urls", [])
+            conn = SharePointConnector(WORKSPACE_STATE, site_urls)
+            items = conn.list_items()
+            nodes = conn.to_graph_nodes(items)
+            item_count = len(nodes)
+        elif connector_id == "onenote":
+            conn_one = OneNoteConnector(WORKSPACE_STATE)
+            items = conn_one.list_items()
+            nodes = conn_one.to_graph_nodes(items)
+            item_count = len(nodes)
+        else:
+            raise ValueError(f"Unknown connector: {connector_id}")
+
+        if nodes:
+            new_graph = _ingest(nodes, graph_path, GRAPHS_DIR)
+            # Activate merged graph
+            global _graph_cache, _summary_cache
+            settings: dict = {}
+            if SETTINGS_FILE.exists():
+                try:
+                    settings = json.loads(SETTINGS_FILE.read_text())
+                except Exception:
+                    pass
+            settings["graph_path"] = str(new_graph)
+            WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+            SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+            _graph_cache = None
+            _summary_cache = {}
+
+        finished = datetime.now(tz=timezone.utc).isoformat()
+        result = {
+            "status": "complete",
+            "started_at": now,
+            "finished_at": finished,
+            "item_count": item_count,
+            "error": None,
+        }
+    except Exception as exc:
+        finished = datetime.now(tz=timezone.utc).isoformat()
+        result = {
+            "status": "error",
+            "started_at": now,
+            "finished_at": finished,
+            "item_count": 0,
+            "error": str(exc),
+        }
+
+    with _SYNC_LOCK:
+        _SYNC_STATUS[connector_id] = result
+    _save_sync_status({**_load_sync_status(), connector_id: result})
+
+
+@app.get("/connectors")
+def list_connectors() -> list[dict]:
+    """List configured connectors with authentication and sync status."""
+    cfg = _load_connector_config()
+    persisted = _load_sync_status()
+
+    def _status(cid: str) -> dict:
+        with _SYNC_LOCK:
+            mem = _SYNC_STATUS.get(cid)
+        return mem or persisted.get(cid) or {}
+
+    ms_authed = _ms_auth.is_authenticated(WORKSPACE_STATE)
+    ms_configured = _ms_auth.is_configured()
+
+    connectors = [
+        {
+            "id": "sharepoint",
+            "display_name": "SharePoint",
+            "source": "microsoft",
+            "configured": ms_configured,
+            "authenticated": ms_authed,
+            "site_urls": cfg.get("sharepoint", {}).get("site_urls", []),
+            "sync": _status("sharepoint"),
+        },
+        {
+            "id": "onenote",
+            "display_name": "OneNote",
+            "source": "microsoft",
+            "configured": ms_configured,
+            "authenticated": ms_authed,
+            "sync": _status("onenote"),
+        },
+    ]
+    return connectors
+
+
+@app.post("/connectors/microsoft/auth")
+def start_microsoft_auth() -> dict:
+    """Initiate Microsoft device code flow. Returns user_code + verification_uri."""
+    try:
+        return _ms_auth.start_device_flow(WORKSPACE_STATE)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/connectors/microsoft/auth/poll")
+def poll_microsoft_auth() -> dict:
+    """Poll for device code completion. Returns {status: pending|complete|error}."""
+    return _ms_auth.poll_device_flow(WORKSPACE_STATE)
+
+
+@app.post("/connectors/{connector_id}/sync", status_code=202)
+def sync_connector(connector_id: str) -> dict:
+    """Trigger a background sync for the given connector."""
+    if connector_id not in ("sharepoint", "onenote"):
+        raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
+    if not _ms_auth.is_authenticated(WORKSPACE_STATE):
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated with Microsoft. Complete device code auth first."
+        )
+    with _SYNC_LOCK:
+        current = _SYNC_STATUS.get(connector_id, {})
+    if current.get("status") == "syncing":
+        raise HTTPException(status_code=409, detail="Sync already in progress.")
+
+    thread = _threading.Thread(
+        target=_run_connector_sync, args=(connector_id,), daemon=True
+    )
+    thread.start()
+    return {"connector_id": connector_id, "status": "syncing"}
+
+
+@app.get("/connectors/{connector_id}/status")
+def connector_sync_status(connector_id: str) -> dict:
+    """Return the last sync status for a connector."""
+    if connector_id not in ("sharepoint", "onenote"):
+        raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
+    with _SYNC_LOCK:
+        mem = _SYNC_STATUS.get(connector_id)
+    if mem:
+        return mem
+    persisted = _load_sync_status()
+    return persisted.get(connector_id) or {"status": "never_synced"}
+
+
+@app.delete("/connectors/{connector_id}/auth", status_code=200)
+def revoke_connector_auth(connector_id: str) -> dict:
+    """Revoke Microsoft token and clear cache. Re-auth required afterward."""
+    if connector_id not in ("sharepoint", "onenote", "microsoft"):
+        raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
+    _ms_auth.revoke_token(WORKSPACE_STATE)
+    return {"revoked": True, "connector_id": connector_id}
