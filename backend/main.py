@@ -630,3 +630,188 @@ def patch_recommendation(rec_id: str, req: PatchRecommendationRequest) -> dict:
     rec["updated_at"] = now
     _save_recommendation(rec)
     return rec
+
+
+# ── Missions (Steady Work Mode — AG-003) ──────────────────────────────────
+
+import threading as _threading  # noqa: E402
+
+MISSIONS: dict[str, dict] = {}
+_CANCEL_FLAGS: dict[str, _threading.Event] = {}
+_MISSIONS_LOCK = _threading.Lock()
+
+MISSION_PROMPT_MAP: dict[str, str] = {
+    "archive-candidates": "recommend_archive.txt",
+    "rank-builds":        "steady_rank_builds.txt",
+    "weak-coverage":      "steady_weak_coverage.txt",
+    "duplicates":         "recommend_duplicates.txt",
+}
+
+MISSION_MODE_MAP: dict[str, str] = {
+    "archive-candidates": "archive-candidates",
+    "rank-builds":        "next-build",
+    "weak-coverage":      "next-build",
+    "duplicates":         "duplicates",
+}
+
+
+def _mission_log(mission_id: str, msg: str) -> None:
+    with _MISSIONS_LOCK:
+        MISSIONS[mission_id]["log"].append(msg)
+
+
+def _run_mission(mission_id: str, mission_type: str) -> None:
+    cancel = _CANCEL_FLAGS[mission_id]
+
+    def log(msg: str) -> None:
+        _mission_log(mission_id, msg)
+
+    def finish(status: str) -> None:
+        with _MISSIONS_LOCK:
+            MISSIONS[mission_id]["status"]      = status
+            MISSIONS[mission_id]["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
+
+    try:
+        log(f"Started mission: {mission_type}")
+
+        if cancel.is_set():
+            finish("cancelled")
+            log("Cancelled before context load.")
+            return
+
+        log("Loading graph context…")
+        try:
+            summary = graph_summary()
+        except HTTPException:
+            summary = {"nodes": [], "edges": [], "total_nodes": 0}
+
+        decisions = _load_decisions()
+        graph_ctx = _build_graph_context(summary)
+        dec_ctx   = _build_decisions_context(decisions)
+        log(f"Context loaded: {summary.get('total_nodes', 0)} nodes, {len(decisions)} decisions.")
+
+        if cancel.is_set():
+            finish("cancelled")
+            log("Cancelled before Ollama call.")
+            return
+
+        prompt_file = Path(__file__).parent / "prompts" / MISSION_PROMPT_MAP[mission_type]
+        if not prompt_file.exists():
+            finish("failed")
+            log(f"Prompt template missing: {prompt_file.name}")
+            return
+
+        template = prompt_file.read_text()
+        prompt   = template.replace("{graph_context}", graph_ctx).replace("{decisions_context}", dec_ctx)
+
+        log(f"Calling Ollama ({RECOMMEND_MODEL_DEFAULT})…")
+        model_used = RECOMMEND_MODEL_DEFAULT
+        parsed: dict = {}
+        try:
+            raw    = _call_ollama(prompt, RECOMMEND_MODEL_DEFAULT, timeout=60)
+            parsed = _extract_json(raw)
+            log("Ollama returned structured output.")
+        except Exception as exc:
+            model_used = "graph-only"
+            log(f"Ollama unavailable ({type(exc).__name__}); using graph-only card.")
+
+        if cancel.is_set():
+            finish("cancelled")
+            log("Cancelled after Ollama call (card not saved).")
+            return
+
+        mode = MISSION_MODE_MAP.get(mission_type, "next-build")
+        now  = datetime.now(tz=timezone.utc).isoformat()
+        rec: dict = {
+            "id":              str(uuid.uuid4()),
+            "mode":            mode,
+            "title":           parsed.get("title") or f"Mission: {mission_type}",
+            "summary":         parsed.get("summary") or "Analysis complete; Ollama synthesis unavailable.",
+            "evidence":        parsed.get("evidence") if isinstance(parsed.get("evidence"), list) else [],
+            "confidence":      float(parsed.get("confidence") or 0.0),
+            "risk":            parsed.get("risk") or "unknown",
+            "effort":          parsed.get("effort") or "unknown",
+            "proposed_action": parsed.get("proposed_action") or "",
+            "status":          "pending",
+            "created_at":      now,
+            "updated_at":      now,
+            "model":           model_used,
+        }
+        _save_recommendation(rec)
+
+        with _MISSIONS_LOCK:
+            MISSIONS[mission_id]["cards_generated"] += 1
+
+        log(f"Card saved: {rec['title']}")
+        finish("completed")
+
+    except Exception as exc:
+        with _MISSIONS_LOCK:
+            MISSIONS[mission_id]["log"].append(f"Unexpected error: {exc}")
+            MISSIONS[mission_id]["status"]      = "failed"
+            MISSIONS[mission_id]["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
+
+
+MissionType = Literal["archive-candidates", "rank-builds", "weak-coverage", "duplicates"]
+
+
+class StartMissionRequest(BaseModel):
+    type: MissionType
+
+
+@app.get("/missions")
+def list_missions() -> list[dict]:
+    with _MISSIONS_LOCK:
+        return sorted(
+            [{**m} for m in MISSIONS.values()],
+            key=lambda m: m["started_at"],
+            reverse=True,
+        )
+
+
+@app.post("/missions", status_code=201)
+def start_mission(req: StartMissionRequest) -> dict:
+    mission_id = str(uuid.uuid4())
+    now = datetime.now(tz=timezone.utc).isoformat()
+    mission: dict = {
+        "id":              mission_id,
+        "type":            req.type,
+        "status":          "running",
+        "log":             [],
+        "cards_generated": 0,
+        "started_at":      now,
+        "finished_at":     None,
+    }
+    cancel = _threading.Event()
+    with _MISSIONS_LOCK:
+        MISSIONS[mission_id]      = mission
+        _CANCEL_FLAGS[mission_id] = cancel
+    thread = _threading.Thread(
+        target=_run_mission, args=(mission_id, req.type), daemon=True
+    )
+    thread.start()
+    with _MISSIONS_LOCK:
+        return {**MISSIONS[mission_id]}
+
+
+@app.get("/missions/{mission_id}")
+def get_mission(mission_id: str) -> dict:
+    with _MISSIONS_LOCK:
+        if mission_id not in MISSIONS:
+            raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found.")
+        return {**MISSIONS[mission_id]}
+
+
+@app.post("/missions/{mission_id}/cancel")
+def cancel_mission(mission_id: str) -> dict:
+    with _MISSIONS_LOCK:
+        if mission_id not in MISSIONS:
+            raise HTTPException(status_code=404, detail=f"Mission {mission_id} not found.")
+        cancel = _CANCEL_FLAGS.get(mission_id)
+        if cancel is not None:
+            cancel.set()
+        if MISSIONS[mission_id]["status"] == "running":
+            MISSIONS[mission_id]["status"]      = "cancelled"
+            MISSIONS[mission_id]["finished_at"] = datetime.now(tz=timezone.utc).isoformat()
+            MISSIONS[mission_id]["log"].append("Cancellation requested.")
+        return {**MISSIONS[mission_id]}

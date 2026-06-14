@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Seven next
+Status: active — Chunk Eight next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -36,9 +36,8 @@ For material or risk-triggering work:
 | Chunk Four — readable map | Complete | 2026-06-14 | GET /graph/summary live; hub-and-spoke map; drill-down; inspect panel; filters; path tracing |
 | Chunk Five — decision ledger | Complete | 2026-06-14 | POST/GET/PATCH /decisions; Decisions tab; Map badges |
 | Chunk Six — recommendation queue | Complete | 2026-06-14 | POST/GET/PATCH /recommendations; Ollama synthesis; Recommendations tab |
-| Chunk Seven — steady work mode | Active | — | Next |
-| Chunk Seven — steady work mode | Planned | — | |
-| Chunk Eight — approved actions | Planned | — | |
+| Chunk Seven — steady work mode | Complete | 2026-06-14 | POST/GET /missions; cancel; background threading; Work Queue tab |
+| Chunk Eight — approved actions | Active | — | Next |
 | Chunk Nine — GitHub packaging | Planned | — | |
 
 ---
@@ -259,7 +258,7 @@ Stop condition: stop at reviewable cards. No action execution in this chunk.
 
 ## Chunk Seven - Steady Work Mode
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Draft complete
 
@@ -282,10 +281,10 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Run one short mission (e.g., "find archive candidates")
-- [ ] Mission writes recommendation cards only
-- [ ] No file mutations outside `workspace/state/`
-- [ ] Cancel button stops the job cleanly
+- [x] Run one short mission (e.g., "find archive candidates")
+- [x] Mission writes recommendation cards only
+- [x] No file mutations outside `workspace/state/`
+- [x] Cancel button stops the job cleanly
 
 Stop condition: stop before approved action execution. Output is cards only.
 
@@ -395,3 +394,8 @@ date -Iseconds
 | 2026-06-14 | POST /recommendations/generate (archive-candidates) | Pass | Structured card returned |
 | 2026-06-14 | PATCH /recommendations/{id} (accept) | Pass | Status updated, file persisted |
 | 2026-06-14 | Frontend typecheck after Recommendations tab — tsc --noEmit | Pass | Zero errors |
+| 2026-06-14 | GET /missions (empty) | Pass | Returns empty array |
+| 2026-06-14 | POST /missions (archive-candidates) | Pass | status=running returned; completed in ~24s; card saved |
+| 2026-06-14 | POST /missions/{id}/cancel (rank-builds) | Pass | status=cancelled immediately; cards_generated=0 |
+| 2026-06-14 | GET /recommendations after mission | Pass | Mission card visible alongside Chunk Six cards |
+| 2026-06-14 | Frontend typecheck after WorkQueue tab — tsc --noEmit | Pass | Zero errors |

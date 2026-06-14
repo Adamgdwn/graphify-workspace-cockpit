@@ -1544,3 +1544,234 @@ body {
   color: #7a9acc;
   border-color: #2a4060;
 }
+
+/* ── Work Queue tab ─────────────────────────────────────────────────────── */
+
+.wq-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 20px 24px;
+  max-width: 900px;
+}
+
+.wq-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+/* Mission picker grid */
+.wq-missions-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.wq-mission-card {
+  background: #111827;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wq-mission-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.wq-mission-desc {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.5;
+  flex: 1;
+}
+
+.wq-start-btn {
+  margin-top: 8px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  color: #6b8cff;
+  border: 1px solid #3a4a7a;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  align-self: flex-start;
+}
+
+.wq-start-btn:hover:not(:disabled) {
+  background: #1a2840;
+  color: #93a8ff;
+}
+
+.wq-start-btn.active,
+.wq-start-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Error */
+.wq-error {
+  background: #1f1010;
+  border: 1px solid #7f1d1d;
+  border-radius: 6px;
+  color: #f87171;
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+/* Active mission panel */
+.wq-active-panel {
+  background: #0d1117;
+  border: 1px solid #1f2937;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.wq-active-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #1f2937;
+  flex-wrap: wrap;
+}
+
+.wq-active-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+
+.wq-status-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid;
+}
+
+.wq-cards-tag {
+  font-size: 11px;
+  color: #4ade80;
+  margin-left: auto;
+}
+
+/* Log */
+.wq-log {
+  font-family: "JetBrains Mono", "Fira Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  color: #9ca3af;
+  background: #070c12;
+  padding: 12px 16px;
+  max-height: 220px;
+  overflow-y: auto;
+  line-height: 1.7;
+}
+
+.wq-log-empty {
+  color: #374151;
+  font-style: italic;
+}
+
+.wq-log-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.wq-log-line:last-child {
+  color: #d1d5db;
+}
+
+/* Footer */
+.wq-active-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid #1f2937;
+}
+
+.wq-time-tag {
+  font-size: 11px;
+  color: #4b5563;
+}
+
+.wq-cancel-btn {
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background: transparent;
+  color: #f87171;
+  border: 1px solid #7f1d1d;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wq-cancel-btn:hover {
+  background: #1f1010;
+}
+
+/* History */
+.wq-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wq-history-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid #1f2937;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.wq-history-item:hover,
+.wq-history-item.active {
+  background: #111827;
+}
+
+.wq-history-type {
+  font-size: 12px;
+  font-weight: 500;
+  color: #d1d5db;
+}
+
+.wq-history-status {
+  font-size: 11px;
+}
+
+.wq-history-cards {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.wq-history-time {
+  font-size: 11px;
+  color: #4b5563;
+}
+
+/* Empty state */
+.wq-empty {
+  font-size: 13px;
+  color: #4b5563;
+  text-align: center;
+  padding: 32px 0;
+}
