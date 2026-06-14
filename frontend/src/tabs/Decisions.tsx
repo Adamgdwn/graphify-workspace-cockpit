@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { API } from "../config";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -14,6 +14,7 @@ interface DecisionRecord {
   created_at: string;
   updated_at: string;
   status: "active" | "retired";
+  created_by?: string;
 }
 
 // ── Classification metadata ───────────────────────────────────────────────
@@ -59,11 +60,16 @@ export function Decisions() {
   const [form, setForm] = useState({ ...BLANK });
   const [areas, setAreas] = useState<string[]>([]);
   const [showRetired, setShowRetired] = useState(false);
+  const etagRef = useRef<string>("");
 
   async function fetchDecisions() {
     try {
-      const r = await fetch(`${API}/decisions`);
+      const headers: Record<string, string> = {};
+      if (etagRef.current) headers["If-None-Match"] = etagRef.current;
+      const r = await fetch(`${API}/decisions`, { headers });
+      if (r.status === 304) return;
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      etagRef.current = r.headers.get("ETag") ?? "";
       setDecisions(await r.json());
       setError(null);
     } catch (e) {
@@ -82,6 +88,8 @@ export function Decisions() {
         if (data?.nodes) setAreas(data.nodes.map((n: { id: string }) => n.id));
       })
       .catch(() => {});
+    const interval = setInterval(fetchDecisions, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   function startEdit(d: DecisionRecord) {
@@ -282,7 +290,12 @@ export function Decisions() {
               )}
 
               <div className="dec-card-footer">
-                <span className="dec-card-meta">{formatDate(d.created_at)}</span>
+                <span className="dec-card-meta">
+                  {formatDate(d.created_at)}
+                  {d.created_by && d.created_by !== "local" && (
+                    <span className="dec-card-by"> · {d.created_by}</span>
+                  )}
+                </span>
                 <div className="dec-card-actions">
                   <button
                     className="dec-action-btn primary"

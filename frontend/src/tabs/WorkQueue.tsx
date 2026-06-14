@@ -120,6 +120,7 @@ export function WorkQueue() {
   const [expandedAction, setExpanded]   = useState<string | null>(null);
   const [actionWorking, setActionWorking] = useState<string | null>(null);
   const [actionError, setActionError]   = useState<string | null>(null);
+  const actionEtagRef                   = useRef<string>("");
 
   // ── Polling ──────────────────────────────────────────────────────────
 
@@ -163,8 +164,12 @@ export function WorkQueue() {
 
   const fetchActions = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/actions`);
+      const headers: Record<string, string> = {};
+      if (actionEtagRef.current) headers["If-None-Match"] = actionEtagRef.current;
+      const r = await fetch(`${API}/actions`, { headers });
+      if (r.status === 304) return;
       if (!r.ok) return;
+      actionEtagRef.current = r.headers.get("ETag") ?? "";
       setActions(await r.json());
     } catch {
       // backend may not be up yet
@@ -191,6 +196,8 @@ export function WorkQueue() {
     }
     load();
     fetchActions();
+    const actionInterval = setInterval(fetchActions, 15000);
+    return () => clearInterval(actionInterval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ──────────────────────────────────────────────────────────

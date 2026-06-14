@@ -12,9 +12,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+import hashlib
+
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -27,10 +29,27 @@ SESSIONS_DIR = WORKSPACE_STATE / "sessions"
 SETTINGS_FILE = WORKSPACE_STATE / "settings.json"
 DECISIONS_FILE = WORKSPACE_STATE / "decisions.json"
 GRAPHS_DIR = WORKSPACE_STATE / "graphs"
+DEVICES_FILE = WORKSPACE_STATE / "devices.json"
+_USERS_FILE = Path(__file__).parent.parent / "config" / "users.json"
 
 _DEMO_GRAPH = str(Path(__file__).parent.parent / "workspace" / "demo" / "graph.json")
 DEFAULT_GRAPH = os.environ.get("GRAPH_PATH", _DEMO_GRAPH)
 API_KEY = os.environ.get("API_KEY", "")
+
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "file")  # "file" | "supabase"
+
+# Supabase client — initialised only when STORAGE_BACKEND=supabase
+_supabase_client = None
+if STORAGE_BACKEND == "supabase":
+    _supabase_url = os.environ.get("SUPABASE_URL", "")
+    _supabase_key = os.environ.get("SUPABASE_KEY", "")
+    if not _supabase_url or not _supabase_key:
+        raise RuntimeError("STORAGE_BACKEND=supabase requires SUPABASE_URL and SUPABASE_KEY env vars.")
+    try:
+        from supabase import create_client as _create_supabase_client
+        _supabase_client = _create_supabase_client(_supabase_url, _supabase_key)
+    except ImportError as _e:
+        raise RuntimeError(f"STORAGE_BACKEND=supabase requires the 'supabase' package: {_e}")
 
 # In-memory cache — loaded once per server lifetime
 _graph_cache: dict | None = None
@@ -51,12 +70,49 @@ app.add_middleware(
 )
 
 
+def _resolve_user(api_key: str) -> str:
+    """Map an API key to a human-readable user name via config/users.json.
+    Falls back to 'adam' (single-user default) when no mapping exists."""
+    if not api_key:
+        return "local"
+    if _USERS_FILE.exists():
+        try:
+            users = json.loads(_USERS_FILE.read_text())
+            if api_key in users:
+                return users[api_key]
+        except Exception:
+            pass
+    return "adam"
+
+
+def _etag(data: list | dict) -> str:
+    payload = json.dumps(data, sort_keys=True, default=str)
+    return '"' + hashlib.md5(payload.encode()).hexdigest() + '"'
+
+
+def _track_device(user_id: str) -> None:
+    """Record this user's last-seen timestamp in devices.json (best-effort)."""
+    try:
+        devices: dict = {}
+        if DEVICES_FILE.exists():
+            try:
+                devices = json.loads(DEVICES_FILE.read_text())
+            except Exception:
+                pass
+        devices[user_id] = datetime.now(tz=timezone.utc).isoformat()
+        WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+        DEVICES_FILE.write_text(json.dumps(devices, indent=2))
+    except Exception:
+        pass
+
+
 class _APIKeyMiddleware(BaseHTTPMiddleware):
     """When API_KEY is set, require Authorization: Bearer <key> or X-API-Key: <key>.
     OPTIONS requests and /health are always allowed so CORS preflight and health
     checks work without credentials."""
 
     async def dispatch(self, request: Request, call_next):
+        provided = ""
         if (
             API_KEY
             and request.method != "OPTIONS"
@@ -68,6 +124,7 @@ class _APIKeyMiddleware(BaseHTTPMiddleware):
             )
             if provided != API_KEY:
                 return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+        request.state.user_id = _resolve_user(provided or API_KEY)
         return await call_next(request)
 
 
@@ -429,6 +486,9 @@ class PatchDecisionRequest(BaseModel):
 
 
 def _load_decisions() -> list[dict]:
+    if _supabase_client:
+        resp = _supabase_client.table("decisions").select("*").order("created_at", desc=True).execute()
+        return resp.data or []
     if DECISIONS_FILE.exists():
         try:
             return json.loads(DECISIONS_FILE.read_text())
@@ -438,19 +498,40 @@ def _load_decisions() -> list[dict]:
 
 
 def _save_decisions(decisions: list[dict]) -> None:
+    if _supabase_client:
+        return  # Supabase mode uses _upsert_decision per-record
     DECISIONS_FILE.write_text(json.dumps(decisions, indent=2))
 
 
+def _upsert_decision(record: dict) -> None:
+    """Persist a single decision record to the active backend."""
+    if _supabase_client:
+        _supabase_client.table("decisions").upsert(record).execute()
+        return
+    decisions = _load_decisions()
+    for i, d in enumerate(decisions):
+        if d["id"] == record["id"]:
+            decisions[i] = record
+            _save_decisions(decisions)
+            return
+    decisions.append(record)
+    _save_decisions(decisions)
+
+
 @app.get("/decisions")
-def list_decisions() -> list[dict]:
-    return _load_decisions()
+def list_decisions(request: Request):
+    decisions = _load_decisions()
+    tag = _etag(decisions)
+    if request.headers.get("if-none-match") == tag:
+        return Response(status_code=304)
+    _track_device(getattr(request.state, "user_id", "local"))
+    return JSONResponse(content=decisions, headers={"ETag": tag})
 
 
 @app.post("/decisions", status_code=201)
-def create_decision(req: CreateDecisionRequest) -> dict:
+def create_decision(req: CreateDecisionRequest, request: Request) -> dict:
     if not req.target_id.strip():
         raise HTTPException(status_code=422, detail="target_id must not be blank.")
-    decisions = _load_decisions()
     now = datetime.now(tz=timezone.utc).isoformat()
     record = {
         "id": str(uuid.uuid4()),
@@ -462,9 +543,9 @@ def create_decision(req: CreateDecisionRequest) -> dict:
         "created_at": now,
         "updated_at": now,
         "status": "active",
+        "created_by": getattr(request.state, "user_id", "local"),
     }
-    decisions.append(record)
-    _save_decisions(decisions)
+    _upsert_decision(record)
     return record
 
 
@@ -483,7 +564,7 @@ def patch_decision(decision_id: str, req: PatchDecisionRequest) -> dict:
             if req.status is not None:
                 d["status"] = req.status
             d["updated_at"] = now
-            _save_decisions(decisions)
+            _upsert_decision(d)
             return d
     raise HTTPException(status_code=404, detail=f"Decision {decision_id} not found.")
 
@@ -516,6 +597,9 @@ class PatchRecommendationRequest(BaseModel):
 
 
 def _load_recommendations() -> list[dict]:
+    if _supabase_client:
+        resp = _supabase_client.table("recommendations").select("*").order("created_at", desc=True).execute()
+        return resp.data or []
     if not RECOMMENDATIONS_DIR.exists():
         return []
     recs: list[dict] = []
@@ -528,11 +612,17 @@ def _load_recommendations() -> list[dict]:
 
 
 def _save_recommendation(rec: dict) -> None:
+    if _supabase_client:
+        _supabase_client.table("recommendations").upsert(rec).execute()
+        return
     RECOMMENDATIONS_DIR.mkdir(parents=True, exist_ok=True)
     (RECOMMENDATIONS_DIR / f"{rec['id']}.json").write_text(json.dumps(rec, indent=2))
 
 
 def _load_recommendation(rec_id: str) -> dict | None:
+    if _supabase_client:
+        resp = _supabase_client.table("recommendations").select("*").eq("id", rec_id).execute()
+        return resp.data[0] if resp.data else None
     path = RECOMMENDATIONS_DIR / f"{rec_id}.json"
     if path.exists():
         try:
@@ -608,12 +698,17 @@ def _call_ollama(prompt: str, model: str, timeout: int = 120) -> str:
 
 
 @app.get("/recommendations")
-def list_recommendations() -> list[dict]:
-    return _load_recommendations()
+def list_recommendations(request: Request):
+    recs = _load_recommendations()
+    tag = _etag(recs)
+    if request.headers.get("if-none-match") == tag:
+        return Response(status_code=304)
+    _track_device(getattr(request.state, "user_id", "local"))
+    return JSONResponse(content=recs, headers={"ETag": tag})
 
 
 @app.post("/recommendations/generate", status_code=201)
-def generate_recommendation(req: GenerateRecommendationRequest) -> dict:
+def generate_recommendation(req: GenerateRecommendationRequest, request: Request) -> dict:
     try:
         summary = graph_summary()
     except HTTPException:
@@ -655,6 +750,7 @@ def generate_recommendation(req: GenerateRecommendationRequest) -> dict:
         "created_at": now,
         "updated_at": now,
         "model": model_used,
+        "created_by": getattr(request.state, "user_id", "local"),
     }
     _save_recommendation(rec)
     return rec
@@ -777,6 +873,7 @@ def _run_mission(mission_id: str, mission_type: str) -> None:
             "created_at":      now,
             "updated_at":      now,
             "model":           model_used,
+            "created_by":      "mission-agent",
         }
         _save_recommendation(rec)
 
@@ -862,11 +959,17 @@ def cancel_mission(mission_id: str) -> dict:
 
 
 def _save_action(action: dict) -> None:
+    if _supabase_client:
+        _supabase_client.table("actions").upsert(action).execute()
+        return
     ACTION_QUEUE_DIR.mkdir(parents=True, exist_ok=True)
     (ACTION_QUEUE_DIR / f"{action['id']}.json").write_text(json.dumps(action, indent=2))
 
 
 def _load_action(action_id: str) -> dict | None:
+    if _supabase_client:
+        resp = _supabase_client.table("actions").select("*").eq("id", action_id).execute()
+        return resp.data[0] if resp.data else None
     path = ACTION_QUEUE_DIR / f"{action_id}.json"
     if not path.exists():
         return None
@@ -876,7 +979,13 @@ def _load_action(action_id: str) -> dict | None:
         return None
 
 
-def _load_all_actions() -> list[dict]:
+def _load_all_actions(status_filter: str | None = None) -> list[dict]:
+    if _supabase_client:
+        query = _supabase_client.table("actions").select("*").order("created_at", desc=True)
+        if status_filter:
+            query = query.eq("status", status_filter)
+        resp = query.execute()
+        return resp.data or []
     if not ACTION_QUEUE_DIR.exists():
         return []
     actions = []
@@ -885,6 +994,8 @@ def _load_all_actions() -> list[dict]:
             actions.append(json.loads(p.read_text()))
         except Exception:
             pass
+    if status_filter:
+        actions = [a for a in actions if a.get("status") == status_filter]
     return actions
 
 
@@ -917,7 +1028,7 @@ def _build_note_content(action: dict) -> str:
     return "\n".join(lines)
 
 
-def _build_action_from_rec(rec: dict) -> dict:
+def _build_action_from_rec(rec: dict, created_by: str = "local") -> dict:
     mode         = rec.get("mode", "")
     action_type  = "tag_for_archive" if mode == "archive-candidates" else "create_note"
     action_id    = str(uuid.uuid4())
@@ -937,6 +1048,8 @@ def _build_action_from_rec(rec: dict) -> dict:
         "evidence":                  rec.get("evidence", []),
         "rec_title":                 rec.get("title", ""),
         "rec_summary":               rec.get("summary", ""),
+        "confidence":                rec.get("confidence", 0.0),
+        "risk":                      rec.get("risk", "unknown"),
         "dry_run_preview":           None,
         "dry_run_at":                None,
         "approval_required":         True,
@@ -947,24 +1060,79 @@ def _build_action_from_rec(rec: dict) -> dict:
         "status":                    "pending",
         "created_at":                now,
         "updated_at":                now,
+        "created_by":                created_by,
     }
 
 
 @app.post("/recommendations/{rec_id}/queue", status_code=201)
-def queue_recommendation(rec_id: str) -> dict:
+def queue_recommendation(rec_id: str, request: Request) -> dict:
     rec = _load_recommendation(rec_id)
     if rec is None:
         raise HTTPException(status_code=404, detail=f"Recommendation {rec_id} not found.")
     if rec.get("status") != "accepted":
         raise HTTPException(status_code=422, detail="Only accepted recommendations can be queued.")
-    action = _build_action_from_rec(rec)
+    action = _build_action_from_rec(rec, created_by=getattr(request.state, "user_id", "local"))
     _save_action(action)
     return action
 
 
+def _to_uaos_envelope(actions: list[dict]) -> dict:
+    """Transform executed action records into the UAOS mission envelope format."""
+    now = datetime.now(tz=timezone.utc).isoformat()
+    items = []
+    for a in actions:
+        evidence = a.get("evidence", [])
+        desc = a.get("description", "")
+        items.append({
+            "id": a["id"],
+            "source_recommendation_id": a.get("source_recommendation_id"),
+            "action_type": a.get("action_type"),
+            "description": desc,
+            "rec_title": a.get("rec_title", ""),
+            "rec_summary": a.get("rec_summary", ""),
+            "evidence": evidence,
+            "confidence": a.get("confidence", 0.0),
+            "risk": a.get("risk", "unknown"),
+            "proposed_action_text": a.get("proposed_action_text", ""),
+            "result": a.get("result"),
+            "rollback_note": a.get("rollback_note"),
+            "approved_at": a.get("approved_at"),
+            "executed_at": a.get("executed_at"),
+            "created_by": a.get("created_by", "adam"),
+            "uaos_mission_hint": {
+                "proposed_mission_title": desc,
+                "stop_triggers": [
+                    "stop before deleting files",
+                    "stop before external commits",
+                    "stop before mutating source outside workspace/state/",
+                ],
+                "approval_level": "A2",
+                "files_in_scope": [e for e in evidence if "/" in str(e)],
+                "non_goals": ["destructive action", "external service calls"],
+            },
+        })
+    return {
+        "schema_version": "1.0",
+        "exported_at": now,
+        "actions": items,
+    }
+
+
 @app.get("/actions")
-def list_actions() -> list[dict]:
-    return _load_all_actions()
+def list_actions(
+    request: Request,
+    status: str | None = Query(default=None),
+    format: str | None = Query(default=None),
+):
+    actions = _load_all_actions(status_filter=status)
+    if format == "uaos":
+        executed = [a for a in actions if a.get("status") == "executed"]
+        return _to_uaos_envelope(executed)
+    tag = _etag(actions)
+    if request.headers.get("if-none-match") == tag:
+        return Response(status_code=304)
+    _track_device(getattr(request.state, "user_id", "local"))
+    return JSONResponse(content=actions, headers={"ETag": tag})
 
 
 @app.get("/actions/{action_id}")
@@ -1118,4 +1286,101 @@ async def upload_graph(file: UploadFile = File(...)) -> dict:
         "node_count": len(data["nodes"]),
         "path": str(dest),
         "active": True,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Chunk Eleven — graph management, org settings
+# ---------------------------------------------------------------------------
+
+@app.get("/graphs")
+def list_graphs() -> list[dict]:
+    """Return all available graphs with their activation status."""
+    active = _graph_path()
+    graphs: list[dict] = []
+
+    # Demo graph (always listed if it exists)
+    demo = Path(_DEMO_GRAPH)
+    if demo.exists():
+        graphs.append({
+            "name": demo.name,
+            "path": str(demo),
+            "active": str(demo) == active,
+            "source": "demo",
+            "uploaded_at": None,
+        })
+
+    # Uploaded graphs in GRAPHS_DIR
+    if GRAPHS_DIR.exists():
+        for p in sorted(GRAPHS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
+            graphs.append({
+                "name": p.name,
+                "path": str(p),
+                "active": str(p) == active,
+                "source": "uploaded",
+                "uploaded_at": datetime.fromtimestamp(
+                    p.stat().st_mtime, tz=timezone.utc
+                ).isoformat(),
+            })
+
+    # Custom GRAPH_PATH env var not covered above
+    active_path = Path(active)
+    if not any(g["path"] == active for g in graphs) and active_path.exists():
+        graphs.insert(0, {
+            "name": active_path.name,
+            "path": active,
+            "active": True,
+            "source": "configured",
+            "uploaded_at": None,
+        })
+
+    return graphs
+
+
+@app.post("/graphs/{name}/activate")
+def activate_graph(name: str) -> dict:
+    """Switch the active graph by name. Must exist in GRAPHS_DIR or be the demo graph."""
+    global _graph_cache, _summary_cache
+    candidate = GRAPHS_DIR / name
+    if not candidate.exists():
+        demo = Path(_DEMO_GRAPH)
+        if demo.name == name and demo.exists():
+            candidate = demo
+        else:
+            raise HTTPException(status_code=404, detail=f"Graph '{name}' not found.")
+    settings: dict = {}
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+        except Exception:
+            pass
+    settings["graph_path"] = str(candidate)
+    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+    SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+    _graph_cache = None
+    _summary_cache = {}
+    return {"activated": name, "path": str(candidate)}
+
+
+@app.get("/settings/org")
+def get_org_settings() -> dict:
+    """Organisation-level view: active graph, Ollama, storage backend, last-seen devices."""
+    graph_path = _graph_path()
+    devices: dict = {}
+    if DEVICES_FILE.exists():
+        try:
+            devices = json.loads(DEVICES_FILE.read_text())
+        except Exception:
+            pass
+    return {
+        "active_graph": {
+            "name": Path(graph_path).name,
+            "path": graph_path,
+        },
+        "ollama_url": os.environ.get("OLLAMA_URL", "http://localhost:11434"),
+        "storage_backend": STORAGE_BACKEND,
+        "last_seen_devices": [
+            {"user": user, "last_seen": ts}
+            for user, ts in sorted(devices.items(), key=lambda x: x[1], reverse=True)
+        ],
     }

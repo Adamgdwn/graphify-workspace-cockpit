@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { API } from "../config";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -20,6 +20,7 @@ interface Recommendation {
   created_at: string;
   updated_at: string;
   model: string;
+  created_by?: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -133,6 +134,9 @@ function RecCard({
         <MetaBadge label={`risk: ${rec.risk}`} color={riskColor} />
         <MetaBadge label={`effort: ${rec.effort}`} color={effortColor} />
         <span className="rec-model-tag">{rec.model}</span>
+        {rec.created_by && rec.created_by !== "local" && (
+          <span className="rec-model-tag" style={{ opacity: 0.65 }}>{rec.created_by}</span>
+        )}
       </div>
 
       {/* Action row */}
@@ -193,11 +197,16 @@ export function Recommendations() {
   const [filter, setFilter]           = useState<FilterValue>("all");
   const [queuing, setQueuing]         = useState<string | null>(null);
   const [queuedIds, setQueuedIds]     = useState<Set<string>>(new Set());
+  const etagRef = useRef<string>("");
 
   const fetchRecs = useCallback(async () => {
     try {
-      const r = await fetch(`${API}/recommendations`);
+      const headers: Record<string, string> = {};
+      if (etagRef.current) headers["If-None-Match"] = etagRef.current;
+      const r = await fetch(`${API}/recommendations`, { headers });
+      if (r.status === 304) return;
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      etagRef.current = r.headers.get("ETag") ?? "";
       setRecs(await r.json());
       setError(null);
     } catch (e) {
@@ -207,7 +216,11 @@ export function Recommendations() {
     }
   }, []);
 
-  useEffect(() => { fetchRecs(); }, [fetchRecs]);
+  useEffect(() => {
+    fetchRecs();
+    const interval = setInterval(fetchRecs, 15000);
+    return () => clearInterval(interval);
+  }, [fetchRecs]);
 
   async function generate(mode: RecMode) {
     setGenerating(mode);

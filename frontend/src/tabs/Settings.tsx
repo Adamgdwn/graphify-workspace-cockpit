@@ -16,12 +16,30 @@ interface OllamaStatus {
   url: string;
 }
 
+interface GraphEntry {
+  name: string;
+  path: string;
+  active: boolean;
+  source: "demo" | "uploaded" | "configured";
+  uploaded_at: string | null;
+}
+
+interface OrgSettings {
+  active_graph: { name: string; path: string };
+  ollama_url: string;
+  storage_backend: string;
+  last_seen_devices: { user: string; last_seen: string }[];
+}
+
 export function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
+  const [graphs, setGraphs] = useState<GraphEntry[]>([]);
+  const [org, setOrg] = useState<OrgSettings | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [activating, setActivating] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function loadAll() {
@@ -32,6 +50,14 @@ export function Settings() {
     fetch(`${API}/status/ollama`)
       .then((r) => r.json())
       .then(setOllama)
+      .catch(() => {});
+    fetch(`${API}/graphs`)
+      .then((r) => r.json())
+      .then(setGraphs)
+      .catch(() => {});
+    fetch(`${API}/settings/org`)
+      .then((r) => r.json())
+      .then(setOrg)
       .catch(() => {});
   }
 
@@ -62,10 +88,38 @@ export function Settings() {
     }
   }
 
+  async function handleActivate(name: string) {
+    setActivating(name);
+    try {
+      const r = await fetch(`${API}/graphs/${encodeURIComponent(name)}`, { method: "POST" });
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(data.detail ?? `HTTP ${r.status}`);
+      }
+      loadAll();
+    } catch (err: unknown) {
+      setUploadError(err instanceof Error ? err.message : "Activation failed");
+    } finally {
+      setActivating(null);
+    }
+  }
+
+  function fmtDate(iso: string | null) {
+    if (!iso) return "—";
+    return new Date(iso).toLocaleDateString("en-CA", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function fmtTime(iso: string) {
+    return new Date(iso).toLocaleString("en-CA", {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+  }
+
   return (
     <div className="settings-pane">
       <h2 className="settings-heading">Settings</h2>
 
+      {/* Active Graph */}
       <section className="settings-section">
         <div className="settings-section-title">Active Graph</div>
         {settings ? (
@@ -90,6 +144,46 @@ export function Settings() {
         )}
       </section>
 
+      {/* Available Graphs */}
+      <section className="settings-section">
+        <div className="settings-section-title">
+          Available Graphs
+          <button className="settings-refresh-btn" type="button" onClick={loadAll}>
+            Refresh
+          </button>
+        </div>
+        {graphs.length === 0 ? (
+          <p className="settings-dim">No graphs found.</p>
+        ) : (
+          <div className="settings-graph-list">
+            {graphs.map((g) => (
+              <div key={g.path} className={`settings-graph-row${g.active ? " active" : ""}`}>
+                <div className="settings-graph-info">
+                  <span className="settings-graph-name">{g.name}</span>
+                  <span className="settings-graph-meta">
+                    {g.source === "demo" ? "demo" : g.source === "configured" ? "configured" : `uploaded ${fmtDate(g.uploaded_at)}`}
+                  </span>
+                </div>
+                {g.active ? (
+                  <span className="settings-graph-active-badge">Active</span>
+                ) : (
+                  <button
+                    className="settings-upload-btn"
+                    style={{ padding: "4px 12px", fontSize: 12 }}
+                    disabled={activating === g.name}
+                    onClick={() => handleActivate(g.name)}
+                  >
+                    {activating === g.name ? "Activating…" : "Activate"}
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {uploadError && <p className="settings-err">{uploadError}</p>}
+      </section>
+
+      {/* Upload Graph */}
       <section className="settings-section">
         <div className="settings-section-title">Upload Graph</div>
         <p className="settings-dim" style={{ marginBottom: 10 }}>
@@ -109,9 +203,9 @@ export function Settings() {
           </button>
         </form>
         {uploadMsg && <p className="settings-ok">{uploadMsg}</p>}
-        {uploadError && <p className="settings-err">{uploadError}</p>}
       </section>
 
+      {/* Ollama */}
       <section className="settings-section">
         <div className="settings-section-title">
           Ollama
@@ -151,6 +245,39 @@ export function Settings() {
         )}
       </section>
 
+      {/* Organisation */}
+      {org && (
+        <section className="settings-section">
+          <div className="settings-section-title">Organisation</div>
+          <div className="settings-grid">
+            <div className="settings-row">
+              <span className="settings-label">Storage</span>
+              <span className="settings-value settings-mono">{org.storage_backend}</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Ollama URL</span>
+              <span className="settings-value settings-mono">{org.ollama_url}</span>
+            </div>
+          </div>
+          {org.last_seen_devices.length > 0 && (
+            <>
+              <div className="settings-label" style={{ padding: "10px 16px 4px", opacity: 0.6, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Last Seen Devices
+              </div>
+              <div className="settings-grid">
+                {org.last_seen_devices.slice(0, 5).map((d) => (
+                  <div key={d.user} className="settings-row">
+                    <span className="settings-label settings-mono">{d.user}</span>
+                    <span className="settings-value settings-dim">{fmtTime(d.last_seen)}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* API */}
       <section className="settings-section">
         <div className="settings-section-title">API</div>
         {settings ? (

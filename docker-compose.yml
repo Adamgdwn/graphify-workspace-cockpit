@@ -13,6 +13,9 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434}
       API_KEY: ${API_KEY:-}
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-file}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_KEY: ${SUPABASE_KEY:-}
 
   frontend:
     build:

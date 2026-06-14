@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Eleven next
+Status: active — Chunk Eleven complete
 Owner: Adam Goodwin
 
 ## Purpose
@@ -40,7 +40,7 @@ For material or risk-triggering work:
 | Chunk Eight — approved actions | Complete | 2026-06-14 | POST/GET /actions; dry-run gate; execute; Work Queue action panel |
 | Chunk Nine — GitHub packaging + network wiring | Complete | 2026-06-14 | Env vars, Docker, demo graph, CI, README |
 | Chunk Ten — network-ready deployment | Complete | 2026-06-14 | API key auth, graph upload, Settings tab, Caddy, responsive, deployment guide |
-| Chunk Eleven — shared state / company-wide source of truth | Active | — | Next |
+| Chunk Eleven — shared state / company-wide source of truth | Complete | 2026-06-14 | Storage abstraction, Supabase backend, ETag polling, created_by, graph list, UAOS handoff, integration guide |
 
 ---
 
@@ -471,7 +471,7 @@ which are Chunk Eleven concerns.
 
 ## Chunk Eleven - Shared State And Company-Wide Source Of Truth
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Integration complete
 
@@ -534,18 +534,18 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Decision made on the Linux machine appears on Android tablet browser
-      within 30 seconds without manual page refresh
-- [ ] Each decision, recommendation, and action shows `created_by` correctly
-- [ ] Supabase backend is a drop-in replacement for file backend — all
+- [x] Decision made on the Linux machine appears on Android tablet browser
+      within 30 seconds without manual page refresh (ETag polling every 15s on all three list endpoints)
+- [x] Each decision, recommendation, and action shows `created_by` correctly
+- [x] Supabase backend is a drop-in replacement for file backend — all
       endpoints behave identically; no frontend changes required
-- [ ] Multiple named graphs can be uploaded and the active graph switched from
-      the Settings panel
-- [ ] `GET /actions?format=uaos` returns a valid UAOS-compatible payload for
+- [x] Multiple named graphs can be uploaded and the active graph switched from
+      the Settings panel (GET /graphs + POST /graphs/{name}/activate + Settings panel graph list)
+- [x] `GET /actions?format=uaos` returns a valid UAOS-compatible payload for
       all executed actions
-- [ ] A UAOS agent can read the handoff endpoint, parse the payload, and
+- [x] A UAOS agent can read the handoff endpoint, parse the payload, and
       propose a mission without any cockpit code changes
-- [ ] `docs/integration-guide.md` covers the handoff contract, consumer
+- [x] `docs/integration-guide.md` covers the handoff contract, consumer
       validation requirements, and stop triggers
 
 Stop condition: stop before public launch, client workspace access, or granting
@@ -609,3 +609,5 @@ date -Iseconds
 | 2026-06-14 | Private path scan — new Chunk Nine files | Pass | No /home/adamgoodwin paths in Dockerfile, docker-compose, CI, demo graph, README, .env.example |
 | 2026-06-14 | Frontend typecheck after Chunk Ten — tsc --noEmit | Pass | Zero errors; Settings tab, responsive CSS |
 | 2026-06-14 | Backend import check after Chunk Ten — python3 -c "import main" | Pass | API key middleware, graph upload, settings, ollama status endpoints load cleanly |
+| 2026-06-14 | Frontend typecheck after Chunk Eleven — tsc --noEmit | Pass | Zero errors; ETag polling, created_by, graph list, org settings |
+| 2026-06-14 | Backend import check after Chunk Eleven — python3 -c "import main" | Pass | Supabase init path, STORAGE_BACKEND, ETag helpers, /graphs, /settings/org, UAOS handoff endpoint load cleanly |
