@@ -9,7 +9,7 @@ import uuid
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +18,7 @@ from pydantic import BaseModel
 WORKSPACE_STATE = Path(__file__).parent.parent / "workspace" / "state"
 SESSIONS_DIR = WORKSPACE_STATE / "sessions"
 SETTINGS_FILE = WORKSPACE_STATE / "settings.json"
+DECISIONS_FILE = WORKSPACE_STATE / "decisions.json"
 
 DEFAULT_GRAPH = "/home/adamgoodwin/code/Tools/graphify/workspace/out/graph.json"
 
@@ -366,3 +367,84 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
     }
     _summary_cache[cache_key] = result
     return result
+
+
+# ---------------------------------------------------------------------------
+# Decision ledger
+# ---------------------------------------------------------------------------
+
+DecisionClassification = Literal["invest", "client-ready", "monitor", "archive", "paused"]
+
+
+class CreateDecisionRequest(BaseModel):
+    target_id: str
+    label: str = ""
+    classification: DecisionClassification
+    rationale: str = ""
+
+
+class PatchDecisionRequest(BaseModel):
+    classification: Optional[DecisionClassification] = None
+    rationale: Optional[str] = None
+    label: Optional[str] = None
+    status: Optional[Literal["active", "retired"]] = None
+
+
+def _load_decisions() -> list[dict]:
+    if DECISIONS_FILE.exists():
+        try:
+            return json.loads(DECISIONS_FILE.read_text())
+        except Exception:
+            return []
+    return []
+
+
+def _save_decisions(decisions: list[dict]) -> None:
+    DECISIONS_FILE.write_text(json.dumps(decisions, indent=2))
+
+
+@app.get("/decisions")
+def list_decisions() -> list[dict]:
+    return _load_decisions()
+
+
+@app.post("/decisions", status_code=201)
+def create_decision(req: CreateDecisionRequest) -> dict:
+    if not req.target_id.strip():
+        raise HTTPException(status_code=422, detail="target_id must not be blank.")
+    decisions = _load_decisions()
+    now = datetime.now(tz=timezone.utc).isoformat()
+    record = {
+        "id": str(uuid.uuid4()),
+        "target_type": "project",
+        "target_id": req.target_id.strip(),
+        "label": req.label.strip() or req.target_id.strip(),
+        "classification": req.classification,
+        "rationale": req.rationale,
+        "created_at": now,
+        "updated_at": now,
+        "status": "active",
+    }
+    decisions.append(record)
+    _save_decisions(decisions)
+    return record
+
+
+@app.patch("/decisions/{decision_id}")
+def patch_decision(decision_id: str, req: PatchDecisionRequest) -> dict:
+    decisions = _load_decisions()
+    for d in decisions:
+        if d["id"] == decision_id:
+            now = datetime.now(tz=timezone.utc).isoformat()
+            if req.classification is not None:
+                d["classification"] = req.classification
+            if req.rationale is not None:
+                d["rationale"] = req.rationale
+            if req.label is not None:
+                d["label"] = req.label
+            if req.status is not None:
+                d["status"] = req.status
+            d["updated_at"] = now
+            _save_decisions(decisions)
+            return d
+    raise HTTPException(status_code=404, detail=f"Decision {decision_id} not found.")

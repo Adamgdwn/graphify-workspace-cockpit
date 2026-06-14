@@ -47,6 +47,16 @@ interface GraphSummary {
 
 type Filter = "all" | "code" | "document";
 
+// ── Decision metadata (mirror of Decisions.tsx) ───────────────────────────
+
+const DECISION_META: Record<string, { label: string; color: string }> = {
+  "invest":       { label: "Invest",       color: "#4ade80" },
+  "client-ready": { label: "Client Ready", color: "#f5d280" },
+  "monitor":      { label: "Monitor",      color: "#6b8cff" },
+  "archive":      { label: "Archive",      color: "#9ca3af" },
+  "paused":       { label: "Paused",       color: "#f97316" },
+};
+
 // ── Cytoscape stylesheet ──────────────────────────────────────────────────
 
 const CY_STYLE: object[] = [
@@ -173,6 +183,68 @@ const CY_STYLE: object[] = [
     selector: "edge.faded",
     style: { opacity: 0.04 },
   },
+  // Decision classification glows
+  {
+    selector: 'node[decision="invest"]',
+    style: {
+      "border-color": "#4ade80",
+      "border-width": 3.5,
+      "shadow-blur": 22,
+      "shadow-color": "#4ade80",
+      "shadow-opacity": 0.65,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
+  {
+    selector: 'node[decision="client-ready"]',
+    style: {
+      "border-color": "#f5d280",
+      "border-width": 3.5,
+      "shadow-blur": 22,
+      "shadow-color": "#f5d280",
+      "shadow-opacity": 0.65,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
+  {
+    selector: 'node[decision="monitor"]',
+    style: {
+      "border-color": "#6b8cff",
+      "border-width": 3.5,
+      "shadow-blur": 22,
+      "shadow-color": "#6b8cff",
+      "shadow-opacity": 0.65,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
+  {
+    selector: 'node[decision="archive"]',
+    style: {
+      "border-color": "#9ca3af",
+      "border-width": 3,
+      "shadow-blur": 10,
+      "shadow-color": "#9ca3af",
+      "shadow-opacity": 0.35,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+      opacity: 0.6,
+    },
+  },
+  {
+    selector: 'node[decision="paused"]',
+    style: {
+      "border-color": "#f97316",
+      "border-width": 3.5,
+      "shadow-blur": 18,
+      "shadow-color": "#f97316",
+      "shadow-opacity": 0.55,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
 ];
 
 // fcose for project drill-down (multiple connected nodes, real force-directed value)
@@ -243,23 +315,27 @@ function getLayout(_summary: GraphSummary): object {
 
 // ── Element builder ───────────────────────────────────────────────────────
 
-function buildElements(summary: GraphSummary) {
+function buildElements(summary: GraphSummary, decisions: Record<string, string> = {}) {
   const ringPositions = buildRingPositions(summary.nodes);
 
-  const nodes = summary.nodes.map((n) => ({
-    data: {
-      id: n.id,
-      label: n.label,
-      node_count: n.node_count,
-      code_count: n.code_count,
-      doc_count: n.doc_count,
-      dominant_type: n.dominant_type,
-      is_drillable: n.is_drillable,
-      // log₂ scaling: 1→36px, 100→66px, 10k→108px, 23k→126px
-      size: Math.max(36, Math.min(126, Math.log2(n.node_count + 2) * 15)),
-    },
-    position: ringPositions[n.id] ?? { x: 0, y: 0 },
-  }));
+  const nodes = summary.nodes.map((n) => {
+    const dec = decisions[n.id];
+    return {
+      data: {
+        id: n.id,
+        label: n.label,
+        node_count: n.node_count,
+        code_count: n.code_count,
+        doc_count: n.doc_count,
+        dominant_type: n.dominant_type,
+        is_drillable: n.is_drillable,
+        // log₂ scaling: 1→36px, 100→66px, 10k→108px, 23k→126px
+        size: Math.max(36, Math.min(126, Math.log2(n.node_count + 2) * 15)),
+        ...(dec ? { decision: dec } : {}),
+      },
+      position: ringPositions[n.id] ?? { x: 0, y: 0 },
+    };
+  });
 
   const seen = new Set<string>();
   const edges = summary.edges
@@ -303,11 +379,27 @@ export function Map() {
   const [pathMode, setPathMode] = useState(false);
   const [pathSource, setPathSource] = useState<string | null>(null);
   const [pathNoRoute, setPathNoRoute] = useState(false);
+  // target_id → classification for active decisions
+  const [decisions, setDecisions] = useState<Record<string, string>>({});
 
   // Keep refs current
   useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
   useEffect(() => { pathSourceRef.current = pathSource; }, [pathSource]);
   useEffect(() => { summaryRef.current = summary; }, [summary]);
+
+  // Fetch decisions (non-critical — silently ignored if backend down)
+  useEffect(() => {
+    fetch("http://localhost:8000/decisions")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list: Array<{ target_id: string; classification: string; status: string }>) => {
+        const map: Record<string, string> = {};
+        list.filter((d) => d.status === "active").forEach((d) => {
+          map[d.target_id] = d.classification;
+        });
+        setDecisions(map);
+      })
+      .catch(() => {});
+  }, []);
 
   const fetchSummary = useCallback(async (project?: string) => {
     setLoading(true);
@@ -347,7 +439,7 @@ export function Map() {
 
     const cy = cytoscape({
       container: containerRef.current,
-      elements: buildElements(summary),
+      elements: buildElements(summary, decisions),
       style: CY_STYLE as any,
       layout: getLayout(summary) as any,
       pixelRatio: 1,
@@ -432,7 +524,7 @@ export function Map() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [summary]);
+  }, [summary, decisions]);
 
   // Apply type filter via class toggling (no re-layout)
   useEffect(() => {
@@ -607,6 +699,17 @@ export function Map() {
               >
                 {selected.dominant_type}
               </span>
+              {decisions[selected.id] && (() => {
+                const meta = DECISION_META[decisions[selected.id]];
+                return meta ? (
+                  <span
+                    className="map-decision-badge"
+                    style={{ color: meta.color, borderColor: meta.color }}
+                  >
+                    {meta.label}
+                  </span>
+                ) : null;
+              })()}
             </div>
 
             <div className="map-panel-stats">

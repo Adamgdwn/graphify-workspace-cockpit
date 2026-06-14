@@ -804,3 +804,376 @@ body {
   border-color: #6b8cff;
   color: #8aa8ff;
 }
+
+/* Map inspect panel — decision badge */
+
+.map-decision-badge {
+  display: inline-block;
+  margin-left: 7px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  border: 1px solid currentColor;
+  background: rgba(0, 0, 0, 0.25);
+  vertical-align: middle;
+}
+
+/* ── Decisions Tab ───────────────────────────────────────────────────────── */
+
+.decisions-pane {
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+  background: #070a12;
+}
+
+/* Form column */
+
+.decisions-form-col {
+  width: 310px;
+  min-width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid #131826;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 22px 20px;
+  gap: 14px;
+}
+
+.decisions-col-header {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #3a4a68;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.dec-count {
+  background: #1a2038;
+  color: #4a5a80;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* Form */
+
+.dec-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dec-field label {
+  display: block;
+  font-size: 11px;
+  color: #4a5a78;
+  margin-bottom: 5px;
+  font-family: ui-monospace, monospace;
+}
+
+.dec-input {
+  width: 100%;
+  background: #0d1020;
+  border: 1px solid #1a2438;
+  border-radius: 6px;
+  color: #b8c8e8;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.dec-input:focus {
+  border-color: #2e4070;
+}
+
+.dec-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dec-textarea {
+  resize: vertical;
+  min-height: 68px;
+  line-height: 1.5;
+}
+
+/* Classification chips */
+
+.dec-chips {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dec-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1.5px solid #161e30;
+  background: #0b0e1a;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  text-align: left;
+  width: 100%;
+}
+
+.dec-chip:hover {
+  border-color: #253050;
+  background: #0e1220;
+}
+
+.dec-chip.selected {
+  border-color: var(--chip-color);
+  background: var(--chip-bg);
+}
+
+.dec-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dec-chip-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: #8090b0;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.dec-chip.selected .dec-chip-label {
+  color: var(--chip-color);
+}
+
+.dec-chip-desc {
+  color: #3a4a62;
+  font-size: 11px;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dec-chip.selected .dec-chip-desc {
+  color: var(--chip-color);
+  opacity: 0.65;
+}
+
+/* Buttons */
+
+.dec-save-btn {
+  background: #111e38;
+  border: 1px solid #1e3055;
+  border-radius: 6px;
+  color: #7a9ad8;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  width: 100%;
+}
+
+.dec-save-btn:hover:not(:disabled) {
+  background: #162848;
+  border-color: #2a4070;
+  color: #9ab8f0;
+}
+
+.dec-save-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dec-cancel-btn {
+  background: transparent;
+  border: 1px solid #141c2e;
+  border-radius: 6px;
+  color: #3a4a68;
+  font-size: 12px;
+  padding: 7px 14px;
+  cursor: pointer;
+  width: 100%;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.dec-cancel-btn:hover {
+  border-color: #1e2e4a;
+  color: #6070a0;
+}
+
+.dec-error {
+  font-size: 12px;
+  color: #e07070;
+  padding: 6px 10px;
+  background: rgba(224, 112, 112, 0.07);
+  border: 1px solid rgba(224, 112, 112, 0.18);
+  border-radius: 5px;
+}
+
+/* List column */
+
+.decisions-list-col {
+  flex: 1;
+  overflow-y: auto;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* Decision cards */
+
+.dec-card {
+  background: #0b0e1a;
+  border: 1px solid #171e30;
+  border-left: 3px solid var(--card-color);
+  border-radius: 8px;
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  transition: border-color 0.15s;
+}
+
+.dec-card:hover {
+  border-color: #202840;
+  border-left-color: var(--card-color);
+}
+
+.dec-card.retired {
+  opacity: 0.45;
+  filter: grayscale(0.35);
+}
+
+.dec-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dec-card-name {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c0cce8;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dec-badge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 4px;
+  color: var(--card-color);
+  background: var(--card-bg);
+  border: 1px solid var(--card-color);
+  flex-shrink: 0;
+}
+
+.dec-card-rationale {
+  font-size: 12px;
+  color: #6a7a98;
+  line-height: 1.55;
+}
+
+.dec-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.dec-card-meta {
+  font-size: 11px;
+  color: #2e3a58;
+  flex-shrink: 0;
+}
+
+.dec-card-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.dec-action-btn {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 4px;
+  border: 1px solid #1a2238;
+  background: transparent;
+  color: #3a4a68;
+  cursor: pointer;
+  transition: border-color 0.13s, color 0.13s;
+}
+
+.dec-action-btn:hover {
+  border-color: #2a3a58;
+  color: #7080a8;
+}
+
+.dec-action-btn.primary {
+  border-color: #1e2e50;
+  color: #5878b8;
+}
+
+.dec-action-btn.primary:hover {
+  border-color: #2e4070;
+  color: #8aa0d8;
+}
+
+/* Empty / retired section */
+
+.dec-empty {
+  color: #2e3a58;
+  font-size: 13px;
+  padding: 32px 16px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.dec-section-divider {
+  border: none;
+  border-top: 1px solid #111824;
+  margin: 4px 0;
+}
+
+.dec-retired-toggle {
+  font-size: 11px;
+  color: #3a4a68;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: color 0.13s;
+}
+
+.dec-retired-toggle:hover {
+  color: #5a6a90;
+}

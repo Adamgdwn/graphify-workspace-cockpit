@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Five next
+Status: active — Chunk Six next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -34,8 +34,8 @@ For material or risk-triggering work:
 | Chunk Two — app shell | Complete | 2026-06-14 | Backend health endpoint live; five-tab shell renders; start.sh launches both |
 | Chunk Three — Ask interface | Complete | 2026-06-14 | POST /ask live; query/path/explain modes; sessions saved |
 | Chunk Four — readable map | Complete | 2026-06-14 | GET /graph/summary live; hub-and-spoke map; drill-down; inspect panel; filters; path tracing |
-| Chunk Five — decision ledger | Active | — | Next |
-| Chunk Six — recommendation queue | Planned | — | |
+| Chunk Five — decision ledger | Complete | 2026-06-14 | POST/GET/PATCH /decisions; Decisions tab; Map badges |
+| Chunk Six — recommendation queue | Active | — | Next |
 | Chunk Seven — steady work mode | Planned | — | |
 | Chunk Eight — approved actions | Planned | — | |
 | Chunk Nine — GitHub packaging | Planned | — | |
@@ -191,7 +191,7 @@ Stop condition: stop before full file-level expansion if performance is uncertai
 
 ## Chunk Five - Decision Ledger
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Task complete
 
@@ -213,9 +213,9 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Create, edit, and retire a decision
-- [ ] Reload app and confirm persistence
-- [ ] Map reflects decision badges/colors
+- [x] Create, edit, and retire a decision
+- [x] Reload app and confirm persistence
+- [x] Map reflects decision badges/colors
 
 Stop condition: stop before action execution. Decision records are read and write; no workspace mutation triggered by them.
 
@@ -383,3 +383,9 @@ date -Iseconds
 | 2026-06-14 | Map tab drill-down into agents | Pass | 11 sub-projects in ring layout, breadcrumb updated |
 | 2026-06-14 | Map inspect panel | Pass | Stats, code%, progress bar, drill-down and path buttons |
 | 2026-06-14 | Frontend typecheck after Map tab — tsc --noEmit | Pass | Zero errors |
+| 2026-06-14 | POST /decisions (invest, agents) | Pass | Record created with id, timestamps, status=active |
+| 2026-06-14 | PATCH /decisions/{id} (rationale update) | Pass | updated_at refreshed, field updated |
+| 2026-06-14 | PATCH /decisions/{id} (retire + reactivate) | Pass | Status toggled correctly |
+| 2026-06-14 | GET /decisions | Pass | Returns array; empty before first write |
+| 2026-06-14 | Persistence check — decisions.json | Pass | File written to workspace/state/decisions.json |
+| 2026-06-14 | Frontend typecheck after Decisions tab — tsc --noEmit | Pass | Zero errors |
