@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Eleven complete
+Status: active — Chunk Eleven complete; Chunks 12–14 planned
 Owner: Adam Goodwin
 
 ## Purpose
@@ -41,6 +41,9 @@ For material or risk-triggering work:
 | Chunk Nine — GitHub packaging + network wiring | Complete | 2026-06-14 | Env vars, Docker, demo graph, CI, README |
 | Chunk Ten — network-ready deployment | Complete | 2026-06-14 | API key auth, graph upload, Settings tab, Caddy, responsive, deployment guide |
 | Chunk Eleven — shared state / company-wide source of truth | Complete | 2026-06-14 | Storage abstraction, Supabase backend, ETag polling, created_by, graph list, UAOS handoff, integration guide |
+| Chunk Twelve — real graph foundation | Planned | — | Index this repo; fix workspace graph edges; validate all tabs against live data; demo-mode banner |
+| Chunk Thirteen — demo polish and UX quality | Planned | — | Loading skeletons, empty states, toast notifications, connection status, export, typography pass |
+| Chunk Fourteen — cloud knowledge base connectors | Planned | — | Microsoft Graph API auth, SharePoint + OneNote ingestion, connector UI, sync scheduling |
 
 ---
 
@@ -553,6 +556,242 @@ other humans access to the shared state. This remains an internal Guided AI Labs
 tool until Adam makes a separate governance decision to open access. The
 Supabase schema, access rules, and row-level security must be reviewed before
 any production data is stored.
+
+---
+
+## Chunk Twelve - Real Graph Foundation
+
+Status: **planned**
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Replace synthetic demo data with a real, edge-connected Graphify
+graph of this repo and the wider workspace. Validate every cockpit feature
+against live data. Make the demo-vs-real distinction explicit in the UI.
+
+Context: Every chunk through Eleven was validated against either the bundled
+synthetic demo graph or unit-level import checks. That proves code correctness,
+not product correctness. This chunk closes that gap. The cockpit cannot serve
+as a world-class demo or a reliable UAOS knowledge spoke until it is running
+against real graph data with real relationships.
+
+Inputs:
+
+- Graphify CLI 0.8.37 (installed at `/home/adamgoodwin/.local/bin/graphify`)
+- This repo at `/home/adamgoodwin/code/agents/graphify-workspace-cockpit`
+- Workspace root at `/home/adamgoodwin/code`
+- Existing workspace graph at
+  `Tools/graphify/workspace/out/graph.json` (currently 35,637 nodes, 0 edges — broken)
+
+Outputs:
+
+- Repo-local Graphify config (`.graphify/`) for this repo
+- Real graph built with `graphify update . --no-cluster` from repo root
+- Workspace graph rebuilt with edges using `graphify update /home/adamgoodwin/code --no-cluster`
+- `GRAPH_PATH` in `.env.example` and `docs/deployment-guide.md` updated to
+  show how to point at either a repo-local graph or the workspace graph
+- **Demo-mode banner**: when `GRAPH_PATH` resolves to `workspace/demo/graph.json`,
+  the backend sets `"demo_mode": true` in `GET /health`; the frontend shows a
+  visible banner: "Demo graph active — upload a real graph in Settings to get
+  started." Banner is dismissible per session.
+- All five tabs validated against real graph data: Ask returns evidence from
+  real nodes, Map renders real relationships (edges > 0), Recommendations
+  reference real repo names
+
+Acceptance criteria:
+
+- [ ] `graphify update . --no-cluster` completes without error in this repo
+- [ ] Workspace graph has edges > 0 after rebuild
+- [ ] Cockpit repo appears in the workspace graph node list
+- [ ] Ask tab returns a real graph-backed answer for "what does this cockpit do?"
+- [ ] Map tab renders with real edges — hub-and-spoke is not empty
+- [ ] Recommendation generation references real evidence nodes (not synthetic IDs)
+- [ ] Demo-mode banner appears when demo graph is active; disappears after
+      uploading or activating a real graph
+- [ ] `GRAPH_PATH` setup is documented in README quick-start
+
+Stop condition: stop before any data export, public access, or Supabase
+migration until this is validated locally.
+
+---
+
+## Chunk Thirteen - Demo Polish And UX Quality
+
+Status: **planned**
+
+Completion target: Integration complete
+
+Budget class: Medium
+
+Objective: Bring the cockpit to world-class demo quality. Every screen should
+be intentional, smooth, and professional. No blank screens, no raw spinners,
+no silent failures. This is the chunk that makes the cockpit safe to show
+anyone.
+
+Context: Chunks 2–11 added features one at a time. Each chunk was validated
+for correctness, not polish. The result is a functional cockpit with rough
+edges: blank initial states, no feedback on slow operations, inconsistent
+spacing. This chunk does one complete quality pass across the whole product.
+
+Inputs:
+
+- All five tabs (current state after Chunks 2–11)
+- Figma or visual reference: not required — the standard is "would you show
+  this to a new user without embarrassment?"
+
+Outputs:
+
+- **Loading skeletons** on every data-fetching view: Ask answer area,
+  Map canvas, Decisions list, Recommendations list, Work Queue list;
+  no raw empty-div flash or unguarded spinner
+- **Empty states** in every tab: guided prompt when there is no data yet
+  (e.g., "No decisions yet — classify a workspace area to get started");
+  includes a call-to-action button where one exists
+- **Toast notification system**: a lightweight, non-blocking notification
+  strip (top-right) for mutations — decision saved, recommendation accepted,
+  action executed, graph activated, error on save; replaces silent
+  success/failure
+- **Connection status indicator** in the header or Settings: green dot when
+  backend is reachable and Ollama is connected; amber when backend is up but
+  Ollama is unreachable; red when backend is unreachable; updates on each
+  15s poll cycle (reuses existing ETag polling)
+- **Export**: Decisions tab gets a "Export JSON" button (downloads
+  `decisions.json`); Recommendations tab gets "Export JSON"; Work Queue gets
+  "Export UAOS Handoff" (calls `GET /actions?format=uaos` and downloads the
+  envelope)
+- **Typography and spacing pass**: one consistent font size scale, consistent
+  card padding, consistent button sizing across all tabs; no mixed
+  `rem`/`px`/`em` in critical layout rules
+- **Graph node count in header**: Settings tab shows "N nodes / M edges" for
+  the active graph; goes red if edges = 0 (signals broken graph)
+- **Keyboard shortcut**: `Ctrl+K` / `Cmd+K` opens the Ask tab and focuses
+  the question input from anywhere in the app
+
+Acceptance criteria:
+
+- [ ] No tab shows a blank screen on first load — skeleton or empty state
+      appears within 200ms
+- [ ] Every mutation (save, accept, reject, execute, activate) shows a toast
+      confirmation or error message
+- [ ] Connection status in header reflects real backend + Ollama state
+- [ ] Export buttons produce valid, parseable JSON / UAOS envelope files
+- [ ] Edge-count warning appears in Settings when active graph has 0 edges
+- [ ] `Ctrl+K` focuses Ask from any tab
+- [ ] Typography pass: consistent scale, no visual regressions on desktop
+      and tablet (768px)
+- [ ] `tsc --noEmit` zero errors after this chunk
+
+Stop condition: stop before adding new data features or connectors. This
+chunk touches presentation only — no new endpoints, no new state, no new
+business logic.
+
+---
+
+## Chunk Fourteen - Cloud Knowledge Base Connectors
+
+Status: **planned**
+
+Completion target: Integration complete
+
+Budget class: Strategic
+
+Objective: Extend the cockpit to ingest cloud knowledge sources — SharePoint
+and OneNote — as first-class graph inputs. The cockpit becomes the single
+place where local workspace knowledge and cloud business knowledge are unified,
+searchable, and fed into recommendations.
+
+Context: Adam is building the Microsoft 365 business environment on Windows.
+The UAOS integration spec (REQ-0051) flags M365 as a future governed spoke.
+This chunk builds that spoke inside the cockpit, not inside UAOS, because the
+cockpit is the graph and knowledge layer. UAOS consumes the output through the
+existing handoff contract — no UAOS changes are required to consume cloud
+knowledge once it is in the graph.
+
+See `user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md`
+(REQ-0051, Microsoft 365 boundary section) for the stop triggers and
+governance constraints that apply to all M365 access.
+
+Inputs:
+
+- Microsoft Graph API (`https://graph.microsoft.com/v1.0/`)
+- MSAL Python (`msal>=1.28.0`) for OAuth 2.0 device code flow (no browser
+  required on headless/Docker; user authenticates once, token cached)
+- SharePoint: site collections, document libraries, Office and PDF files
+- OneNote: notebooks, sections, page HTML content
+
+Outputs:
+
+- **Connector abstraction**: `backend/connectors/base.py` — `ConnectorBase`
+  with `authenticate()`, `list_items()`, `fetch_content(item_id)`,
+  `to_graph_nodes()` interface; connector registry in `backend/connectors/__init__.py`
+- **Microsoft Graph auth module**: `backend/connectors/microsoft_auth.py` —
+  device code flow; token cache written to `workspace/state/connector-tokens/`
+  (excluded from git); refresh on expiry
+- **SharePoint connector**: `backend/connectors/sharepoint.py` — discovers
+  configured site(s), lists document library files, downloads content,
+  extracts text (Office XML for .docx/.xlsx, raw HTML for .aspx), converts
+  to graph nodes with `source: "sharepoint"`, `site_url`, `file_path`,
+  `modified_at` metadata
+- **OneNote connector**: `backend/connectors/onenote.py` — lists notebooks
+  and sections accessible to the authenticated user, fetches page HTML,
+  strips to plain text, converts to graph nodes with `source: "onenote"`,
+  `notebook`, `section`, `page` metadata
+- **Ingestion pipeline**: `backend/connectors/ingest.py` — merges connector
+  nodes into the active graph JSON; deduplicates by `source + item_id`;
+  computes edges to existing workspace nodes where shared terms overlap
+  (lightweight TF-IDF co-occurrence, not LLM-based); writes updated graph
+  to `workspace/state/graphs/cloud-merged-{timestamp}.json` and activates it
+- **Sync scheduling**: `POST /connectors/{id}/sync` triggers a background
+  sync; `GET /connectors/{id}/status` returns last sync timestamp, item
+  count, error if any; `SYNC_INTERVAL_HOURS` env var (default: manual-only)
+- **Backend endpoints**:
+  - `GET /connectors` — list configured connectors with auth and sync status
+  - `POST /connectors/microsoft/auth` — starts device code flow; returns
+    user_code and verification_uri for display
+  - `POST /connectors/microsoft/auth/poll` — polls for token completion
+  - `POST /connectors/{id}/sync` — triggers background sync
+  - `GET /connectors/{id}/status` — sync status and item count
+  - `DELETE /connectors/{id}/auth` — revokes token and clears cache
+- **Connector UI in Settings tab**: new "Connected Sources" section shows
+  each connector with auth status (connected/not connected), item count,
+  last sync time, Connect/Disconnect button, Sync Now button; device code
+  auth flow is shown inline (user_code + link displayed, polls until complete)
+- **`config/connectors.json`**: stores non-secret connector config (site
+  URLs, notebook names, sync interval); committed as `.example`
+- **New env vars**: `MICROSOFT_CLIENT_ID`, `MICROSOFT_TENANT_ID` (registered
+  app in Azure AD); secrets never in config files
+- **`.gitignore` additions**: `workspace/state/connector-tokens/`
+- **Governance note**: connector access is read-only for content; no write,
+  send, share, or admin operations; stop triggers from REQ-0051 apply
+
+Acceptance criteria:
+
+- [ ] Microsoft device code auth flow completes successfully and token is
+      cached across backend restarts
+- [ ] SharePoint connector lists files from at least one configured site
+- [ ] OneNote connector lists pages from at least one configured notebook
+- [ ] After sync, Ask tab can answer a question whose answer comes from a
+      SharePoint or OneNote document (evidence node has `source: "sharepoint"`
+      or `source: "onenote"`)
+- [ ] Map tab shows cloud-source nodes distinguished visually from local nodes
+      (different color or icon)
+- [ ] Sync runs in background — Settings tab stays responsive during sync
+- [ ] `DELETE /connectors/{id}/auth` clears token; re-auth required after
+- [ ] No secrets or tokens committed to git
+- [ ] `GET /connectors` returns consistent status whether or not a sync has
+      run
+- [ ] Stop triggers from REQ-0051 are documented in `docs/integration-guide.md`
+      under a "Cloud Connectors" section
+- [ ] `tsc --noEmit` zero errors; `python3 -c "import main"` clean
+
+Stop condition: stop before write operations (create, update, delete, share,
+send) to any Microsoft 365 surface. Stop before accessing email, calendar,
+Teams, or admin/tenant settings. Stop before reading content from accounts
+other than the authenticated user without explicit per-account approval from
+Adam. Content-read access to SharePoint and OneNote is the scope of this
+chunk. Any extension beyond that requires a new governance decision.
 
 ---
 
