@@ -1,0 +1,83 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  background: #0f1117;
+  color: #e8eaf0;
+}
+
+.cockpit {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.cockpit-header {
+  padding: 12px 20px;
+  background: #1a1d27;
+  border-bottom: 1px solid #2a2d3a;
+}
+
+.cockpit-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #a8b4d0;
+  letter-spacing: 0.03em;
+}
+
+.cockpit-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 16px 0;
+  background: #1a1d27;
+  border-bottom: 1px solid #2a2d3a;
+}
+
+.tab-btn {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: #7a8399;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tab-btn:hover {
+  color: #c8cfe0;
+  background: #22263a;
+}
+
+.tab-btn.active {
+  color: #e8eaf0;
+  background: #0f1117;
+  border-top: 2px solid #6b8cff;
+}
+
+.cockpit-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 40px;
+}
+
+.tab-placeholder {
+  max-width: 560px;
+}
+
+.tab-placeholder h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #c8cfe0;
+}
+
+.tab-placeholder p {
+  margin: 0;
+  color: #5a6380;
+  font-size: 0.9rem;
+}

@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14T10:00:00-06:00
-Status: active — Chunk Two in progress
+Status: active — Chunk Three next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -31,8 +31,8 @@ For material or risk-triggering work:
 | Step | Status | Timestamp | Notes |
 |------|--------|-----------|-------|
 | Chunk One — governance baseline | Complete | 2026-06-14 | Docs filled, plan updated, memory note saved |
-| Chunk Two — app shell | Active | 2026-06-14 | Next: scaffold backend + frontend, single launcher |
-| Chunk Three — Ask interface | Planned | — | |
+| Chunk Two — app shell | Complete | 2026-06-14 | Backend health endpoint live; five-tab shell renders; start.sh launches both |
+| Chunk Three — Ask interface | Active | — | Next |
 | Chunk Four — readable map | Planned | — | |
 | Chunk Five — decision ledger | Planned | — | |
 | Chunk Six — recommendation queue | Planned | — | |
@@ -71,7 +71,7 @@ Validation: document review — all placeholder templates replaced with cockpit-
 
 ## Chunk Two - Single App Shell
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Draft complete
 
@@ -95,11 +95,11 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] `uvicorn` starts backend on localhost:8000; `/health` returns 200
-- [ ] `npm run dev` starts frontend; cockpit shell loads in browser
-- [ ] Five tabs render (empty content is fine)
-- [ ] `scripts/start.sh` starts both without error
-- [ ] No secrets or private workspace paths hardcoded
+- [x] `uvicorn` starts backend on localhost:8000; `/health` returns 200
+- [x] `npm run dev` starts frontend; cockpit shell loads in browser
+- [x] Five tabs render (empty content is fine)
+- [x] `scripts/start.sh` starts both without error
+- [x] No secrets or private workspace paths hardcoded
 
 Validation:
 
@@ -113,8 +113,7 @@ Known gaps:
 
 - Graph loading not yet wired
 - Ollama adapter not yet present
-
-Next action: scaffold `backend/main.py` (FastAPI) and `frontend/` (Vite + React) as the smallest runnable shell.
+- Desktop launcher deferred: Adam wants a single `.desktop` launcher file so the cockpit is easy to open without a terminal. Create this when the cockpit is first usable end-to-end (target: after Chunk Three). Launcher should call `scripts/start.sh` and open `http://localhost:5173` in the browser.
 
 ---
 
@@ -371,3 +370,5 @@ date -Iseconds
 | Timestamp | Command | Result | Notes |
 |-----------|---------|--------|-------|
 | 2026-06-14T10:00:00-06:00 | Document review — Chunk One | Pass | All placeholder docs replaced with cockpit-specific content |
+| 2026-06-14 | Backend smoke test — GET /health | Pass | 200 {"status":"ok","version":"0.1.0"} |
+| 2026-06-14 | Frontend typecheck — tsc --noEmit | Pass | Zero errors |
