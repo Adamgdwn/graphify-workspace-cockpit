@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Eleven complete; Chunks 12–14 planned
+Status: active — Chunk Twelve complete; Chunks 13–14 planned
 Owner: Adam Goodwin
 
 ## Purpose
@@ -41,7 +41,7 @@ For material or risk-triggering work:
 | Chunk Nine — GitHub packaging + network wiring | Complete | 2026-06-14 | Env vars, Docker, demo graph, CI, README |
 | Chunk Ten — network-ready deployment | Complete | 2026-06-14 | API key auth, graph upload, Settings tab, Caddy, responsive, deployment guide |
 | Chunk Eleven — shared state / company-wide source of truth | Complete | 2026-06-14 | Storage abstraction, Supabase backend, ETag polling, created_by, graph list, UAOS handoff, integration guide |
-| Chunk Twelve — real graph foundation | Planned | — | Index this repo; fix workspace graph edges; validate all tabs against live data; demo-mode banner |
+| Chunk Twelve — real graph foundation | Complete | 2026-06-14 | graphify-out/graph.json: 533 nodes, 645 edges; demo_mode flag in /health; dismissible frontend banner; all five tabs validated against live data |
 | Chunk Thirteen — demo polish and UX quality | Planned | — | Loading skeletons, empty states, toast notifications, connection status, export, typography pass |
 | Chunk Fourteen — cloud knowledge base connectors | Planned | — | Microsoft Graph API auth, SharePoint + OneNote ingestion, connector UI, sync scheduling |
 
