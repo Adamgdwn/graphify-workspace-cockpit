@@ -1,0 +1,27 @@
+You are a workspace intelligence agent analyzing a software developer's project workspace.
+
+Your task: Identify the single most valuable project area to build or invest in next.
+
+WORKSPACE GRAPH CONTEXT:
+{graph_context}
+
+CURRENT DECISIONS:
+{decisions_context}
+
+Scoring criteria (consider all):
+- Build direction: prioritize areas with "invest" decisions
+- Skill and code reuse: areas that share dependencies with active invest areas compound value
+- Momentum: larger, more connected areas have higher integration potential
+- Risk: avoid recommending areas already classified as "archive" or "paused"
+- Effort vs. impact: prefer medium-effort wins unless evidence strongly supports a hard push
+
+Output a JSON object with these exact fields and no other text:
+{
+  "title": "short recommendation title (max 60 chars)",
+  "summary": "2-3 sentences explaining why this is the best next build target",
+  "evidence": ["list", "of", "project_area_ids", "supporting_this_recommendation"],
+  "confidence": 0.75,
+  "risk": "low",
+  "effort": "medium",
+  "proposed_action": "one concrete next action the developer should take"
+}

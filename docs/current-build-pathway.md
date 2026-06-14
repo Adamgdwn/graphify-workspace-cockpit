@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Six next
+Status: active — Chunk Seven next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -35,7 +35,8 @@ For material or risk-triggering work:
 | Chunk Three — Ask interface | Complete | 2026-06-14 | POST /ask live; query/path/explain modes; sessions saved |
 | Chunk Four — readable map | Complete | 2026-06-14 | GET /graph/summary live; hub-and-spoke map; drill-down; inspect panel; filters; path tracing |
 | Chunk Five — decision ledger | Complete | 2026-06-14 | POST/GET/PATCH /decisions; Decisions tab; Map badges |
-| Chunk Six — recommendation queue | Active | — | Next |
+| Chunk Six — recommendation queue | Complete | 2026-06-14 | POST/GET/PATCH /recommendations; Ollama synthesis; Recommendations tab |
+| Chunk Seven — steady work mode | Active | — | Next |
 | Chunk Seven — steady work mode | Planned | — | |
 | Chunk Eight — approved actions | Planned | — | |
 | Chunk Nine — GitHub packaging | Planned | — | |
@@ -223,7 +224,7 @@ Stop condition: stop before action execution. Decision records are read and writ
 
 ## Chunk Six - Recommendation Queue
 
-Status: **planned**
+Status: **complete** — 2026-06-14
 
 Completion target: Draft complete
 
@@ -246,11 +247,11 @@ Outputs:
 
 Acceptance criteria:
 
-- [ ] Generate "next best build" recommendation
-- [ ] Generate "archive candidates" recommendation
-- [ ] Cards show evidence, confidence, risk
-- [ ] Accept/reject/defer saves status to record
-- [ ] No action is triggered by generating or displaying a card
+- [x] Generate "next best build" recommendation
+- [x] Generate "archive candidates" recommendation
+- [x] Cards show evidence, confidence, risk
+- [x] Accept/reject/defer saves status to record
+- [x] No action is triggered by generating or displaying a card
 
 Stop condition: stop at reviewable cards. No action execution in this chunk.
 
@@ -389,3 +390,8 @@ date -Iseconds
 | 2026-06-14 | GET /decisions | Pass | Returns array; empty before first write |
 | 2026-06-14 | Persistence check — decisions.json | Pass | File written to workspace/state/decisions.json |
 | 2026-06-14 | Frontend typecheck after Decisions tab — tsc --noEmit | Pass | Zero errors |
+| 2026-06-14 | GET /recommendations (empty) | Pass | Returns empty array |
+| 2026-06-14 | POST /recommendations/generate (next-build) | Pass | Ollama phi4:latest returned title, summary, evidence, confidence=0.75 |
+| 2026-06-14 | POST /recommendations/generate (archive-candidates) | Pass | Structured card returned |
+| 2026-06-14 | PATCH /recommendations/{id} (accept) | Pass | Status updated, file persisted |
+| 2026-06-14 | Frontend typecheck after Recommendations tab — tsc --noEmit | Pass | Zero errors |

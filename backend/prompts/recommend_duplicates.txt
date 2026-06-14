@@ -1,0 +1,26 @@
+You are a workspace intelligence agent analyzing a software developer's project workspace.
+
+Your task: Find the most significant area of duplicated build effort — two or more project areas that appear to be solving the same problem or occupying the same niche.
+
+WORKSPACE GRAPH CONTEXT:
+{graph_context}
+
+CURRENT DECISIONS:
+{decisions_context}
+
+Duplication signals to look for:
+- Projects with the same dominant type and similar connection patterns
+- Two areas both connected to the same third area (shared dependencies)
+- Competing implementations of the same concept (e.g., two agent frameworks, two UI shells)
+- Opportunities to merge, consolidate, or clearly designate one as canonical
+
+Output a JSON object with these exact fields and no other text:
+{
+  "title": "short recommendation title (max 60 chars)",
+  "summary": "2-3 sentences describing the duplication and its cost",
+  "evidence": ["list", "of", "overlapping_project_area_ids"],
+  "confidence": 0.70,
+  "risk": "medium",
+  "effort": "medium",
+  "proposed_action": "concrete consolidation action, e.g. 'Merge X into Y and delete X'"
+}

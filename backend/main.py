@@ -448,3 +448,185 @@ def patch_decision(decision_id: str, req: PatchDecisionRequest) -> dict:
             _save_decisions(decisions)
             return d
     raise HTTPException(status_code=404, detail=f"Decision {decision_id} not found.")
+
+
+# ---------------------------------------------------------------------------
+# Recommendation queue
+# ---------------------------------------------------------------------------
+
+RECOMMENDATIONS_DIR = WORKSPACE_STATE / "recommendations"
+RECOMMEND_MODEL_DEFAULT = "phi4:latest"
+
+MODE_PROMPT_FILES: dict[str, str] = {
+    "next-build": "recommend_ranked.txt",
+    "archive-candidates": "recommend_archive.txt",
+    "duplicates": "recommend_duplicates.txt",
+}
+
+RecommendationStatus = Literal["pending", "accepted", "rejected", "deferred"]
+
+
+class GenerateRecommendationRequest(BaseModel):
+    mode: Literal["next-build", "archive-candidates", "duplicates"]
+    model: Optional[str] = None
+
+
+class PatchRecommendationRequest(BaseModel):
+    status: Optional[RecommendationStatus] = None
+
+
+def _load_recommendations() -> list[dict]:
+    if not RECOMMENDATIONS_DIR.exists():
+        return []
+    recs: list[dict] = []
+    for f in RECOMMENDATIONS_DIR.glob("*.json"):
+        try:
+            recs.append(json.loads(f.read_text()))
+        except Exception:
+            pass
+    return sorted(recs, key=lambda r: r.get("created_at", ""), reverse=True)
+
+
+def _save_recommendation(rec: dict) -> None:
+    RECOMMENDATIONS_DIR.mkdir(parents=True, exist_ok=True)
+    (RECOMMENDATIONS_DIR / f"{rec['id']}.json").write_text(json.dumps(rec, indent=2))
+
+
+def _load_recommendation(rec_id: str) -> dict | None:
+    path = RECOMMENDATIONS_DIR / f"{rec_id}.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text())
+        except Exception:
+            pass
+    return None
+
+
+def _build_graph_context(summary: dict) -> str:
+    nodes = summary.get("nodes", [])
+    edges = summary.get("edges", [])
+    lines = [
+        f"Workspace: {len(nodes)} project areas, {summary.get('total_nodes', '?')} total nodes.",
+        "",
+        "Project areas (largest first):",
+    ]
+    for n in nodes[:20]:
+        lines.append(
+            f"  - {n['id']}: {n.get('node_count', 0)} nodes, type={n.get('dominant_type', 'code')}"
+        )
+    if edges:
+        lines.append("")
+        lines.append(f"Top connections ({min(len(edges), 10)} of {len(edges)}):")
+        for e in edges[:10]:
+            lines.append(f"  - {e['source']} <-> {e['target']} ({e.get('weight', 0)} links)")
+    return "\n".join(lines)
+
+
+def _build_decisions_context(decisions: list[dict]) -> str:
+    active = [d for d in decisions if d.get("status") == "active"]
+    if not active:
+        return "No workspace decisions recorded yet."
+    lines = ["Current decisions:"]
+    for d in active:
+        note = f" — {d['rationale']}" if d.get("rationale") else ""
+        lines.append(f"  - {d['target_id']}: {d['classification']}{note}")
+    return "\n".join(lines)
+
+
+def _extract_json(text: str) -> dict:
+    text = re.sub(r"```(?:json)?\s*", "", text).replace("```", "").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start:end])
+            except Exception:
+                pass
+    return {}
+
+
+def _call_ollama(prompt: str, model: str, timeout: int = 120) -> str:
+    import urllib.request as _req
+    payload = json.dumps({
+        "model": model,
+        "prompt": prompt,
+        "stream": False,
+        "format": "json",
+    }).encode("utf-8")
+    request = _req.Request(
+        "http://localhost:11434/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with _req.urlopen(request, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8")).get("response", "")
+
+
+@app.get("/recommendations")
+def list_recommendations() -> list[dict]:
+    return _load_recommendations()
+
+
+@app.post("/recommendations/generate", status_code=201)
+def generate_recommendation(req: GenerateRecommendationRequest) -> dict:
+    try:
+        summary = graph_summary()
+    except HTTPException:
+        summary = {"nodes": [], "edges": [], "total_nodes": 0}
+    decisions = _load_decisions()
+
+    graph_ctx = _build_graph_context(summary)
+    dec_ctx = _build_decisions_context(decisions)
+
+    prompt_file = Path(__file__).parent / "prompts" / MODE_PROMPT_FILES[req.mode]
+    if not prompt_file.exists():
+        raise HTTPException(status_code=500, detail=f"Prompt template missing: {prompt_file.name}")
+
+    template = prompt_file.read_text()
+    prompt = template.replace("{graph_context}", graph_ctx).replace("{decisions_context}", dec_ctx)
+
+    model = (req.model or RECOMMEND_MODEL_DEFAULT).strip()
+    model_used = model
+    parsed: dict = {}
+
+    try:
+        raw = _call_ollama(prompt, model)
+        parsed = _extract_json(raw)
+    except Exception:
+        model_used = "graph-only"
+
+    now = datetime.now(tz=timezone.utc).isoformat()
+    rec: dict = {
+        "id": str(uuid.uuid4()),
+        "mode": req.mode,
+        "title": parsed.get("title") or f"Recommendation: {req.mode}",
+        "summary": parsed.get("summary") or "Ollama unavailable — graph context loaded but no synthesis available.",
+        "evidence": parsed.get("evidence") if isinstance(parsed.get("evidence"), list) else [],
+        "confidence": float(parsed.get("confidence") or 0.0),
+        "risk": parsed.get("risk") or "unknown",
+        "effort": parsed.get("effort") or "unknown",
+        "proposed_action": parsed.get("proposed_action") or "",
+        "status": "pending",
+        "created_at": now,
+        "updated_at": now,
+        "model": model_used,
+    }
+    _save_recommendation(rec)
+    return rec
+
+
+@app.patch("/recommendations/{rec_id}")
+def patch_recommendation(rec_id: str, req: PatchRecommendationRequest) -> dict:
+    rec = _load_recommendation(rec_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"Recommendation {rec_id} not found.")
+    now = datetime.now(tz=timezone.utc).isoformat()
+    if req.status is not None:
+        rec["status"] = req.status
+    rec["updated_at"] = now
+    _save_recommendation(rec)
+    return rec
