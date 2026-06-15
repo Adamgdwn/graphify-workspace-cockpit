@@ -38,6 +38,7 @@ CONNECTORS_DIR = WORKSPACE_STATE / "connectors"
 CLUSTER_SELECTION_FILE = WORKSPACE_STATE / "cluster-selection.json"
 CHAT_CONFIG_FILE      = WORKSPACE_STATE / "chat-config.json"
 CHAT_SESSIONS_DIR     = WORKSPACE_STATE / "chat-sessions"
+SCAN_DIRS_FILE        = WORKSPACE_STATE / "scan-dirs.json"
 _CHAT_DEFAULT_SYSTEM_PROMPT = (
     "You are an assistant with access to the user's knowledge graph. "
     "Answer based on the provided graph context. "
@@ -1580,21 +1581,63 @@ def _run_rebuild() -> None:
     global _graph_cache, _summary_cache
     _REBUILD_STATUS.update({"status": "running"})
     try:
-        repo_root = str(Path(__file__).parent.parent)
-        result = subprocess.run(
-            ["graphify", "update", ".", "--no-cluster"],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-        ts = datetime.now(tz=timezone.utc).isoformat()
-        if result.returncode == 0:
-            _graph_cache = None
-            _summary_cache = {}
-            _REBUILD_STATUS.update({"status": "complete", "last_run": ts, "error": None})
+        repo_root = Path(__file__).parent.parent
+        scan_dirs = _load_scan_dirs()
+
+        if not scan_dirs:
+            # Default: scan just this repo
+            result = subprocess.run(
+                ["graphify", "update", ".", "--no-cluster"],
+                cwd=str(repo_root),
+                capture_output=True, text=True, timeout=300,
+            )
+            ts = datetime.now(tz=timezone.utc).isoformat()
+            if result.returncode != 0:
+                _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": result.stderr[:500]})
+                return
         else:
-            _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": result.stderr[:500]})
+            # Scan each configured directory, then merge all graphs
+            graph_paths: list[str] = []
+            for d in scan_dirs:
+                r = subprocess.run(
+                    ["graphify", "update", d, "--no-cluster"],
+                    cwd=d,
+                    capture_output=True, text=True, timeout=300,
+                )
+                if r.returncode == 0:
+                    candidate = Path(d) / "graphify-out" / "graph.json"
+                    if candidate.exists():
+                        graph_paths.append(str(candidate))
+            ts = datetime.now(tz=timezone.utc).isoformat()
+            if not graph_paths:
+                _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": "No graphs produced by configured scan directories"})
+                return
+            out_path = repo_root / "graphify-out" / "merged-graph.json"
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            if len(graph_paths) == 1:
+                import shutil
+                shutil.copy(graph_paths[0], str(out_path))
+            else:
+                merge_result = subprocess.run(
+                    ["graphify", "merge-graphs"] + graph_paths + ["--out", str(out_path)],
+                    capture_output=True, text=True, timeout=300,
+                )
+                if merge_result.returncode != 0:
+                    _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": merge_result.stderr[:500]})
+                    return
+            # Activate the merged graph
+            settings: dict = {}
+            if SETTINGS_FILE.exists():
+                try:
+                    settings = json.loads(SETTINGS_FILE.read_text())
+                except Exception:
+                    pass
+            settings["graph_path"] = str(out_path)
+            SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+
+        _graph_cache = None
+        _summary_cache = {}
+        _REBUILD_STATUS.update({"status": "complete", "last_run": datetime.now(tz=timezone.utc).isoformat(), "error": None})
     except Exception as exc:
         ts = datetime.now(tz=timezone.utc).isoformat()
         _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": str(exc)})
@@ -1618,6 +1661,53 @@ def rebuild_status() -> dict:
         "last_run": _REBUILD_STATUS.get("last_run"),
         "error": _REBUILD_STATUS.get("error"),
     }
+
+
+def _load_scan_dirs() -> list[str]:
+    if SCAN_DIRS_FILE.exists():
+        try:
+            return json.loads(SCAN_DIRS_FILE.read_text())
+        except Exception:
+            pass
+    return []
+
+
+def _save_scan_dirs(dirs: list[str]) -> None:
+    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+    SCAN_DIRS_FILE.write_text(json.dumps(dirs, indent=2))
+
+
+@app.get("/graph/scan-dirs")
+def get_scan_dirs() -> dict:
+    """Return the list of directories currently configured for graphify scanning."""
+    return {"dirs": _load_scan_dirs()}
+
+
+class ScanDirBody(BaseModel):
+    path: str
+
+
+@app.post("/graph/scan-dirs", status_code=201)
+def add_scan_dir(body: ScanDirBody) -> dict:
+    """Add a directory to the scan list. Path must exist on disk."""
+    p = Path(body.path).expanduser().resolve()
+    if not p.is_dir():
+        raise HTTPException(status_code=422, detail=f"Not a directory: {p}")
+    dirs = _load_scan_dirs()
+    sp = str(p)
+    if sp not in dirs:
+        dirs.append(sp)
+        _save_scan_dirs(dirs)
+    return {"dirs": dirs}
+
+
+@app.delete("/graph/scan-dirs")
+def remove_scan_dir(body: ScanDirBody) -> dict:
+    """Remove a directory from the scan list."""
+    p = str(Path(body.path).expanduser().resolve())
+    dirs = [d for d in _load_scan_dirs() if str(Path(d).resolve()) != p]
+    _save_scan_dirs(dirs)
+    return {"dirs": dirs}
 
 
 # ---------------------------------------------------------------------------

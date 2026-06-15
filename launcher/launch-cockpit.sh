@@ -15,7 +15,24 @@ FRONTEND_LOG="$LOG_DIR/frontend.log"
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 notify() {
-  command -v notify-send &>/dev/null && notify-send "Graphify Cockpit" "$1" --icon="$LOG_DIR/icon.svg" 2>/dev/null || true
+  command -v notify-send &>/dev/null && notify-send "Graphify Cockpit" "$1" --icon="$LOG_DIR/icon.png" 2>/dev/null || true
+}
+
+open_browser() {
+  local url="$1"
+  # Try multiple methods in order — xdg-open can be unreliable on COSMIC/Wayland
+  if command -v xdg-open &>/dev/null; then
+    xdg-open "$url" 2>/dev/null &
+    disown
+    return
+  fi
+  for browser in firefox google-chrome chromium-browser brave-browser; do
+    if command -v "$browser" &>/dev/null; then
+      "$browser" "$url" 2>/dev/null &
+      disown
+      return
+    fi
+  done
 }
 
 backend_running() {
@@ -42,7 +59,7 @@ wait_for() {
 
 if backend_running && frontend_running; then
   notify "Cockpit already running — opening browser"
-  xdg-open "$FRONTEND_URL" &
+  open_browser "$FRONTEND_URL"
   exit 0
 fi
 
@@ -78,4 +95,4 @@ wait_for "$BACKEND_URL/health" "backend"
 wait_for "$FRONTEND_URL" "frontend"
 
 notify "Cockpit ready"
-xdg-open "$FRONTEND_URL" &
+open_browser "$FRONTEND_URL"

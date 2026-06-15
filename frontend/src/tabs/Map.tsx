@@ -552,7 +552,7 @@ export function Map({ onNavigateSettings }: MapProps) {
   const pathSourceRef = useRef<string | null>(null);
   const summaryRef = useRef<GraphSummary | null>(null);
 
-  const [viewMode, setViewMode] = useState<ViewMode>("summary");
+  const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [summary, setSummary] = useState<GraphSummary | null>(null);
   const [fullGraph, setFullGraph] = useState<FullGraph | null>(null);
   const [fullLoading, setFullLoading] = useState(false);
@@ -809,10 +809,11 @@ export function Map({ onNavigateSettings }: MapProps) {
     return () => { cy.destroy(); cyRef.current = null; };
   }, [viewMode, fullGraph, filter]);
 
-  // Apply type filter via class toggling (no re-layout)
+  // Apply type filter via class toggling (no re-layout) — summary mode only.
+  // Full mode re-runs its init effect to rebuild elements via buildFullElements.
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy) return;
+    if (!cy || viewMode === "full") return;
     cy.batch(() => {
       if (filter === "all") {
         cy.elements().removeClass("faded");
@@ -823,7 +824,7 @@ export function Map({ onNavigateSettings }: MapProps) {
         matching.connectedEdges().removeClass("faded");
       }
     });
-  }, [filter]);
+  }, [filter, viewMode]);
 
   // Path mode exit — clear all highlights
   useEffect(() => {

@@ -126,6 +126,11 @@ export function Settings() {
   const [chatDraft,   setChatDraft]   = useState<ChatConfig | null>(null);
   const [savingChat,  setSavingChat]  = useState(false);
 
+  // Scan directories
+  const [scanDirs, setScanDirs] = useState<string[]>([]);
+  const [scanDirInput, setScanDirInput] = useState("");
+  const [addingDir, setAddingDir] = useState(false);
+
   const loadConnectors = useCallback(() => {
     fetch(`${API}/connectors`)
       .then((r) => r.json())
@@ -161,6 +166,10 @@ export function Settings() {
     fetch(`${API}/chat-config`)
       .then((r) => r.json())
       .then((d: ChatConfig) => { setChatConfig(d); setChatDraft(d); })
+      .catch(() => {});
+    fetch(`${API}/graph/scan-dirs`)
+      .then((r) => r.json())
+      .then((d: { dirs: string[] }) => setScanDirs(d.dirs))
       .catch(() => {});
     loadConnectors();
   }
@@ -251,6 +260,50 @@ export function Settings() {
   async function handleDeselectAll() {
     if (!clusterSel) return;
     await applyClusterSel({ sources: clusterSel.available_sources, clusters: [] });
+  }
+
+  async function handleAddScanDir(e: FormEvent) {
+    e.preventDefault();
+    const path = scanDirInput.trim();
+    if (!path) return;
+    setAddingDir(true);
+    try {
+      const r = await fetch(`${API}/graph/scan-dirs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { detail?: string };
+        addToast(d.detail ?? `Error ${r.status}`, "error");
+      } else {
+        const d = await r.json() as { dirs: string[] };
+        setScanDirs(d.dirs);
+        setScanDirInput("");
+        addToast("Directory added", "success");
+      }
+    } catch {
+      addToast("Failed to add directory", "error");
+    } finally {
+      setAddingDir(false);
+    }
+  }
+
+  async function handleRemoveScanDir(path: string) {
+    try {
+      const r = await fetch(`${API}/graph/scan-dirs`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      if (r.ok) {
+        const d = await r.json() as { dirs: string[] };
+        setScanDirs(d.dirs);
+        addToast("Directory removed", "info");
+      }
+    } catch {
+      addToast("Failed to remove directory", "error");
+    }
   }
 
   async function handleSaveChatConfig() {
@@ -555,6 +608,50 @@ export function Settings() {
             </span>
           )}
         </div>
+      </section>
+
+      {/* Local Repositories */}
+      <section className="settings-section">
+        <div className="settings-section-title">Local Repositories</div>
+        <p className="settings-dim" style={{ marginBottom: 10 }}>
+          Directories scanned by graphify when you rebuild the graph.
+          Add any local repo or folder — each is scanned and merged into one graph.
+          Then click <strong>Rebuild Graph</strong> above to apply.
+        </p>
+        {scanDirs.length === 0 ? (
+          <p className="settings-dim" style={{ marginBottom: 8 }}>
+            No directories configured — rebuild uses this repo only.
+          </p>
+        ) : (
+          <div className="connector-list" style={{ marginBottom: 8 }}>
+            {scanDirs.map((d) => (
+              <div key={d} className="connector-row">
+                <span className="settings-value settings-mono settings-break" style={{ flex: 1, fontSize: 12 }}>{d}</span>
+                <button
+                  className="settings-refresh-btn"
+                  type="button"
+                  onClick={() => handleRemoveScanDir(d)}
+                  style={{ color: "#f97316" }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <form className="settings-upload-form" onSubmit={handleAddScanDir} style={{ gap: 8 }}>
+          <input
+            className="settings-mono-input"
+            style={{ flex: 1 }}
+            value={scanDirInput}
+            onChange={(e) => setScanDirInput(e.target.value)}
+            placeholder="/home/user/code/my-repo"
+            type="text"
+          />
+          <button type="submit" className="settings-upload-btn" disabled={addingDir || !scanDirInput.trim()}>
+            {addingDir ? "Adding…" : "Add Directory"}
+          </button>
+        </form>
       </section>
 
       {/* Knowledge Sources */}
