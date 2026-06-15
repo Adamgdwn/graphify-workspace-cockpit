@@ -331,10 +331,28 @@ body {
   border-top: 1px solid #1e2130;
 }
 
-.evidence-label {
+.evidence-label,
+.evidence-node-button {
   font-size: 0.85rem;
   color: #9ab0e0;
   font-weight: 500;
+}
+
+.evidence-node-button {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+
+.evidence-node-button:hover {
+  color: #c8d8ff;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .evidence-src {
@@ -667,6 +685,28 @@ body {
 
 .map-path-hint-warn {
   border-color: rgba(224, 112, 112, 0.5);
+  color: #e07070;
+}
+
+.map-focus-notice {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  max-width: 560px;
+  padding: 8px 12px;
+  background: rgba(13, 18, 32, 0.94);
+  border: 1px solid rgba(107, 140, 255, 0.38);
+  border-radius: 6px;
+  color: #9ab0e0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.map-focus-notice-warn {
+  border-color: rgba(224, 112, 112, 0.45);
   color: #e07070;
 }
 
@@ -1858,6 +1898,15 @@ body {
   border-radius: 4px;
   padding: 2px 7px;
   font-family: monospace;
+  cursor: pointer;
+  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  text-align: left;
+}
+
+.rec-evidence-chip:hover {
+  color: #8ab4ff;
+  border-color: #2a4f8a;
+  background: #0d1728;
 }
 
 /* Proposed action */

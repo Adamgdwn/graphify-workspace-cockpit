@@ -36,7 +36,7 @@ export default function App() {
   const [connStatus, setConnStatus] = useState<ConnStatus>("ok");
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
-  const [, setActiveContext] = useState<ActiveCockpitContext | null>(null);
+  const [activeContext, setActiveContext] = useState<ActiveCockpitContext | null>(null);
   const askRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Connection status + demo mode poll (15s)
@@ -76,6 +76,11 @@ export default function App() {
   function dismissBanner() {
     sessionStorage.setItem(BANNER_KEY, "1");
     setBannerDismissed(true);
+  }
+
+  function navigateToMapContext(context: ActiveCockpitContext) {
+    setActiveContext(context);
+    setActive("map");
   }
 
   const showBanner = demoMode && !bannerDismissed;
@@ -140,10 +145,10 @@ export default function App() {
           ))}
         </nav>
         <main className="cockpit-content">
-          {active === "ask" && <ErrorBoundary tabName="Ask"><Ask focusTrigger={focusTrigger} askRef={askRef} /></ErrorBoundary>}
-          {active === "map" && <ErrorBoundary tabName="Map"><Map onNavigateSettings={() => setActive("settings")} onActiveContextChange={setActiveContext} /></ErrorBoundary>}
+          {active === "ask" && <ErrorBoundary tabName="Ask"><Ask focusTrigger={focusTrigger} askRef={askRef} onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
+          {active === "map" && <ErrorBoundary tabName="Map"><Map activeContext={activeContext} onNavigateSettings={() => setActive("settings")} onActiveContextChange={setActiveContext} /></ErrorBoundary>}
           {active === "decisions" && <ErrorBoundary tabName="Decisions"><Decisions onActiveContextChange={setActiveContext} /></ErrorBoundary>}
-          {active === "recommendations" && <ErrorBoundary tabName="Recommendations"><Recommendations /></ErrorBoundary>}
+          {active === "recommendations" && <ErrorBoundary tabName="Recommendations"><Recommendations onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
           {active === "work-queue" && <ErrorBoundary tabName="Work Queue"><WorkQueue /></ErrorBoundary>}
           {active === "settings" && <ErrorBoundary tabName="Settings"><Settings /></ErrorBoundary>}
         </main>

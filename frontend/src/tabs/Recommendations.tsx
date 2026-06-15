@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { API } from "../config";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -87,12 +88,14 @@ function RecCard({
   rec,
   onSetStatus,
   onQueue,
+  onEvidenceNavigate,
   isQueuing,
   isQueued,
 }: {
   rec: Recommendation;
   onSetStatus: (id: string, status: RecStatus) => void;
   onQueue: (id: string) => void;
+  onEvidenceNavigate?: (context: ActiveCockpitContext) => void;
   isQueuing: boolean;
   isQueued: boolean;
 }) {
@@ -128,7 +131,20 @@ function RecCard({
           <span className="rec-evidence-label">Evidence:</span>
           <div className="rec-evidence-chips">
             {rec.evidence.map((e) => (
-              <span key={e} className="rec-evidence-chip">{e}</span>
+              <button
+                key={e}
+                type="button"
+                className="rec-evidence-chip"
+                onClick={() => onEvidenceNavigate?.({
+                  kind: "node",
+                  source: "recommendations",
+                  nodeId: e,
+                  label: e,
+                })}
+                title="Open this evidence on the Map"
+              >
+                {e}
+              </button>
             ))}
           </div>
         </div>
@@ -203,7 +219,7 @@ function RecCard({
 const FILTERS = ["all", "pending", "accepted", "deferred", "rejected"] as const;
 type FilterValue = (typeof FILTERS)[number];
 
-export function Recommendations() {
+export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (context: ActiveCockpitContext) => void }) {
   const [recs, setRecs]               = useState<Recommendation[]>([]);
   const [loading, setLoading]         = useState(true);
   const [generating, setGenerating]   = useState<RecMode | null>(null);
@@ -378,6 +394,7 @@ export function Recommendations() {
             rec={rec}
             onSetStatus={setStatus}
             onQueue={queueRec}
+            onEvidenceNavigate={onEvidenceNavigate}
             isQueuing={queuing === rec.id}
             isQueued={queuedIds.has(rec.id)}
           />

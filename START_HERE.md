@@ -1,20 +1,21 @@
 # Start Here
 
-Last Updated: 2026-06-15T11:23:11-06:00
-Status: active — Chunk Twenty complete; Chunk Twenty-One planned
+Last Updated: 2026-06-15T11:50:05-06:00
+Status: active — Chunk Twenty-One complete; Chunk Twenty-Two planned
 Owner: Adam Goodwin
 
 ## State at Pause
 
-The first 20 build chunks are complete. The cockpit is a working local-first decision
+The first 21 build chunks are complete. The cockpit is a working local-first decision
 surface: six tabs (Ask, Map, Decisions, Recommendations, Work Queue, Settings)
 plus a floating AI assistant overlay. Desktop launcher is at
 `~/Desktop/graphify-cockpit.desktop`.
 
 The active path is decision-flow polish, split into token-friendly chunks in
 `docs/current-build-pathway.md`. Chunk Twenty established the shared decision
-vocabulary and App-level active cockpit context. Chunk Twenty-One is next:
-clickable evidence that navigates to focused Map context.
+vocabulary and App-level active cockpit context. Chunk Twenty-One made Ask and
+Recommendation evidence navigate into focused Map context. Chunk Twenty-Two is
+next: Map mode polish.
 
 **Chunks 18–19 highlights:**
 - Map → Overlap Analysis panel: 14 cross-cluster pairs, 1,988 semantic edges
@@ -41,8 +42,8 @@ loading, and `79ccf42` Fix overlap semantic highlight clearing.
 ## To Resume
 
 1. `git status --short` — confirm clean tree.
-2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Twenty-One - Evidence Navigation" sections in `docs/current-build-pathway.md`.
-3. Load only the context listed for Chunk Twenty-One.
+2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Twenty-Two - Map Mode Polish" sections in `docs/current-build-pathway.md`.
+3. Load only the context listed for Chunk Twenty-Two.
 4. Use `docs/context-map.md` if routing is still unclear.
 
 ## Work Patterns

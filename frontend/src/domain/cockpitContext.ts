@@ -12,7 +12,7 @@ export type ActiveCockpitContext =
     }
   | {
       kind: "cluster";
-      source: "map" | "settings";
+      source: "ask" | "map" | "recommendations" | "settings";
       clusterId: string;
       label?: string;
     }

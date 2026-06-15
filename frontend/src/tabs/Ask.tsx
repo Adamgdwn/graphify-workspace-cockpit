@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { API } from "../config";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
 type Mode = "query" | "path" | "explain";
 
@@ -38,9 +39,10 @@ const MODE_HINTS: Record<Mode, string> = {
 interface AskProps {
   focusTrigger?: number;
   askRef?: React.MutableRefObject<HTMLTextAreaElement | null>;
+  onEvidenceNavigate?: (context: ActiveCockpitContext) => void;
 }
 
-export function Ask({ focusTrigger = 0, askRef }: AskProps) {
+export function Ask({ focusTrigger = 0, askRef, onEvidenceNavigate }: AskProps) {
   const [question, setQuestion] = useState("");
   const [mode, setMode] = useState<Mode>("query");
   const [nodeA, setNodeA] = useState("");
@@ -193,7 +195,20 @@ export function Ask({ focusTrigger = 0, askRef }: AskProps) {
               <ul className="ask-evidence-list">
                 {response.evidence.map((e, i) => (
                   <li key={i} className="ask-evidence-item">
-                    <span className="evidence-label">{e.label}</span>
+                    <button
+                      type="button"
+                      className="evidence-node-button"
+                      onClick={() => onEvidenceNavigate?.({
+                        kind: "node",
+                        source: "ask",
+                        nodeId: e.label,
+                        label: e.label,
+                        clusterId: e.community,
+                      })}
+                      title="Open this evidence node on the Map"
+                    >
+                      {e.label}
+                    </button>
                     {e.src && (
                       <span className="evidence-src">
                         {e.src}

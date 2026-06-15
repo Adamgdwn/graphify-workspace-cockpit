@@ -7,6 +7,7 @@ import fcose from "cytoscape-fcose";
 // @ts-ignore
 import layoutUtilities from "cytoscape-layout-utilities";
 import { DECISION_CLASSIFICATIONS } from "../domain/decision";
+import type { ActiveCockpitContext } from "../domain/cockpitContext";
 import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
 
 // ── Extension registration (once per page lifetime) ───────────────────────
@@ -607,13 +608,15 @@ const FULL_CY_STYLE: object[] = [
 // ── Component ─────────────────────────────────────────────────────────────
 
 interface MapProps {
+  activeContext?: ActiveCockpitContext | null;
   onNavigateSettings?: () => void;
   onActiveContextChange?: ActiveCockpitContextHandler;
 }
 
-export function Map({ onNavigateSettings, onActiveContextChange }: MapProps) {
+export function Map({ activeContext, onNavigateSettings, onActiveContextChange }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const appliedContextKeyRef = useRef<string | null>(null);
 
   // Refs for cy event handlers — avoids stale closures over React state
   const pathModeRef = useRef(false);
@@ -664,6 +667,7 @@ export function Map({ onNavigateSettings, onActiveContextChange }: MapProps) {
   // LLM triage
   const [triageResults, setTriageResults] = useState<Record<string, TriageResult>>({});
   const [triaging, setTriaging] = useState<Record<string, boolean>>({});
+  const [focusNotice, setFocusNotice] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
 
   const showSemanticRef = useRef(false);
   const semanticEdgesRef = useRef<Array<{ source: string; target: string; similarity: number }>>([]);
@@ -760,6 +764,71 @@ export function Map({ onNavigateSettings, onActiveContextChange }: MapProps) {
   useEffect(() => { semanticEdgesRef.current = semanticEdges; }, [semanticEdges]);
   useEffect(() => { showStructuralRef.current = showStructural; }, [showStructural]);
   useEffect(() => { nodeClusterMapRef.current = nodeClusterMap; }, [nodeClusterMap]); // eslint-disable-line
+
+  function normalizeLookup(value: string) {
+    return value.trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function evidenceCandidates(context: ActiveCockpitContext): string[] {
+    if (context.kind !== "node") return [];
+    const raw = [context.nodeId, context.label ?? ""].filter(Boolean);
+    return [...new Set(raw.flatMap((value) => {
+      const withoutScore = value.replace(/\s+\(\d+%?\)\s*$/, "");
+      return [value, withoutScore, ...withoutScore.split(/\s*(?:↔|<--|-->|→|->)\s*/)];
+    }).map((value) => value.trim()).filter(Boolean))];
+  }
+
+  function contextLabel(context: ActiveCockpitContext) {
+    if (context.kind === "node") return context.label || context.nodeId;
+    if (context.kind === "cluster") return context.label || context.clusterId;
+    if (context.kind === "overlap-pair") return `${context.clusterA} ↔ ${context.clusterB}`;
+    if (context.kind === "recommendation") return context.label || context.recommendationId;
+    return context.label || context.targetId;
+  }
+
+  function contextSourceLabel(context: ActiveCockpitContext) {
+    return context.source === "ask" ? "Ask evidence"
+      : context.source === "recommendations" ? "Recommendation evidence"
+      : context.source === "decisions" ? "Decision"
+      : "Map context";
+  }
+
+  function contextKey(context: ActiveCockpitContext) {
+    return JSON.stringify(context);
+  }
+
+  function focusVisibleNode(nodeId: string, notice: string) {
+    const cy = cyRef.current;
+    if (!cy) return false;
+    const node = cy.getElementById(nodeId);
+    if (!node || node.empty()) return false;
+    cy.batch(() => {
+      cy.nodes().removeClass("selected");
+      cy.edges().removeClass("highlighted");
+      node.addClass("selected");
+      node.connectedEdges().addClass("highlighted");
+    });
+    cy.animate({ center: { eles: node }, zoom: Math.max(cy.zoom(), 1.8) }, { duration: 450 });
+    setFocusNotice({ tone: "info", text: notice });
+    return true;
+  }
+
+  function focusVisibleCluster(clusterId: string, notice: string) {
+    const cy = cyRef.current;
+    if (!cy) return false;
+    const wanted = normalizeLookup(clusterId);
+    const nodes = cy.nodes().filter((node: any) => normalizeLookup(String(node.data("cluster") ?? "")) === wanted);
+    if (!nodes || nodes.empty()) return false;
+    cy.batch(() => {
+      cy.nodes().removeClass("selected");
+      cy.edges().removeClass("highlighted");
+      nodes.addClass("selected");
+      nodes.connectedEdges().addClass("highlighted");
+    });
+    cy.fit(nodes, 80);
+    setFocusNotice({ tone: "info", text: notice });
+    return true;
+  }
 
   // Fetch decisions (non-critical — silently ignored if backend down)
   useEffect(() => {
@@ -1093,6 +1162,83 @@ export function Map({ onNavigateSettings, onActiveContextChange }: MapProps) {
 
     return () => { cy.destroy(); cyRef.current = null; };
   }, [viewMode, fullGraph, filter, selectedClusters]);
+
+  // Apply cross-tab evidence context once the relevant graph surface is ready.
+  useEffect(() => {
+    if (!activeContext || activeContext.source === "map") return;
+    const key = contextKey(activeContext);
+    if (appliedContextKeyRef.current === key) return;
+
+    if (activeContext.kind !== "node") {
+      setFocusNotice({ tone: "warn", text: `${contextSourceLabel(activeContext)} target is not focusable on the Map yet.` });
+      appliedContextKeyRef.current = key;
+      return;
+    }
+
+    if (viewMode !== "full") {
+      setViewMode("full");
+      return;
+    }
+
+    if (!fullGraph) {
+      fetchFullGraph();
+      return;
+    }
+
+    const candidates = evidenceCandidates(activeContext);
+    const normalized = new Set(candidates.map(normalizeLookup));
+    const match = fullGraph.nodes.find((n) =>
+      normalized.has(normalizeLookup(n.id)) || normalized.has(normalizeLookup(n.label))
+    );
+    const requested = contextLabel(activeContext);
+    const sourceLabel = contextSourceLabel(activeContext);
+
+    if (!match) {
+      const clusterMatch = [...new Set(fullGraph.nodes.map((n) => n.cluster).filter(Boolean))]
+        .find((cluster) => normalized.has(normalizeLookup(cluster)));
+      if (clusterMatch) {
+        if (filter !== "all") {
+          setFilter("all");
+          return;
+        }
+
+        if (selectedClusters && !selectedClusters.has(clusterMatch)) {
+          setSelectedClusters(null);
+          return;
+        }
+
+        if (!focusVisibleCluster(clusterMatch, `${sourceLabel}: ${requested}`)) return;
+        setSelectedFull(null);
+        setSelected(null);
+        setShowOverlap(false);
+        setHighlightedPair(null);
+        appliedContextKeyRef.current = key;
+        return;
+      }
+
+      setSelectedFull(null);
+      setFocusNotice({ tone: "warn", text: `${sourceLabel} not found in the active graph: ${requested}` });
+      appliedContextKeyRef.current = key;
+      return;
+    }
+
+    if (filter !== "all") {
+      setFilter("all");
+      return;
+    }
+
+    if (selectedClusters && !selectedClusters.has(match.cluster)) {
+      setSelectedClusters(null);
+      return;
+    }
+
+    if (!focusVisibleNode(match.id, `${sourceLabel}: ${requested}`)) return;
+    setSelectedFull(match);
+    setSelected(null);
+    setShowOverlap(false);
+    setHighlightedPair(null);
+    appliedContextKeyRef.current = key;
+  }, [activeContext, fetchFullGraph, filter, fullGraph, selectedClusters, viewMode]);
 
   // Apply type filter via class toggling (no re-layout) — summary mode only.
   // Full mode re-runs its init effect to rebuild elements via buildFullElements.
@@ -1473,6 +1619,12 @@ export function Map({ onNavigateSettings, onActiveContextChange }: MapProps) {
         {/* Canvas */}
         <div className="map-canvas-wrap">
           <div className="map-canvas" ref={containerRef} />
+
+          {focusNotice && (
+            <div className={`map-focus-notice${focusNotice.tone === "warn" ? " map-focus-notice-warn" : ""}`}>
+              {focusNotice.text}
+            </div>
+          )}
 
           {(loading || (fullLoading && viewMode === "full")) && (
             <div className="map-overlay">

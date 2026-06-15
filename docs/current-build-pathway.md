@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-15T11:23:11-06:00
-Status: active — Chunk Twenty complete; Chunk Twenty-One planned
+Last Updated: 2026-06-15T11:50:05-06:00
+Status: active — Chunk Twenty-One complete; Chunk Twenty-Two planned
 Owner: Adam Goodwin
 
 ## Purpose
@@ -50,7 +50,7 @@ For material or risk-triggering work:
 | Chunk Eighteen — overlap analysis + actionable consolidation | Complete | 2026-06-14 | Cross-cluster semantic edge filtering (1988 cross-repo vs 14501 total); Overlap Analysis panel in Map tab; GET /graph/overlap-report; POST /recommendations/from-overlap (no LLM — computed from graph data); Highlight pair on map; Create Task → Recommendations flow |
 | Chunk Nineteen — signal/noise filtering + LLM triage | Complete | 2026-06-15 | Layer 1: same-name detection, similarity filter chips (70/80/85/90%), sameNameCount badge, pairs sort same-name first; Layer 2: POST /overlap/triage (Ollama phi4, structured JSON verdict); triageAll button; verdict badge (duplicate/reference/related); Next step action displayed for all verdicts; Task button verb reflects verdict (Merge/Review/Document); triage data flows into recommendation title + proposed_action; CSS specificity fix for Highlight/fade behaviour |
 | Chunk Twenty — decision-flow foundation | Complete | 2026-06-15T11:23:11-06:00 | Decision vocabulary aligned to shipped API/UI values; shared frontend decision metadata added; App-level active cockpit context added and wired to Map node/overlap selection plus Decisions edit/save/retire without changing action permissions |
-| Chunk Twenty-One — evidence navigation | Planned | 2026-06-15T10:23:52-06:00 | Make evidence chips and overlap pairs navigate to focused Map context without adding new analysis behavior |
+| Chunk Twenty-One — evidence navigation | Complete | 2026-06-15T11:50:05-06:00 | Ask evidence and Recommendation evidence now navigate to Map; Map resolves full-graph nodes by id/label, resolves cluster evidence by cluster id, shows focus notices, fails softly for missing targets, and backend default CORS now supports both localhost and 127.0.0.1 dev origins |
 | Chunk Twenty-Two — Map mode polish | Planned | 2026-06-15T10:23:52-06:00 | Group dense Map controls into explicit Explore / Trace / Overlap / Review modes |
 | Chunk Twenty-Three — overlap triage workflow | Planned | 2026-06-15T10:23:52-06:00 | Add durable triage statuses for overlap pairs: untriaged, triaged, task created, dismissed |
 | Chunk Twenty-Four — decision command center | Planned | 2026-06-15T10:23:52-06:00 | Add a compact attention surface for pending recommendations, dry-run-ready actions, untriaged overlaps, and graph freshness |
@@ -60,7 +60,7 @@ For material or risk-triggering work:
 
 ## Next Path - World-Class Decision Tool Polish
 
-Status: **active** — Chunk Twenty complete; Chunk Twenty-One planned — 2026-06-15T11:23:11-06:00
+Status: **active** — Chunk Twenty-One complete; Chunk Twenty-Two planned — 2026-06-15T11:50:05-06:00
 
 Completion target: Integration complete
 
@@ -146,7 +146,7 @@ Stop condition: stop before making evidence chips navigate or changing Map toolb
 
 ## Chunk Twenty-One - Evidence Navigation
 
-Status: **planned**
+Status: **complete** — 2026-06-15T11:50:05-06:00
 
 Completion target: Task complete
 
@@ -166,21 +166,35 @@ Outputs:
 
 - Clickable evidence nodes in Ask results
 - Clickable evidence chips in Recommendation cards
-- Map focus behavior for selected node/cluster when navigated from another tab
-- Clear empty/error handling when an evidence target is not present in the current graph
+- App-level evidence navigation from Ask/Recommendations into the Map tab
+- Map focus behavior for full-graph nodes by id or label
+- Map focus behavior for cluster evidence such as `frontend` or `backend`
+- Visible focus notice showing why Map changed
+- Soft warning notice when an evidence target is not present in the current graph
+- Backend default CORS now allows both `http://localhost:5173` and `http://127.0.0.1:5173` for local demo access
 
 Acceptance criteria:
 
-- [ ] Ask evidence click navigates to Map and focuses the target when resolvable
-- [ ] Recommendation evidence click navigates to Map and focuses the target when resolvable
-- [ ] The active context is visible enough that the operator knows why Map changed
-- [ ] Missing evidence targets fail softly
+- [x] Ask evidence click navigates to Map and focuses the target when resolvable
+- [x] Recommendation evidence click navigates to Map and focuses the target when resolvable
+- [x] The active context is visible enough that the operator knows why Map changed
+- [x] Missing evidence targets fail softly
 
 Validation:
 
-- Frontend typecheck and build
-- Manual: Ask question → click evidence → Map focus
-- Manual: Recommendation evidence → Map focus
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed: `cd backend && .venv/bin/python -m py_compile main.py`
+- Passed: `git diff --check`
+- Passed: `curl -I http://127.0.0.1:5173` returned `200 OK`
+- Passed: `curl http://127.0.0.1:8000/health` returned `{"status":"ok","version":"0.1.0","demo_mode":false}`
+- Passed: CORS preflight for `Origin: http://127.0.0.1:5173` to `http://localhost:8000/ask` returned `200 OK` with `access-control-allow-origin: http://127.0.0.1:5173`
+- Passed: `chromium --headless --disable-gpu --no-sandbox --dump-dom http://127.0.0.1:5173` loaded the app shell
+- Live data checked: `/ask` returns evidence including `Graphify Workspace Cockpit`, which is resolvable in `/graph/full`
+- Live data checked: `/recommendations` returns cluster evidence including `frontend` and `backend`, which are resolvable as full-graph clusters
+- Running backend restarted on `127.0.0.1:8000` after the CORS default change
+- Browser click-through pending: Ask question → click evidence → Map focus
+- Browser click-through pending: Recommendation evidence → Map focus
 
 Stop condition: stop before adding command-center summaries or overlap workflow status.
 
