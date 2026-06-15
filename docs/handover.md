@@ -103,6 +103,34 @@ The cockpit is fully functional. All 17 chunks are complete and committed throug
 
 ---
 
+## Hosting Decision (When Going Live with UAOS)
+
+The cockpit currently runs local-first. When UAOS needs to reach it remotely,
+inference is the deciding dependency — Ollama is local and can't follow UAOS
+into the cloud.
+
+**Option A — Local machine + Cloudflare Tunnel (bridge option)**
+Keep everything local. Cloudflare Tunnel (free) or Tailscale in front of Caddy
+exposes the API to UAOS without port-forwarding. Fastest inference (your own
+hardware). Downside: availability tied to your machine being on.
+
+**Option B — VPS + Claude/OpenAI API inference (recommended for full UAOS live)**
+- FastAPI backend on a small VPS (Hetzner CX22, ~€5/month — no GPU needed, just serves the app)
+- React frontend as a static build on Vercel (free)
+- Swap Ollama for Claude Haiku or Sonnet at the inference layer — the graph context passed as system prompt is already in the right shape for the API
+- Supabase (already wired in) handles persistent state
+- Graph syncs to the VPS via the existing graph upload API (`POST /graph/upload`)
+- API key auth already in place
+
+**What's already done toward Option B:** Supabase storage backend (Chunk 11),
+graph upload API (Chunk 10), API key auth (Chunk 10), Docker deployment (Chunk 9).
+
+**What's still needed:** ADR for hosted model adapter (noted in
+`docs/model-registry.md`), small backend change to swap `OLLAMA_URL` for a
+Claude/OpenAI client, and a Vite production build pointing at the VPS URL.
+
+---
+
 ## What Made This Build Unusual
 
 This 0→1 was done in a single continuous agentic session. The session hit the
