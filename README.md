@@ -21,13 +21,15 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 
 ## What This Cockpit Does
 
-| Tab | What it does |
-|-----|--------------|
+| Surface | What it does |
+|---------|--------------|
 | **Ask** | Natural language questions answered from your graph (`graphify query/path/explain`) with optional local Ollama synthesis |
 | **Map** | Interactive project-level relationship map — click to inspect, filter by type/theme/decision, drill down on demand |
 | **Decisions** | Durable ledger of human decisions about workspace areas: invest, finish, merge, archive, extract, or ignore |
 | **Recommendations** | Model-backed cards with evidence, confidence, risk, and accept/reject/defer controls |
 | **Work Queue** | Approval-gated action queue with dry-run previews, rollback notes, and execution reports |
+| **Settings** | Graph upload, Ollama status, source + cluster toggles, AI assistant configuration, and graph rebuild |
+| **AI Assistant** | Floating draggable/resizable chat panel — available in every tab. Streams responses from Ollama using your active cluster context. Collapse to a button when not needed. |
 
 ---
 
@@ -152,7 +154,7 @@ To use your own graph with Docker, either:
 
 ## Demo
 
-A synthetic demo graph (`workspace/demo/graph.json`) ships with the cockpit. It contains three fictional projects — `cockpit`, `knowledge-hub`, and `automation` — with enough nodes and links to demonstrate all five tabs. No private workspace data is included.
+A synthetic demo graph (`workspace/demo/graph.json`) ships with the cockpit. It contains three fictional projects — `cockpit`, `knowledge-hub`, and `automation` — with enough nodes and links to demonstrate all tabs and the AI assistant. No private workspace data is included.
 
 ---
 

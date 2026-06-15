@@ -97,6 +97,18 @@ const CY_STYLE: object[] = [
     },
   },
   {
+    selector: 'node[?god_node]',
+    style: {
+      "border-color": "#fbbf24",
+      "border-width": 5,
+      "shadow-blur": 36,
+      "shadow-color": "#fbbf24",
+      "shadow-opacity": 0.75,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
+  {
     selector: "node:hover",
     style: {
       "border-color": "#6b8cff",
@@ -314,9 +326,25 @@ function getLayout(_summary: GraphSummary): object {
   return PRESET_LAYOUT;
 }
 
+// ── Compute god nodes (top-5 by total edge weight) ───────────────────────
+
+function computeGodNodeIds(edges: SummaryEdge[]): Set<string> {
+  const scores: Record<string, number> = {};
+  edges.forEach((e) => {
+    scores[e.source] = (scores[e.source] ?? 0) + e.weight;
+    scores[e.target] = (scores[e.target] ?? 0) + e.weight;
+  });
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  return new Set(sorted.slice(0, 5).map(([id]) => id));
+}
+
 // ── Element builder ───────────────────────────────────────────────────────
 
-function buildElements(summary: GraphSummary, decisions: Record<string, string> = {}) {
+function buildElements(
+  summary: GraphSummary,
+  decisions: Record<string, string> = {},
+  godNodeIds: Set<string> = new Set()
+) {
   const ringPositions = buildRingPositions(summary.nodes);
 
   const nodes = summary.nodes.map((n) => {
@@ -332,6 +360,7 @@ function buildElements(summary: GraphSummary, decisions: Record<string, string> 
         is_drillable: n.is_drillable,
         // log₂ scaling: 1→36px, 100→66px, 10k→108px, 23k→126px
         size: Math.max(36, Math.min(126, Math.log2(n.node_count + 2) * 15)),
+        god_node: godNodeIds.has(n.id),
         ...(dec ? { decision: dec } : {}),
       },
       position: ringPositions[n.id] ?? { x: 0, y: 0 },
@@ -362,7 +391,11 @@ function buildElements(summary: GraphSummary, decisions: Record<string, string> 
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-export function Map() {
+interface MapProps {
+  onNavigateSettings?: () => void;
+}
+
+export function Map({ onNavigateSettings }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
 
@@ -382,6 +415,12 @@ export function Map() {
   const [pathNoRoute, setPathNoRoute] = useState(false);
   // target_id → classification for active decisions
   const [decisions, setDecisions] = useState<Record<string, string>>({});
+  // top-5 nodes by total edge weight
+  const [godNodeIds, setGodNodeIds] = useState<Set<string>>(new Set());
+  // edge count per god node for tooltip display
+  const [godNodeEdgeCounts, setGodNodeEdgeCounts] = useState<Record<string, number>>({});
+  // active vs total sources chip (from cluster selection)
+  const [sourceChip, setSourceChip] = useState<{ active: number; total: number } | null>(null);
 
   // Keep refs current
   useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
@@ -401,6 +440,34 @@ export function Map() {
       })
       .catch(() => {});
   }, []);
+
+  // Fetch cluster selection for source chip
+  useEffect(() => {
+    fetch(`${API}/cluster-selection`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data) return;
+        const total: number = data.available_sources.length;
+        const active: number = (data.selection.sources as string[]).filter((s: string) =>
+          (data.available_sources as string[]).includes(s)
+        ).length;
+        setSourceChip({ active, total });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Recompute god nodes whenever summary changes
+  useEffect(() => {
+    if (!summary) return;
+    const scores: Record<string, number> = {};
+    summary.edges.forEach((e) => {
+      scores[e.source] = (scores[e.source] ?? 0) + e.weight;
+      scores[e.target] = (scores[e.target] ?? 0) + e.weight;
+    });
+    const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    setGodNodeIds(new Set(sorted.slice(0, 5).map(([id]) => id)));
+    setGodNodeEdgeCounts(Object.fromEntries(sorted.slice(0, 5)));
+  }, [summary]);
 
   const fetchSummary = useCallback(async (project?: string) => {
     setLoading(true);
@@ -440,7 +507,7 @@ export function Map() {
 
     const cy = cytoscape({
       container: containerRef.current,
-      elements: buildElements(summary, decisions),
+      elements: buildElements(summary, decisions, godNodeIds),
       style: CY_STYLE as any,
       layout: getLayout(summary) as any,
       pixelRatio: 1,
@@ -525,7 +592,7 @@ export function Map() {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [summary, decisions]);
+  }, [summary, decisions, godNodeIds]);
 
   // Apply type filter via class toggling (no re-layout)
   useEffect(() => {
@@ -603,6 +670,16 @@ export function Map() {
               {summary.nodes.length}&thinsp;groups&thinsp;·&thinsp;
               {summary.total_nodes.toLocaleString()}&thinsp;nodes
             </span>
+          )}
+          {sourceChip && sourceChip.total > 1 && (
+            <button
+              className={`map-source-chip${sourceChip.active < sourceChip.total ? " map-source-chip-partial" : ""}`}
+              onClick={onNavigateSettings}
+              title="Manage knowledge sources in Settings"
+              type="button"
+            >
+              {sourceChip.active}&thinsp;of&thinsp;{sourceChip.total}&thinsp;sources active
+            </button>
           )}
         </div>
 
@@ -700,6 +777,11 @@ export function Map() {
               >
                 {selected.dominant_type}
               </span>
+              {godNodeIds.has(selected.id) && (
+                <span className="map-god-badge" title={`High-traffic node (${godNodeEdgeCounts[selected.id] ?? 0} edge weight)`}>
+                  ⚡ High-traffic node ({godNodeEdgeCounts[selected.id] ?? 0} edges)
+                </span>
+              )}
               {decisions[selected.id] && (() => {
                 const meta = DECISION_META[decisions[selected.id]];
                 return meta ? (

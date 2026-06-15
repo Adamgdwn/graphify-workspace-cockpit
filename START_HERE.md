@@ -1,23 +1,28 @@
 # Start Here
 
 Last Updated: 2026-06-14T08:18:40-06:00
-Status: draft
-Owner: Project Owner
+Status: current
+Owner: Adam Goodwin
 
 ## Current Plan
 
 This is the first file an agent should read when starting work in this project. Keep it short, current, and pointed at the active build path.
 
-Current priorities:
+Current status:
 
-- confirm project scope and governance level
-- confirm use-case classification in `project-control.yaml`
+All 17 chunks of the build pathway are complete as of 2026-06-14. The cockpit
+is a working local-first decision surface. See `docs/current-build-pathway.md`
+for the full chunk status table and `docs/roadmap.md` for what was built and
+what comes next.
+
+Priorities for any new work:
+
+- confirm scope against `docs/current-build-pathway.md` (all 17 chunks done — new work needs explicit direction)
 - apply `docs/policy/durable-development-engineering-policy.md` during implementation
 - apply `docs/standards/ship-ready-engineering-standard.md` before declaring meaningful work complete
 - use `docs/context-map.md` as the short routing map for task-specific context loads
 - keep startup lean: use short repo orientation first, then trigger governance, Graphify, plugins, MCP tools, and release checks by task risk or scope
 - use Graphify before broad source exploration or architecture analysis, using workspace routing plus repo-local semantic graphs for heavy active repos
-- fill in project commands in `AI_BOOTSTRAP.md`
 - keep work in context-window-friendly chunks
 - timestamp material work, decisions, validation, and handoffs
 

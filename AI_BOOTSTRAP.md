@@ -84,12 +84,14 @@ After code changes, update the relevant graph with `graphify update . --no-clust
 Preserve existing secret-handling rules: do not index, print, summarize, or commit secrets or environment files.
 
 ## Commands
-<!-- Replace these with the actual commands for this project -->
-- Install: `<fill in>`
-- Dev:     `<fill in>`
-- Lint:    `<fill in>`
-- Build:   `<fill in>`
-- Test:    `<fill in>`
+
+- Install backend:  `cd backend && python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`
+- Install frontend: `cd frontend && npm install`
+- Dev (both):       `bash scripts/start.sh`  (launches uvicorn on :8000 and Vite on :5173)
+- Type-check:       `cd frontend && npx tsc --noEmit`
+- Build frontend:   `cd frontend && npm run build`
+- Validate backend: `cd backend && .venv/bin/python -c "import main; print('OK')"`
+- Test:             No formal test suite yet. Smoke-test via `curl http://localhost:8000/health`.
 
 ## Document control
 - Architecture decisions go in `docs/`

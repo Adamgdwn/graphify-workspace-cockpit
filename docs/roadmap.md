@@ -3,92 +3,70 @@
 Last Updated: 2026-06-14
 Owner: Adam Goodwin
 
-## Done
+## Done — Chunks 1–17 (all complete as of 2026-06-14)
 
-- **Chunk One** — Governance baseline: docs filled, risk register, agent inventory, prompt register, tool permission matrix
-- **Chunk Two** — Single app shell: FastAPI backend, React/Vite frontend, five-tab cockpit, start.sh launcher
-- **Chunk Three** — Ask interface: graph-backed Q&A via `graphify query/path/explain`, session transcripts
-- **Chunk Four** — Readable map: clustered project-level Cytoscape.js view, drill-down, inspect panel, filters
+- **Chunk One** — Governance baseline: docs, risk register, agent inventory, prompt register, tool permission matrix
+- **Chunk Two** — App shell: FastAPI backend, React/Vite frontend, five-tab cockpit, `start.sh` launcher
+- **Chunk Three** — Ask interface: graph-backed Q&A via `graphify query/path/explain`, Ollama synthesis, session transcripts
+- **Chunk Four** — Readable map: clustered Cytoscape.js view, drill-down, click-to-inspect panel, type/theme/decision filters
 - **Chunk Five** — Decision ledger: persistent classifications, map badges, accept/edit/retire
 - **Chunk Six** — Recommendation queue: Ollama-backed cards, accept/reject/defer, evidence inspection
 - **Chunk Seven** — Steady work mode: bounded background missions, progress log, cancel
 - **Chunk Eight** — Approved actions: dry-run gate, explicit confirmation, execution report, rollback note
+- **Chunk Nine** — GitHub packaging: env-var layer, Dockerfile, docker-compose, demo graph, clean README, CI
+- **Chunk Ten** — Network-ready deployment: API key auth, Caddy HTTPS proxy, graph upload API, responsive layout, Windows Docker guide
+- **Chunk Eleven** — Shared state: Supabase storage backend, cross-device sync, `created_by` identity, named graphs, org settings
+- **Chunk Twelve** — Real graph foundation: live `graph.json` (533 nodes, 645 edges), `demo_mode` flag, dismissible banner, full tab validation
+- **Chunk Thirteen** — Demo polish and UX quality: empty states, export buttons, responsive audit, graph stats in Settings, `Ctrl+K` shortcut, god node gold ring, keyboard and mobile UX
+- **Chunk Fourteen** — Cloud knowledge base connectors: SharePoint + OneNote OAuth, sync engine, background sync, cloud node visual distinction
+- **Chunk Fifteen** — Hardening, polish, and help: rate limiting (slowapi, 60/min), session pruning (50 max), `POST /graph/rebuild`, `ErrorBoundary` per tab, `HelpModal`, graph rebuild in Settings
+- **Chunk Sixteen** — Knowledge base cluster selector: `GET/PUT /cluster-selection`, source + cluster toggles in Settings, cluster-filtered graph context for Ask and Recommendations, Map source chip
+- **Chunk Seventeen** — In-cockpit AI assistant: floating draggable/resizable overlay panel, `POST /chat` SSE streaming, cluster-aware graph context, "X nodes used" chip, localStorage persistence, Settings → AI Assistant section
 
 ## Now
 
-- **Chunk Nine** — GitHub packaging + network wiring:
-  - env-var layer (`VITE_API_URL`, `GRAPH_PATH`, `STATE_DIR`, `CORS_ORIGINS`, `OLLAMA_URL`)
-  - `Dockerfile` + `docker-compose.yml`
-  - demo graph (no private data)
-  - clean README (local dev + hosted Docker modes)
-  - CI on push
-  - auth warning in docs before any network exposure
+The 17-chunk build pathway is complete. The cockpit is a working local-first decision surface with:
 
-## Next
+- Graph-backed Q&A, interactive map, decision ledger, recommendation queue, and action log
+- Floating AI assistant available in every tab
+- Knowledge base cluster selector for focused graph context
+- Cloud connector sync (SharePoint + OneNote)
+- Cross-device shared state via Supabase
+- API key auth, Caddy HTTPS, Docker deployment, rate limiting, and session pruning
 
-- **Chunk Ten** — Network-ready deployment:
-  - API key authentication gate
-  - HTTPS via Caddy reverse proxy
-  - graph upload API (no SSH required)
-  - responsive layout for Android tablet
-  - Windows Docker setup guide
-  - configurable Ollama URL
+Immediate candidates for follow-on work (not committed):
 
-## Soon
-
-- **Chunk Eleven** — Shared state / company-wide source of truth:
-  - storage backend abstraction (`file` or `supabase`)
-  - decisions + recommendations + actions visible across all devices in real time
-  - `created_by` identity on all records
-  - multiple named graphs per organization
-  - Graphify → UAOS handoff contract endpoint (`GET /actions?format=uaos`)
-  - organization settings panel
+- End-to-end test suite (Playwright or Vitest + MSW)
+- Graph rebuild UI polish (progress streaming, error reporting)
+- Ask and Chat response formatting (markdown rendering for model output)
+- Mobile layout refinements below 768px
 
 ## Strategic Direction
 
 The cockpit is the knowledge backbone of Adam's AI-native operating system.
 
-The build sequence follows a deliberate progression:
-
 ```
-Single-machine local tool (Chunks 1–8)
-  → Portable and installable anywhere (Chunk 9)
-    → Reachable from any device on the network (Chunk 10)
-      → Shared truth across all devices and team members (Chunk 11)
-        → Knowledge spoke consumed by UAOS mission envelope (Chunk 11 handoff)
+Layer 1 — Knowledge Extraction
+  Graphify CLI + graph.json
+  Reads repos, docs, and workspace structure
+  Produces a semantic workspace graph
+
+Layer 2 — Decision Intelligence (this cockpit)
+  Answers questions, maps relationships, proposes recommendations
+  Records human decisions, accepted recommendations, approved actions
+  Exports durable governed artifacts through /actions?format=uaos
+
+Layer 3 — Mission Execution
+  User AI Operating System (UAOS)
+  Reads cockpit artifacts through the handoff contract
+  Proposes and executes policy-gated missions
 ```
 
-Each layer is independently useful and does not require the next. A developer
-who only does Chunk 9 gets a clean local tool. A developer who adds Chunk 10
-gets cross-device access. Chunk 11 turns individual use into organizational
-memory.
-
-## What Becomes Possible After Each Chunk
-
-| After Chunk | New capability |
-|---|---|
-| 9 | Any laptop can clone and run the cockpit in under 15 minutes |
-| 10 | Android tablet, Windows laptop, or remote worker can use the cockpit without a local install |
-| 10 | A single hosted instance serves the whole team |
-| 11 | Decision made on one device is immediately visible on all others |
-| 11 | UAOS can consume cockpit decisions as mission candidates through the handoff endpoint |
-| 11 | The organization has a single source of truth for workspace decisions, recommended actions, and approved changes |
-
-## Non-Goals For Chunks 1–9
-
-- Multi-user collaboration
-- Cloud sync
-- External authentication (OAuth, SSO)
-- Client workspace access
-- Public internet exposure (auth is a Chunk 10 prerequisite)
-- Autonomous execution without approval
-- Editing arbitrary source files from the UI
-
-## Non-Goals For Chunks 10–11
+## Non-Goals (standing)
 
 - Autonomous commits, pushes, or destructive actions
-- Public client access (separate governance decision required)
+- Editing arbitrary source files from the UI
+- Making decisions on the user's behalf
+- Replacing Codex or Claude as a coding assistant
+- Public client access without a separate governance decision
 - Whole-workspace semantic re-extraction from the UI
-- Replacing Codex or Claude as the coding assistant
-- Microsoft 365 integration (separate UAOS spoke — defined in
-  `user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md`)

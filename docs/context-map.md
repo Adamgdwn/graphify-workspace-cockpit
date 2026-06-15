@@ -1,8 +1,8 @@
 # Context Map
 
 Document type: project context routing map
-Status: draft
-Owner: Technical Lead
+Status: current
+Owner: Adam Goodwin
 Audience: coding agents, human coders, reviewers, and project owners
 
 ## Purpose

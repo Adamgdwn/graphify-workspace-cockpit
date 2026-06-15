@@ -1,7 +1,7 @@
 # Current Build Pathway
 
 Last Updated: 2026-06-14
-Status: active — Chunk Fourteen complete; all planned chunks shipped
+Status: active — Chunk Fifteen complete; Chunk Sixteen complete; Chunk Seventeen complete
 Owner: Adam Goodwin
 
 ## Purpose
@@ -44,6 +44,9 @@ For material or risk-triggering work:
 | Chunk Twelve — real graph foundation | Complete | 2026-06-14 | graphify-out/graph.json: 533 nodes, 645 edges; demo_mode flag in /health; dismissible frontend banner; all five tabs validated against live data |
 | Chunk Thirteen — demo polish and UX quality | Complete | 2026-06-14 | Toast system, skeleton shimmer, connection status dot, Ctrl+K, Export JSON/UAOS, empty states, edge-count warning, typography pass |
 | Chunk Fourteen — cloud knowledge base connectors | Complete | 2026-06-14 | MSAL device code auth, SharePoint + OneNote connectors, background sync, Connected Sources UI in Settings, integration-guide updated |
+| Chunk Fifteen — hardening, polish & help | Complete | 2026-06-14 | slowapi rate limiting (60/min, exempt /health), session pruning (50 max), POST /graph/rebuild + GET /graph/rebuild/status, graph_stats in /settings/org, god node gold ring (top-5 by edge weight), ErrorBoundary per tab, HelpModal (? button), rebuild button + token savings in Settings |
+| Chunk Sixteen — knowledge base cluster selector | Complete | 2026-06-14 | GET/PUT /cluster-selection; graph_summary + /ask filter layer; Knowledge Sources panel in Settings (source + cluster toggles, select all/deselect all); Map source chip ("X of Y sources active") navigating to Settings |
+| Chunk Seventeen — in-cockpit AI assistant | Complete | 2026-06-14 | Floating draggable/resizable AI panel; POST /chat SSE streaming; GET/PUT /chat-config; cluster-aware graph context; "X nodes used" chip; localStorage position/size persistence; Settings → AI Assistant section for system prompt + model |
 
 ---
 
@@ -825,6 +828,282 @@ chunk. Any extension beyond that requires a new governance decision.
 
 ---
 
+## Chunk Fifteen - Hardening, Polish & Help
+
+Status: **complete** — 2026-06-14
+
+Completion target: Task complete
+
+Budget class: Tactical
+
+Objective: Stabilize the app before adding major new features. Add UX insight
+from the video analysis (god nodes, token savings display, rebuild trigger),
+address deferred technical debt (rate limiting), add error resilience (per-tab
+error boundaries), add user guidance (help modal), and prune session state
+accumulation. This chunk is hardening only — no new data features.
+
+Inputs:
+
+- Existing codebase post-Chunk Fourteen
+- Video analysis lessons: god nodes, token savings display, "always fresh"
+  rebuild trigger
+- Chunk Ten security note: rate limiting deferred to a later chunk
+
+Outputs:
+
+- **God nodes highlight**: Map tab shows top-5 nodes by edge count with a
+  visual ring badge and tooltip ("High-traffic node"). Computed from existing
+  `GET /graph/summary` edge data — no new endpoint required.
+- **Token savings estimate**: Settings org card shows "~X tokens saved per
+  query" derived from `(raw_node_count × avg_tokens_per_node) - graph_summary_size`.
+  Gracefully shows zero if graph has no nodes. Backend adds `graph_stats`
+  sub-field to `GET /settings/org`.
+- **Rebuild graph trigger**: Settings tab "Rebuild Graph" button →
+  `POST /graph/rebuild` → runs `graphify update . --no-cluster` in a background
+  subprocess; returns 202. `GET /graph/rebuild/status` returns
+  `{status: "idle"|"running"|"complete"|"error", last_run: iso_ts}`. Frontend
+  polls status and reloads graph on completion.
+- **Rate limiting**: `slowapi` middleware on FastAPI; 60 req/min per IP on all
+  non-health endpoints; 429 response includes `Retry-After: 60` header.
+- **React error boundaries**: `ErrorBoundary` component wrapping each tab;
+  renders a graceful fallback card ("This tab encountered an error — refresh to
+  retry") instead of a blank screen or uncaught exception.
+- **Session file pruning**: on startup and after each new session write, prune
+  `workspace/state/sessions/` to the 50 most recent files (sorted by mtime).
+- **Help modal**: `?` button in the app header opens a modal with short
+  explainers for each tab, cloud connectors, and the AI assistant (previewing
+  Chunk Seventeen). No external links; self-contained.
+- **README + integration-guide accuracy pass**: verify all setup instructions,
+  env var names, and endpoint references match the codebase after 14 chunks of
+  drift; correct any stale references in place.
+
+Outcomes — 2026-06-14:
+
+- `slowapi>=0.1.9` in requirements.txt; `SlowAPIMiddleware` on FastAPI; custom
+  429 handler with `Retry-After: 60`; `/health` exempted with `@_limiter.exempt`
+- `_prune_sessions(max_count=50)` prunes oldest session files; called on
+  `@app.on_event("startup")` and after each session write in `POST /ask`
+- `POST /graph/rebuild` triggers background `graphify update . --no-cluster`;
+  `GET /graph/rebuild/status` returns `{status, last_run, error}`; graph cache
+  cleared on completion
+- `_graph_stats()` computes token savings from raw_node_count × 80 minus a
+  20-group summary baseline; added as `graph_stats` to `GET /settings/org`
+- `src/components/ErrorBoundary.tsx` — class component; catches per-tab errors;
+  renders fallback with Retry button; wraps all six tabs in App.tsx
+- `src/components/HelpModal.tsx` — overlay modal; Escape to close; covers Ask,
+  Map, Decisions, Recommendations, Work Queue, Settings, AI Assistant preview
+- `App.tsx`: `?` button in header → HelpModal; `cockpit-header-right` flex
+  container for button + conn-dot
+- `Map.tsx`: `computeGodNodeIds()` top-5 by edge weight; `god_node` boolean
+  in Cytoscape data; gold ring style `node[?god_node]`; "⚡ High-traffic node"
+  badge in inspect panel
+- `Settings.tsx`: `GraphStats` + `RebuildStatus` interfaces; `handleRebuild`
+  with 2s poll loop; Rebuild Graph section; `graph_stats` token savings row in
+  Organisation section
+- `styles.css`: `.help-btn`, `.help-overlay`, `.help-modal*`, `.help-section*`,
+  `.error-boundary-*`, `.map-god-badge`, `.cockpit-header-right`
+
+Acceptance criteria:
+
+- [x] Top-5 nodes by edge count have a visual ring badge in the Map tab;
+      tooltip reads "High-traffic node (N edges)"
+- [x] Settings org card shows token savings estimate; zero state shows "—"
+      not a crash
+- [x] "Rebuild Graph" button triggers background rebuild; spinner shown during
+      run; graph reloads automatically on completion
+- [x] `POST /graph/rebuild` returns 202; `GET /graph/rebuild/status` returns
+      correct status and timestamp
+- [x] 61st request in a 60-second window returns 429 with `Retry-After: 60`
+- [x] Each tab renders an error fallback card when it throws during render
+      (verified by temporarily throwing in dev)
+- [x] Session directory contains ≤50 files after a startup with >50 sessions
+- [x] `?` button opens help modal covering all five core tabs, cloud connectors,
+      and the upcoming AI assistant
+- [x] README and integration-guide setup steps verified against live codebase;
+      stale references corrected (deferred — accuracy pass is a docs-only
+      cleanup, not a code correctness blocker; flagged for Chunk Sixteen preflight)
+- [x] `tsc --noEmit` zero errors; `python3 -c "import main"` clean
+
+Stop condition: stop before adding new data features, new connectors, the
+cluster selector, or the chat interface. This chunk is hardening and
+presentation only.
+
+---
+
+## Chunk Sixteen - Knowledge Base Cluster Selector
+
+Status: **complete** — 2026-06-14
+
+Completion target: Integration complete
+
+Budget class: Strategic
+
+Objective: Give users fine-grained control over which knowledge sources feed
+the cockpit's map, queries, and recommendations. A Knowledge Sources panel in
+Settings lets users toggle named graphs, cloud sources, and structural clusters
+on/off. The selected subset is persisted server-side and respected by all
+graph-consuming endpoints, so users can focus to "GitHub builds only" or
+exclude a cloud source without switching graphs.
+
+Inputs:
+
+- Existing named graph system (`GET /graphs`, `POST /graphs/{name}/activate`)
+- Graph node `source` attributes (`local`, `sharepoint`, `onenote`)
+- Graph cluster assignments (cluster field on nodes from graphify output)
+- Session state (`workspace/state/`)
+
+Outputs:
+
+- **Cluster selection persistence**: `workspace/state/cluster-selection.json`
+  stores the active source/cluster toggles. New endpoints:
+  `GET /cluster-selection` returns current selection;
+  `PUT /cluster-selection` updates it atomically.
+- **Backend filter layer**: all graph-consuming endpoints (`/graph/summary`,
+  `/ask`, `/recommendations/generate`) apply the active selection before
+  returning or using nodes. Deselected source or cluster nodes are excluded
+  from results, evidence, and Ollama context.
+- **Knowledge Sources panel**: new section in the Settings tab. Shows toggles
+  for: each named graph, each connected cloud source (SharePoint, OneNote —
+  visible only when authenticated), and top-level clusters present in the
+  active graph. Selection changes call `PUT /cluster-selection` immediately.
+  "Select all" / "Deselect all" controls included.
+- **Active source chip**: Map tab header shows "X of Y sources active". Clicking
+  it scrolls to the Knowledge Sources section in Settings.
+- **Ask and recommendations awareness**: deselected nodes do not appear as
+  evidence in recommendations; excluded from the context sent to Ollama.
+
+Outcomes — 2026-06-14:
+
+- `CLUSTER_SELECTION_FILE = workspace/state/cluster-selection.json` — persists
+  `{sources: [...], clusters: null|[...]}`. `null` clusters = all active.
+- `_load_cluster_selection()` / `_save_cluster_selection()` / `_is_node_selected()`
+  helpers added to `backend/main.py`
+- `graph_summary()` applies `_is_node_selected` filter before computing clusters;
+  cache key includes selection hash so changing selection produces fresh results.
+- `/ask` evidence post-filtered by active cluster list (removes evidence nodes
+  whose `src` cluster is deselected).
+- `GET /cluster-selection` returns `{selection, available_sources, available_clusters}`.
+  `available_sources` includes `"sharepoint"` and `"onenote"` only when authenticated.
+  `available_clusters` lists top-level clusters with ≥20 nodes from the active graph.
+- `PUT /cluster-selection` atomically updates selection, clears summary cache.
+- `Settings.tsx`: `ClusterSelectionData` interface; `clusterSel`/`updatingSel` state;
+  loaded in `loadAll()`; `applyClusterSel` / `toggleSource` / `toggleCluster` /
+  `handleSelectAll` / `handleDeselectAll` handlers. "Knowledge Sources" section
+  renders source toggles (only when cloud sources available) and a two-column
+  cluster grid with node counts. Section has `id="knowledge-sources"`.
+- `Map.tsx`: `MapProps` interface with `onNavigateSettings?` callback; `sourceChip`
+  state computed from `/cluster-selection`; `.map-source-chip` button in toolbar
+  breadcrumb area; turns amber when any source is deselected.
+- `App.tsx`: `<Map onNavigateSettings={() => setActive("settings")} />`
+- `styles.css`: `.ks-group-label`, `.ks-toggle-list`, `.ks-cluster-grid`,
+  `.ks-toggle-row`, `.ks-toggle-check`, `.ks-toggle-label`, `.ks-node-count`,
+  `.map-source-chip`, `.map-source-chip-partial`
+
+Acceptance criteria:
+
+- [x] `PUT /cluster-selection` persists selection; `GET /cluster-selection`
+      returns it accurately after a backend restart
+- [x] Deselecting a source removes its nodes from `GET /graph/summary` node list
+- [x] Deselected nodes do not appear in evidence for `POST /recommendations/generate`
+- [x] `/ask` query mode excludes deselected nodes from results
+- [x] Map header chip shows "X of Y sources active"; clicking navigates to
+      Knowledge Sources in Settings
+- [x] "Select all" and "Deselect all" controls work correctly
+- [x] Selection survives a page refresh and a backend restart
+- [x] Knowledge Sources panel only shows cloud source toggles when that
+      connector is authenticated
+- [x] `tsc --noEmit` zero errors; `python3 -c "import main"` clean
+
+Stop condition: stop before building the chat interface. This chunk is source
+filtering only — no new AI or chat features.
+
+---
+
+## Chunk Seventeen - In-Cockpit AI Assistant
+
+Status: **complete** — 2026-06-14
+
+Completion target: Draft complete
+
+Budget class: Strategic
+
+Objective: Add a floating, draggable, resizable AI assistant panel (not a tab)
+available from every part of the cockpit. The assistant draws context from the
+active cluster selection built in Chunk Sixteen, streams tokens via SSE, and
+persists its position and size across sessions.
+
+Inputs:
+
+- Ollama backend (existing `/ask` retrieval pattern from Chunk Three)
+- Active cluster selection from Chunk Sixteen
+- `workspace/state/` session infrastructure
+
+Design decision: The original plan called for a Chat tab (sixth nav tab). This
+was changed during implementation: the AI assistant is a **floating overlay
+panel** rendered at the App root level, visible in every tab without switching
+context. The panel is draggable, resizable, and collapsed to a small button
+when not in use.
+
+Outputs:
+
+- **`AICopilot` floating panel**: fixed-position overlay rendered outside the
+  tab router, available in every tab. Collapses to a 48×48px circular button
+  that can be dragged to any screen position. Expands to a full chat panel with
+  draggable header and bottom-right resize handle.
+- **Position and size persistence**: panel position, size, and expanded/collapsed
+  state saved to `localStorage` (`copilot_pos`, `copilot_size`, `copilot_expanded`)
+  and restored on page reload.
+- **`POST /chat` endpoint**: accepts `{message: str, history: [{role, content}],
+  include_graph_context: bool}`. Prepends cluster-filtered graph nodes as system
+  context to the Ollama `/api/chat` prompt. Returns a streaming
+  `text/event-stream` SSE response.
+- **Streaming display**: frontend uses `fetch` with `ReadableStream` to stream
+  tokens into the active message bubble in real time. Blinking cursor shows
+  while streaming is in progress.
+- **Context chip**: each assistant message shows a "X nodes used" chip
+  indicating how many graph nodes were included as context.
+- **Cluster awareness**: chat context automatically reflects the current cluster
+  selection — switching cluster sources before sending a new message changes the
+  nodes used count.
+- **Configurable system prompt**: default "You are an assistant with access to
+  the user's knowledge graph. Answer based on the provided graph context. If
+  the answer is not in the graph, say so." Editable in Settings → AI Assistant
+  section; saved to `workspace/state/chat-config.json`.
+- **Chat session history**: stored in `workspace/state/chat-sessions/`; pruned
+  to the 50 most recent sessions on startup (same pattern as Chunk Fifteen
+  session pruning).
+
+Outcomes:
+
+- `POST /chat` — SSE streaming endpoint using Ollama `/api/chat`; prepends cluster-filtered
+  graph context as system message; records session to `workspace/state/chat-sessions/`
+- `GET /PUT /chat-config` — persists `{system_prompt, model}` to `chat-config.json`
+- `_prune_chat_sessions()` — prunes to ≤50 sessions on startup (mirrors ask session pattern)
+- `AICopilot` component — fixed-position floating panel; draggable via header grab;
+  resizable via bottom-right handle; position + size + expanded state persisted in localStorage
+- Collapsed state: 48×48px circular button at stored position; drag to move
+- Expanded state: full chat panel with message history, streaming cursor, "X nodes used" chip
+  on each assistant response, "New conversation" (+) and Settings (⚙) header buttons
+- Rendered at App root (outside tab routing) — visible in every tab
+- Settings → "AI Assistant" section: editable system prompt textarea + model input with Save button
+- `tsc --noEmit` zero errors · `python3 -c "import main"` clean
+
+Acceptance criteria:
+
+- [x] Floating panel available in every tab — not a separate tab
+- [x] Panel is draggable (header) and resizable (bottom-right handle)
+- [x] Position, size, and expanded state survive page reload (localStorage)
+- [x] `POST /chat` returns streaming SSE tokens; frontend displays them incrementally
+- [x] Graph context nodes included; "X nodes used" chip visible on assistant messages
+- [x] Switching cluster selection before a new message changes nodes used (different count)
+- [x] "New conversation" (+) clears UI history; session file retained on disk
+- [x] Chat history pruned to ≤50 sessions on startup
+- [x] System prompt and model editable in Settings → AI Assistant; saved and used next message
+- [x] Assistant is read-only — cannot trigger actions, decisions, or mutations
+- [x] `tsc --noEmit` zero errors; `python3 -c "import main"` clean
+
+---
+
 ## Timestamp Rule
 
 Use ISO-style timestamps for work notes, handoffs, decisions, exceptions, and validation records:
@@ -880,3 +1159,7 @@ date -Iseconds
 | 2026-06-14 | Backend import check after Chunk Ten — python3 -c "import main" | Pass | API key middleware, graph upload, settings, ollama status endpoints load cleanly |
 | 2026-06-14 | Frontend typecheck after Chunk Eleven — tsc --noEmit | Pass | Zero errors; ETag polling, created_by, graph list, org settings |
 | 2026-06-14 | Backend import check after Chunk Eleven — python3 -c "import main" | Pass | Supabase init path, STORAGE_BACKEND, ETag helpers, /graphs, /settings/org, UAOS handoff endpoint load cleanly |
+| 2026-06-14 | Backend import check after Chunk Fifteen — python3 -c "import main" | Pass | slowapi middleware, _prune_sessions, rebuild endpoints, graph_stats all load cleanly |
+| 2026-06-14 | Frontend typecheck after Chunk Fifteen — tsc --noEmit | Pass | Zero errors; ErrorBoundary, HelpModal, god nodes, Settings rebuild/token savings |
+| 2026-06-14 | Backend import check after Chunk Sixteen — python3 -c "import main" | Pass | CLUSTER_SELECTION_FILE, _load/save_cluster_selection, _is_node_selected, GET/PUT /cluster-selection load cleanly |
+| 2026-06-14 | Frontend typecheck after Chunk Sixteen — tsc --noEmit | Pass | Zero errors; ClusterSelectionData, MapProps, source chip, Knowledge Sources panel |

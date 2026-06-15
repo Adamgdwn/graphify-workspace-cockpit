@@ -1,7 +1,7 @@
 # Risk Register
 
 Document ID: RSK-REG-001
-Status: draft
+Status: current
 Last Updated: 2026-06-14
 
 ## Current Risk Classification

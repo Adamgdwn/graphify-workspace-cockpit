@@ -1,22 +1,92 @@
 # Runbook
 
-## Purpose
+Status: current
+Last Updated: 2026-06-14
+Owner: Adam Goodwin
 
-Describe what this system does in operation.
+## What This System Does In Operation
 
-## Alerts And Failures
+The Graphify Workspace Cockpit runs two local processes:
 
-List likely failure conditions and what to do first.
+- **Backend** — FastAPI on `http://localhost:8000`. Reads `graph.json`, runs graphify CLI subprocesses, calls Ollama for inference, writes workspace state to `workspace/state/`.
+- **Frontend** — Vite/React dev server on `http://localhost:5173`. Talks only to the backend.
+
+Neither process connects to the internet unless Supabase (`STORAGE_BACKEND=supabase`) or Cloud Connectors (SharePoint/OneNote) are configured.
+
+## Starting the Cockpit
+
+**Via desktop launcher:** click "Graphify Cockpit" on the desktop. The launcher script starts both processes if not already running, waits for health checks, and opens the browser.
+
+**Via terminal:**
+```bash
+bash /path/to/repo/scripts/start.sh
+```
+
+**Via Docker:**
+```bash
+docker-compose up --build
+```
+
+See `docs/deployment-guide.md` for network deployments, API key setup, and Caddy HTTPS.
+
+## Health Check
+
+```bash
+curl http://localhost:8000/health
+```
+
+Response includes `status`, `graph_loaded`, `demo_mode`, and `ollama_connected`. If `graph_loaded` is false, check `GRAPH_PATH` in `backend/.env`.
+
+## Alerts and Failures
+
+| Symptom | Likely Cause | First Action |
+|---------|-------------|--------------|
+| Backend won't start | Missing `.venv` or `requirements.txt` changed | `cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` |
+| `graph_loaded: false` in `/health` | `GRAPH_PATH` points to a missing or malformed file | Check `backend/.env` or `backend/.env.example`; default graph is `workspace/demo/graph.json` |
+| Ask/Chat returns error | Ollama not running | `ollama serve` in a separate terminal; confirm model is pulled (`ollama list`) |
+| 401 Unauthorized | `API_KEY` is set but client isn't sending the header | Set `Authorization: Bearer <key>` or `X-API-Key: <key>`; or unset `API_KEY` for local-only use |
+| 429 Too Many Requests | Rate limit hit (60 req/min per IP) | Wait 60 seconds; `/health` is exempt |
+| CORS errors in browser | `CORS_ORIGINS` doesn't match the frontend URL | Update `CORS_ORIGINS` in `backend/.env` to match exact scheme+host+port |
+| AI panel off-screen | `localStorage` position persisted off-screen | Clear `copilot_pos` from DevTools → Application → Local Storage |
+| Supabase sync failing | `SUPABASE_URL` or `SUPABASE_KEY` wrong | Check `.env`; test with `curl $SUPABASE_URL/rest/v1/decisions -H "apikey: $SUPABASE_KEY"` |
+| Cloud sync failing | MSAL token expired or wrong tenant | Re-run `POST /cloud-connectors/sync` to re-trigger device code auth flow |
+| Frontend won't load | Port 5173 in use or Vite didn't start | Check `launcher/frontend.log`; kill stale process on that port |
+| Graph rebuild hanging | `graphify update` subprocess stalled | Check `GET /graph/rebuild/status`; kill backend and restart if stuck |
 
 ## Dependencies
 
-List critical dependencies and how to check them.
+| Dependency | Required | How To Check |
+|-----------|----------|-------------|
+| Python 3.11+ | Yes | `python3 --version` |
+| Node.js 18+ | Yes | `node --version` |
+| Ollama | For Ask/Chat/Recommendations | `curl http://localhost:11434` |
+| Graphify CLI | For Ask and graph rebuild | `graphify --version` |
+| Supabase | Only if `STORAGE_BACKEND=supabase` | Check env vars; see `docs/integration-guide.md` |
+| Microsoft 365 OAuth | Only if using Cloud Connectors | MSAL device code; see `docs/integration-guide.md` |
+
+## Stopping the Cockpit
+
+If started with `start.sh`: press `Ctrl-C` — the trap kills both background processes.
+
+If started via the desktop launcher (`nohup`/`disown`):
+```bash
+pkill -f "uvicorn main:app"
+pkill -f "vite"
+```
 
 ## Recovery
 
-Document service recovery or fallback actions.
+**Backend crash loop:** check `launcher/backend.log` for the exception. Most common cause is a changed `requirements.txt` without reinstalling.
+
+**Corrupted state:** state files live in `workspace/state/`. They are JSON; delete the corrupted file and the backend will recreate it on next write. No data is truly lost — decisions, recommendations, and actions are only ever written; nothing auto-deletes.
+
+**Demo graph vs real graph:** if `demo_mode: true` in `/health` but you expect a real graph, set `GRAPH_PATH` to the absolute path of the real `graph.json` and restart the backend.
 
 ## Escalation
 
-Describe who to contact and when.
+This is a single-developer local tool. There is no on-call rotation. If something is broken and the runbook doesn't cover it:
 
+1. Check `launcher/backend.log` and `launcher/frontend.log`.
+2. Run `curl http://localhost:8000/health` and read the full response.
+3. Grep `backend/main.py` for the failing endpoint.
+4. Open a new Claude Code session in the repo — the docs and code are the source of truth.

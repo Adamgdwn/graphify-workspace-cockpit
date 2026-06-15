@@ -4,3 +4,4 @@ python-multipart>=0.0.9
 supabase>=2.0.0
 msal>=1.28.0
 requests>=2.31.0
+slowapi>=0.1.9

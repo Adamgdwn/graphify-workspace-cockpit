@@ -213,8 +213,7 @@ curl http://localhost:8000/settings         # -> active graph name + node count
 curl http://localhost:8000/status/ollama    # -> {"connected":true/false,...}
 ```
 
-Open `http://localhost:5173` → confirm all six tabs render → confirm Settings
-tab shows active graph and Ollama status.
+Open `http://localhost:5173` → confirm all six tabs render → confirm the AI assistant button appears in the bottom-right corner → confirm Settings tab shows active graph and Ollama status.
 
 ---
 

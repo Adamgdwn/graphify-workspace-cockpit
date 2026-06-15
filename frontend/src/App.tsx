@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { API } from "./config";
+import { AICopilot } from "./components/AICopilot";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { HelpModal } from "./components/HelpModal";
 import { ToastProvider } from "./components/Toast";
 import { Ask } from "./tabs/Ask";
 import { Decisions } from "./tabs/Decisions";
@@ -31,6 +34,7 @@ export default function App() {
   );
   const [connStatus, setConnStatus] = useState<ConnStatus>("ok");
   const [focusTrigger, setFocusTrigger] = useState(0);
+  const [showHelp, setShowHelp] = useState(false);
   const askRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Connection status + demo mode poll (15s)
@@ -89,8 +93,20 @@ export default function App() {
       <div className="cockpit">
         <header className="cockpit-header">
           <span className="cockpit-title">Graphify Workspace Cockpit</span>
-          <span className={connDotClass} title={connTitle} aria-label={connTitle} />
+          <div className="cockpit-header-right">
+            <button
+              className="help-btn"
+              type="button"
+              onClick={() => setShowHelp(true)}
+              title="Help"
+              aria-label="Open help"
+            >
+              ?
+            </button>
+            <span className={connDotClass} title={connTitle} aria-label={connTitle} />
+          </div>
         </header>
+        <HelpModal open={showHelp} onClose={() => setShowHelp(false)} />
         {showBanner && (
           <div className="demo-banner">
             <span>
@@ -122,13 +138,14 @@ export default function App() {
           ))}
         </nav>
         <main className="cockpit-content">
-          {active === "ask" && <Ask focusTrigger={focusTrigger} askRef={askRef} />}
-          {active === "map" && <Map />}
-          {active === "decisions" && <Decisions />}
-          {active === "recommendations" && <Recommendations />}
-          {active === "work-queue" && <WorkQueue />}
-          {active === "settings" && <Settings />}
+          {active === "ask" && <ErrorBoundary tabName="Ask"><Ask focusTrigger={focusTrigger} askRef={askRef} /></ErrorBoundary>}
+          {active === "map" && <ErrorBoundary tabName="Map"><Map onNavigateSettings={() => setActive("settings")} /></ErrorBoundary>}
+          {active === "decisions" && <ErrorBoundary tabName="Decisions"><Decisions /></ErrorBoundary>}
+          {active === "recommendations" && <ErrorBoundary tabName="Recommendations"><Recommendations /></ErrorBoundary>}
+          {active === "work-queue" && <ErrorBoundary tabName="Work Queue"><WorkQueue /></ErrorBoundary>}
+          {active === "settings" && <ErrorBoundary tabName="Settings"><Settings /></ErrorBoundary>}
         </main>
+        <AICopilot onNavigateSettings={() => setActive("settings")} />
       </div>
     </ToastProvider>
   );

@@ -16,8 +16,12 @@ import hashlib
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
 _STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
@@ -31,6 +35,14 @@ DECISIONS_FILE = WORKSPACE_STATE / "decisions.json"
 GRAPHS_DIR = WORKSPACE_STATE / "graphs"
 DEVICES_FILE = WORKSPACE_STATE / "devices.json"
 CONNECTORS_DIR = WORKSPACE_STATE / "connectors"
+CLUSTER_SELECTION_FILE = WORKSPACE_STATE / "cluster-selection.json"
+CHAT_CONFIG_FILE      = WORKSPACE_STATE / "chat-config.json"
+CHAT_SESSIONS_DIR     = WORKSPACE_STATE / "chat-sessions"
+_CHAT_DEFAULT_SYSTEM_PROMPT = (
+    "You are an assistant with access to the user's knowledge graph. "
+    "Answer based on the provided graph context. "
+    "If the answer is not in the graph, say so."
+)
 _USERS_FILE = Path(__file__).parent.parent / "config" / "users.json"
 
 _DEMO_GRAPH = str(Path(__file__).parent.parent / "workspace" / "demo" / "graph.json")
@@ -58,6 +70,21 @@ _summary_cache: dict[str, dict] = {}
 
 app = FastAPI(title="Graphify Workspace Cockpit", version="0.1.0")
 
+_limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+app.state.limiter = _limiter
+app.add_middleware(SlowAPIMiddleware)
+
+
+async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(
+        {"error": "rate_limit_exceeded", "detail": str(exc.detail)},
+        status_code=429,
+        headers={"Retry-After": "60"},
+    )
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)  # type: ignore[arg-type]
+
 _cors_origins = [
     o.strip()
     for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
@@ -69,6 +96,47 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _prune_sessions(max_count: int = 50) -> None:
+    if not SESSIONS_DIR.exists():
+        return
+    files = sorted(SESSIONS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+    for f in files[max_count:]:
+        try:
+            f.unlink()
+        except Exception:
+            pass
+
+
+def _prune_chat_sessions(max_count: int = 50) -> None:
+    if not CHAT_SESSIONS_DIR.exists():
+        return
+    files = sorted(CHAT_SESSIONS_DIR.glob("*.json"), key=lambda f: f.stat().st_mtime, reverse=True)
+    for f in files[max_count:]:
+        try:
+            f.unlink()
+        except Exception:
+            pass
+
+
+def _load_chat_config() -> dict:
+    if CHAT_CONFIG_FILE.exists():
+        try:
+            return json.loads(CHAT_CONFIG_FILE.read_text())
+        except Exception:
+            pass
+    return {"system_prompt": _CHAT_DEFAULT_SYSTEM_PROMPT, "model": RECOMMEND_MODEL_DEFAULT}
+
+
+# Rebuild graph state
+_REBUILD_STATUS: dict = {"status": "idle", "last_run": None}
+
+
+@app.on_event("startup")
+async def _startup() -> None:
+    _prune_sessions()
+    _prune_chat_sessions()
 
 
 def _resolve_user(api_key: str) -> str:
@@ -259,10 +327,42 @@ def _suggestions(question: str, mode: Mode, evidence: list[dict]) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Cluster selection helpers (Chunk Sixteen)
+# ---------------------------------------------------------------------------
+
+def _load_cluster_selection() -> dict:
+    if CLUSTER_SELECTION_FILE.exists():
+        try:
+            return json.loads(CLUSTER_SELECTION_FILE.read_text())
+        except Exception:
+            pass
+    return {"sources": ["local", "sharepoint", "onenote"], "clusters": None}
+
+
+def _save_cluster_selection(sel: dict) -> None:
+    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+    CLUSTER_SELECTION_FILE.write_text(json.dumps(sel, indent=2))
+
+
+def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] | None) -> bool:
+    """Return True if node passes the active source/cluster filter."""
+    node_source = n.get("source", "local")
+    if node_source not in sel_sources:
+        return False
+    if sel_clusters is not None:
+        sf = n.get("source_file", "")
+        cluster = sf.split("/")[0] if sf else ""
+        if cluster and cluster not in sel_clusters:
+            return False
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
 
 @app.get("/health")
+@_limiter.exempt
 def health() -> dict:
     graph = _graph_path()
     demo_mode = Path(graph).resolve() == Path(_DEMO_GRAPH).resolve()
@@ -314,6 +414,16 @@ def ask(req: AskRequest) -> AskResponse:
     else:
         answer, evidence = _parse_path_output(raw)
 
+    # Post-filter evidence by active cluster selection
+    _ask_sel = _load_cluster_selection()
+    _ask_clusters = _ask_sel.get("clusters")
+    if _ask_clusters is not None:
+        evidence = [
+            ev for ev in evidence
+            if not ev.get("src", "").split("/")[0]
+            or ev["src"].split("/")[0] in _ask_clusters
+        ]
+
     suggestions = _suggestions(req.question, req.mode, evidence)
     session_id = str(uuid.uuid4())
 
@@ -335,6 +445,7 @@ def ask(req: AskRequest) -> AskResponse:
     (SESSIONS_DIR / f"{session_id}.json").write_text(
         json.dumps(transcript, indent=2)
     )
+    _prune_sessions()
 
     return AskResponse(
         session_id=session_id,
@@ -355,7 +466,11 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
     Results are cached in memory after first computation.
     """
     global _summary_cache
-    cache_key = f"{project}:{min_weight}"
+    selection = _load_cluster_selection()
+    sel_sources = selection.get("sources", ["local", "sharepoint", "onenote"])
+    sel_clusters = selection.get("clusters")
+    sel_hash = hashlib.md5(json.dumps(selection, sort_keys=True).encode()).hexdigest()[:8]
+    cache_key = f"{project}:{min_weight}:{sel_hash}"
     if cache_key in _summary_cache:
         return _summary_cache[cache_key]
 
@@ -367,7 +482,10 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
             detail=f"Graph not found: {exc}. Run graphify update first.",
         ) from exc
 
-    nodes_raw: list[dict] = graph["nodes"]
+    nodes_raw: list[dict] = [
+        n for n in graph["nodes"]
+        if _is_node_selected(n, sel_sources, sel_clusters)
+    ]
     links_raw: list[dict] = graph["links"]
     node_map: dict[str, dict] = {n["id"]: n for n in nodes_raw}
 
@@ -1389,7 +1507,128 @@ def get_org_settings() -> dict:
             {"user": user, "last_seen": ts}
             for user, ts in sorted(devices.items(), key=lambda x: x[1], reverse=True)
         ],
+        "graph_stats": _graph_stats(),
     }
+
+
+def _graph_stats() -> dict:
+    """Token savings estimate: (raw_node_count × avg_tokens_per_node) - graph_summary_size."""
+    try:
+        data = _load_graph()
+        raw_node_count = len(data.get("nodes", []))
+        avg_tokens_per_node = 80
+        # Summary compresses the graph to ~20 cluster groups on average
+        summary_token_cost = 20 * avg_tokens_per_node
+        tokens_saved = max(0, raw_node_count * avg_tokens_per_node - summary_token_cost)
+        return {
+            "raw_node_count": raw_node_count,
+            "avg_tokens_per_node": avg_tokens_per_node,
+            "estimated_tokens_saved_per_query": tokens_saved,
+        }
+    except Exception:
+        return {"raw_node_count": 0, "avg_tokens_per_node": 80, "estimated_tokens_saved_per_query": 0}
+
+
+# ---------------------------------------------------------------------------
+# Chunk Fifteen — Rebuild graph trigger
+# ---------------------------------------------------------------------------
+
+import threading as _rebuild_threading  # noqa: E402
+
+
+def _run_rebuild() -> None:
+    global _graph_cache, _summary_cache
+    _REBUILD_STATUS.update({"status": "running"})
+    try:
+        repo_root = str(Path(__file__).parent.parent)
+        result = subprocess.run(
+            ["graphify", "update", ".", "--no-cluster"],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        ts = datetime.now(tz=timezone.utc).isoformat()
+        if result.returncode == 0:
+            _graph_cache = None
+            _summary_cache = {}
+            _REBUILD_STATUS.update({"status": "complete", "last_run": ts, "error": None})
+        else:
+            _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": result.stderr[:500]})
+    except Exception as exc:
+        ts = datetime.now(tz=timezone.utc).isoformat()
+        _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": str(exc)})
+
+
+@app.post("/graph/rebuild", status_code=202)
+def trigger_rebuild() -> dict:
+    """Trigger a background graphify update rebuild. Returns 202 immediately."""
+    if _REBUILD_STATUS.get("status") == "running":
+        raise HTTPException(status_code=409, detail="Rebuild already in progress.")
+    t = _rebuild_threading.Thread(target=_run_rebuild, daemon=True)
+    t.start()
+    return {"status": "running"}
+
+
+@app.get("/graph/rebuild/status")
+def rebuild_status() -> dict:
+    """Return current rebuild status and last run timestamp."""
+    return {
+        "status": _REBUILD_STATUS.get("status", "idle"),
+        "last_run": _REBUILD_STATUS.get("last_run"),
+        "error": _REBUILD_STATUS.get("error"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Chunk Sixteen — Knowledge Base Cluster Selector
+# ---------------------------------------------------------------------------
+
+class ClusterSelectionBody(BaseModel):
+    sources: list[str]
+    clusters: Optional[list[str]] = None  # None = all clusters active
+
+
+@app.get("/cluster-selection")
+def get_cluster_selection() -> dict:
+    """Return the current cluster/source selection and available options."""
+    selection = _load_cluster_selection()
+    # Compute available clusters from the active graph (≥20 nodes each)
+    available_clusters: list[dict] = []
+    try:
+        data = _load_graph()
+        counts: dict[str, int] = {}
+        for n in data.get("nodes", []):
+            sf = n.get("source_file", "")
+            cluster = sf.split("/")[0] if sf else ""
+            if cluster:
+                counts[cluster] = counts.get(cluster, 0) + 1
+        available_clusters = [
+            {"id": k, "node_count": v}
+            for k, v in sorted(counts.items(), key=lambda x: -x[1])
+            if v >= 20
+        ]
+    except Exception:
+        pass
+    # Available sources: local always present; cloud only when authenticated
+    available_sources = ["local"]
+    if _ms_auth.is_authenticated(WORKSPACE_STATE):
+        available_sources.extend(["sharepoint", "onenote"])
+    return {
+        "selection": selection,
+        "available_clusters": available_clusters,
+        "available_sources": available_sources,
+    }
+
+
+@app.put("/cluster-selection")
+def update_cluster_selection(req: ClusterSelectionBody) -> dict:
+    """Atomically persist the cluster/source selection. Clears summary cache."""
+    global _summary_cache
+    selection = {"sources": req.sources, "clusters": req.clusters}
+    _save_cluster_selection(selection)
+    _summary_cache = {}
+    return selection
 
 
 # ---------------------------------------------------------------------------
@@ -1604,3 +1843,119 @@ def revoke_connector_auth(connector_id: str) -> dict:
         raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
     _ms_auth.revoke_token(WORKSPACE_STATE)
     return {"revoked": True, "connector_id": connector_id}
+
+
+# ---------------------------------------------------------------------------
+# Chunk Seventeen — In-Cockpit AI Assistant
+# ---------------------------------------------------------------------------
+
+
+class _ChatMsgModel(BaseModel):
+    role: str
+    content: str
+
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list[_ChatMsgModel] = []
+    include_graph_context: bool = True
+
+
+class ChatConfigBody(BaseModel):
+    system_prompt: str
+    model: Optional[str] = None
+
+
+@app.get("/chat-config")
+def get_chat_config() -> dict:
+    """Return the current AI assistant configuration."""
+    return _load_chat_config()
+
+
+@app.put("/chat-config")
+def update_chat_config(req: ChatConfigBody) -> dict:
+    """Persist AI assistant configuration."""
+    config = _load_chat_config()
+    config["system_prompt"] = req.system_prompt
+    if req.model is not None:
+        config["model"] = req.model.strip() or RECOMMEND_MODEL_DEFAULT
+    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+    CHAT_CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    return config
+
+
+@app.post("/chat")
+def chat_stream(req: ChatRequest):
+    """Stream an Ollama chat response with cluster-aware graph context via SSE."""
+    config = _load_chat_config()
+    system_prompt = config.get("system_prompt", _CHAT_DEFAULT_SYSTEM_PROMPT)
+    model = config.get("model", RECOMMEND_MODEL_DEFAULT)
+
+    nodes_used = 0
+    graph_ctx = ""
+    if req.include_graph_context:
+        try:
+            summary = graph_summary()
+            graph_ctx = _build_graph_context(summary)
+            nodes_used = len(summary.get("nodes", []))
+        except Exception:
+            pass
+
+    sys_content = system_prompt
+    if graph_ctx:
+        sys_content = f"{system_prompt}\n\nGraph context:\n{graph_ctx}"
+    messages = [{"role": "system", "content": sys_content}]
+    for h in req.history[-20:]:
+        messages.append({"role": h.role, "content": h.content})
+    messages.append({"role": "user", "content": req.message})
+
+    session_id = str(uuid.uuid4())
+    CHAT_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+    (CHAT_SESSIONS_DIR / f"{session_id}.json").write_text(
+        json.dumps({
+            "session_id": session_id,
+            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+            "message": req.message,
+            "history_len": len(req.history),
+            "nodes_used": nodes_used,
+            "model": model,
+        }, indent=2)
+    )
+    _prune_chat_sessions()
+
+    _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+
+    def _generate():
+        import urllib.request as _ureq
+        yield f"data: {json.dumps({'type': 'meta', 'nodes_used': nodes_used, 'session_id': session_id})}\n\n"
+        payload = json.dumps({"model": model, "messages": messages, "stream": True}).encode()
+        req_obj = _ureq.Request(
+            f"{_ollama_base}/api/chat",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with _ureq.urlopen(req_obj, timeout=120) as resp:
+                for raw in resp:
+                    line = raw.decode("utf-8").strip()
+                    if not line:
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                        token = chunk.get("message", {}).get("content", "")
+                        if token:
+                            yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
+                        if chunk.get("done"):
+                            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                            return
+                    except Exception:
+                        continue
+        except Exception as exc:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
+
+    return StreamingResponse(
+        _generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

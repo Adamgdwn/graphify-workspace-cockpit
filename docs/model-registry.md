@@ -1,7 +1,7 @@
 # Model Registry
 
 Document ID: MDL-REG-001
-Status: draft
+Status: current
 Last Updated: 2026-06-14
 
 | Model ID | Provider | Version | Purpose | Approved For | Owner | Last Reviewed |

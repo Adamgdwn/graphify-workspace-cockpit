@@ -26,11 +26,24 @@ interface GraphEntry {
   uploaded_at: string | null;
 }
 
+interface GraphStats {
+  raw_node_count: number;
+  avg_tokens_per_node: number;
+  estimated_tokens_saved_per_query: number;
+}
+
 interface OrgSettings {
   active_graph: { name: string; path: string };
   ollama_url: string;
   storage_backend: string;
   last_seen_devices: { user: string; last_seen: string }[];
+  graph_stats?: GraphStats;
+}
+
+interface RebuildStatus {
+  status: "idle" | "running" | "complete" | "error";
+  last_run: string | null;
+  error?: string | null;
 }
 
 interface ConnectorSync {
@@ -59,6 +72,27 @@ interface DeviceFlow {
   message: string;
 }
 
+interface ChatConfig {
+  system_prompt: string;
+  model: string;
+}
+
+interface ClusterSelectionState {
+  sources: string[];
+  clusters: string[] | null;
+}
+
+interface ClusterOption {
+  id: string;
+  node_count: number;
+}
+
+interface ClusterSelectionData {
+  selection: ClusterSelectionState;
+  available_sources: string[];
+  available_clusters: ClusterOption[];
+}
+
 export function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
@@ -77,6 +111,20 @@ export function Settings() {
   const [authState, setAuthState] = useState<AuthFlowState>("idle");
   const [syncing, setSyncing] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Rebuild graph
+  const [rebuildStatus, setRebuildStatus] = useState<RebuildStatus | null>(null);
+  const [rebuilding, setRebuilding] = useState(false);
+  const rebuildPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Knowledge source / cluster selection
+  const [clusterSel, setClusterSel] = useState<ClusterSelectionData | null>(null);
+  const [updatingSel, setUpdatingSel] = useState(false);
+
+  // AI assistant config
+  const [chatConfig,  setChatConfig]  = useState<ChatConfig | null>(null);
+  const [chatDraft,   setChatDraft]   = useState<ChatConfig | null>(null);
+  const [savingChat,  setSavingChat]  = useState(false);
 
   const loadConnectors = useCallback(() => {
     fetch(`${API}/connectors`)
@@ -102,7 +150,128 @@ export function Settings() {
       .then((r) => r.json())
       .then(setOrg)
       .catch(() => {});
+    fetch(`${API}/graph/rebuild/status`)
+      .then((r) => r.json())
+      .then(setRebuildStatus)
+      .catch(() => {});
+    fetch(`${API}/cluster-selection`)
+      .then((r) => r.json())
+      .then(setClusterSel)
+      .catch(() => {});
+    fetch(`${API}/chat-config`)
+      .then((r) => r.json())
+      .then((d: ChatConfig) => { setChatConfig(d); setChatDraft(d); })
+      .catch(() => {});
     loadConnectors();
+  }
+
+  async function handleRebuild() {
+    setRebuilding(true);
+    try {
+      const r = await fetch(`${API}/graph/rebuild`, { method: "POST" });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(d.detail ?? `HTTP ${r.status}`);
+      }
+      addToast("Graph rebuild started", "info");
+      if (rebuildPollRef.current) clearInterval(rebuildPollRef.current);
+      rebuildPollRef.current = setInterval(async () => {
+        try {
+          const sr = await fetch(`${API}/graph/rebuild/status`);
+          const sd: RebuildStatus = await sr.json();
+          setRebuildStatus(sd);
+          if (sd.status === "complete") {
+            clearInterval(rebuildPollRef.current!);
+            rebuildPollRef.current = null;
+            setRebuilding(false);
+            addToast("Graph rebuilt successfully", "success");
+            loadAll();
+          } else if (sd.status === "error") {
+            clearInterval(rebuildPollRef.current!);
+            rebuildPollRef.current = null;
+            setRebuilding(false);
+            addToast(`Rebuild error: ${sd.error ?? "unknown"}`, "error");
+          }
+        } catch {
+          clearInterval(rebuildPollRef.current!);
+          rebuildPollRef.current = null;
+          setRebuilding(false);
+        }
+      }, 2000);
+    } catch (err: unknown) {
+      setRebuilding(false);
+      addToast(err instanceof Error ? err.message : "Rebuild failed", "error");
+    }
+  }
+
+  async function applyClusterSel(sel: { sources: string[]; clusters: string[] | null }) {
+    setUpdatingSel(true);
+    try {
+      const r = await fetch(`${API}/cluster-selection`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sel),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json() as ClusterSelectionState;
+      setClusterSel((prev) => prev ? { ...prev, selection: data } : null);
+      addToast("Knowledge sources updated", "info");
+    } catch {
+      addToast("Failed to update selection", "error");
+    } finally {
+      setUpdatingSel(false);
+    }
+  }
+
+  async function toggleSource(source: string) {
+    if (!clusterSel) return;
+    const current = clusterSel.selection.sources;
+    const next = current.includes(source)
+      ? current.filter((s) => s !== source)
+      : [...current, source];
+    await applyClusterSel({ sources: next, clusters: clusterSel.selection.clusters });
+  }
+
+  async function toggleCluster(clusterId: string) {
+    if (!clusterSel) return;
+    const allIds = clusterSel.available_clusters.map((c) => c.id);
+    const current = clusterSel.selection.clusters ?? allIds;
+    const next = current.includes(clusterId)
+      ? current.filter((c) => c !== clusterId)
+      : [...current, clusterId];
+    const isAll = next.length === allIds.length && allIds.every((id) => next.includes(id));
+    await applyClusterSel({ sources: clusterSel.selection.sources, clusters: isAll ? null : next });
+  }
+
+  async function handleSelectAll() {
+    if (!clusterSel) return;
+    await applyClusterSel({ sources: clusterSel.available_sources, clusters: null });
+  }
+
+  async function handleDeselectAll() {
+    if (!clusterSel) return;
+    await applyClusterSel({ sources: clusterSel.available_sources, clusters: [] });
+  }
+
+  async function handleSaveChatConfig() {
+    if (!chatDraft) return;
+    setSavingChat(true);
+    try {
+      const r = await fetch(`${API}/chat-config`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(chatDraft),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const saved = await r.json() as ChatConfig;
+      setChatConfig(saved);
+      setChatDraft(saved);
+      addToast("AI Assistant config saved", "success");
+    } catch {
+      addToast("Failed to save AI config", "error");
+    } finally {
+      setSavingChat(false);
+    }
   }
 
   useEffect(() => {
@@ -200,10 +369,11 @@ export function Settings() {
     }
   }
 
-  // Cleanup poll on unmount
+  // Cleanup polls on unmount
   useEffect(() => {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
+      if (rebuildPollRef.current) clearInterval(rebuildPollRef.current);
     };
   }, []);
 
@@ -358,6 +528,157 @@ export function Settings() {
         {uploadMsg && <p className="settings-ok">{uploadMsg}</p>}
       </section>
 
+      {/* Rebuild Graph */}
+      <section className="settings-section">
+        <div className="settings-section-title">Rebuild Graph</div>
+        <p className="settings-dim" style={{ marginBottom: 10 }}>
+          Run <code>graphify update . --no-cluster</code> on the current repo to refresh graph data.
+          The active graph reloads automatically when the rebuild completes.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            type="button"
+            className="settings-upload-btn"
+            onClick={handleRebuild}
+            disabled={rebuilding}
+          >
+            {rebuilding ? "Rebuilding…" : "Rebuild Graph"}
+          </button>
+          {rebuilding && <span className="settings-dim" style={{ fontSize: 12 }}>Running graphify update…</span>}
+          {rebuildStatus && !rebuilding && rebuildStatus.status !== "idle" && (
+            <span className={`settings-dim${rebuildStatus.status === "error" ? " settings-warn" : ""}`} style={{ fontSize: 12 }}>
+              {rebuildStatus.status === "complete"
+                ? `Last rebuild: ${rebuildStatus.last_run ? fmtTime(rebuildStatus.last_run) : "—"}`
+                : rebuildStatus.status === "error"
+                ? `Error: ${rebuildStatus.error ?? "unknown"}`
+                : ""}
+            </span>
+          )}
+        </div>
+      </section>
+
+      {/* Knowledge Sources */}
+      {clusterSel && (
+        <section className="settings-section" id="knowledge-sources">
+          <div className="settings-section-title">
+            Knowledge Sources
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="settings-refresh-btn" type="button" onClick={handleSelectAll} disabled={updatingSel}>
+                Select all
+              </button>
+              <button className="settings-refresh-btn" type="button" onClick={handleDeselectAll} disabled={updatingSel}>
+                Deselect all
+              </button>
+            </div>
+          </div>
+          <p className="settings-dim" style={{ marginBottom: 10 }}>
+            Toggle which sources and clusters feed the map, queries, and recommendations.
+          </p>
+
+          {/* Source toggles — only show if cloud sources are available */}
+          {clusterSel.available_sources.length > 1 && (
+            <>
+              <div className="ks-group-label">Sources</div>
+              <div className="ks-toggle-list">
+                {clusterSel.available_sources.map((src) => {
+                  const active = clusterSel.selection.sources.includes(src);
+                  const label = src === "local"
+                    ? "Local workspace"
+                    : src.charAt(0).toUpperCase() + src.slice(1);
+                  return (
+                    <label key={src} className="ks-toggle-row">
+                      <input
+                        type="checkbox"
+                        className="ks-toggle-check"
+                        checked={active}
+                        disabled={updatingSel}
+                        onChange={() => toggleSource(src)}
+                      />
+                      <span className="ks-toggle-label">{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Cluster toggles */}
+          {clusterSel.available_clusters.length > 0 && (
+            <>
+              <div className="ks-group-label" style={{ marginTop: 14 }}>Clusters</div>
+              <div className="ks-cluster-grid">
+                {clusterSel.available_clusters.map((c) => {
+                  const allIds = clusterSel.available_clusters.map((x) => x.id);
+                  const activeClusters = clusterSel.selection.clusters ?? allIds;
+                  const active = activeClusters.includes(c.id);
+                  return (
+                    <label key={c.id} className="ks-toggle-row">
+                      <input
+                        type="checkbox"
+                        className="ks-toggle-check"
+                        checked={active}
+                        disabled={updatingSel}
+                        onChange={() => toggleCluster(c.id)}
+                      />
+                      <span className="ks-toggle-label">{c.id}</span>
+                      <span className="ks-node-count">{c.node_count.toLocaleString()}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {clusterSel.available_clusters.length === 0 && clusterSel.available_sources.length <= 1 && (
+            <p className="settings-dim">No clusters found in the active graph.</p>
+          )}
+        </section>
+      )}
+
+      {/* AI Assistant */}
+      {chatDraft && (
+        <section className="settings-section" id="ai-assistant">
+          <div className="settings-section-title">AI Assistant</div>
+          <p className="settings-dim" style={{ marginBottom: 10 }}>
+            System prompt and model for the floating AI panel. Changes take effect on the next message.
+          </p>
+          <div className="settings-grid">
+            <div className="settings-row" style={{ alignItems: "flex-start" }}>
+              <span className="settings-label" style={{ paddingTop: 6 }}>System prompt</span>
+              <textarea
+                className="settings-prompt-textarea"
+                value={chatDraft.system_prompt}
+                onChange={(e) => setChatDraft({ ...chatDraft, system_prompt: e.target.value })}
+                rows={4}
+              />
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Model</span>
+              <input
+                className="settings-mono-input"
+                value={chatDraft.model}
+                onChange={(e) => setChatDraft({ ...chatDraft, model: e.target.value })}
+                placeholder="phi4:latest"
+              />
+            </div>
+          </div>
+          <div style={{ padding: "8px 16px 4px" }}>
+            <button
+              className="settings-upload-btn"
+              type="button"
+              onClick={handleSaveChatConfig}
+              disabled={
+                savingChat ||
+                (chatDraft.system_prompt === chatConfig?.system_prompt &&
+                  chatDraft.model === chatConfig?.model)
+              }
+            >
+              {savingChat ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </section>
+      )}
+
       {/* Ollama */}
       <section className="settings-section">
         <div className="settings-section-title">
@@ -410,6 +731,14 @@ export function Settings() {
             <div className="settings-row">
               <span className="settings-label">Ollama URL</span>
               <span className="settings-value settings-mono">{org.ollama_url}</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Est. tokens saved/query</span>
+              <span className="settings-value">
+                {org.graph_stats && org.graph_stats.estimated_tokens_saved_per_query > 0
+                  ? `~${org.graph_stats.estimated_tokens_saved_per_query.toLocaleString()}`
+                  : "—"}
+              </span>
             </div>
           </div>
           {org.last_seen_devices.length > 0 && (
