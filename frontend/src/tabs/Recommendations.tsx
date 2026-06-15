@@ -24,6 +24,107 @@ interface Recommendation {
   updated_at: string;
   model: string;
   created_by?: string;
+  action_plan?: ActionPlan;
+  overlap_dossier?: OverlapDossier | null;
+}
+
+interface ActionPlan {
+  canonical_target?: string;
+  merge_sources?: string[];
+  concrete_steps?: string[];
+  savings_estimate?: {
+    duplicate_node_count?: number;
+    affected_files?: number;
+    semantic_edge_reduction?: number;
+    rough_context_savings?: string;
+    caveat?: string;
+    [key: string]: string | number | undefined;
+  };
+  risks?: string[];
+  acceptance_criteria?: string[];
+  rollback_note?: string;
+  open_questions?: string[];
+  source_pairs?: string[];
+  same_name_count?: number;
+  proposed_action?: string;
+}
+
+interface OverlapDossier {
+  evidence_summary?: string;
+  per_side_purpose?: Record<string, string>;
+  similarities?: string[];
+  differences?: string[];
+  canonicality_signals?: string[];
+  open_questions?: string[];
+}
+
+interface PacketEvidenceNode {
+  id: string;
+  label: string;
+  type?: string;
+  cluster?: string;
+  repo?: string;
+  container?: string;
+  relative_path?: string;
+  source_file?: string;
+  source_location?: string;
+  symbol?: string;
+  purpose?: string;
+}
+
+interface PacketAction {
+  id: string;
+  status: string;
+  target_path?: string;
+  dry_run_at?: string | null;
+  approved_at?: string | null;
+  executed_at?: string | null;
+}
+
+interface PacketDecision {
+  id: string;
+  target_id: string;
+  label: string;
+  classification: string;
+  rationale?: string;
+  status: string;
+}
+
+interface DecisionPacket {
+  schema_version: string;
+  id: string;
+  created_at: string;
+  recommendation: Recommendation;
+  evidence: {
+    nodes: PacketEvidenceNode[];
+    overlap?: {
+      cluster_a?: string;
+      cluster_b?: string;
+      edge_count?: number;
+      avg_similarity?: number;
+    } | null;
+    overlap_dossier?: OverlapDossier | null;
+  };
+  judgement: {
+    recommendation_status: RecStatus | string;
+    confidence: number;
+    risk: string;
+    effort: string;
+    model: string;
+  };
+  recommendation_plan?: ActionPlan | null;
+  decisions: {
+    related: PacketDecision[];
+    count: number;
+  };
+  approval: {
+    queued_actions: PacketAction[];
+    queued_action_count: number;
+    next_gate: string;
+    execution_locked_to_work_queue: boolean;
+  };
+  operator_choices: string[];
+  markdown: string;
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────
@@ -59,6 +160,16 @@ function downloadJson(data: unknown, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+function downloadText(text: string, filename: string, type = "text/markdown") {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────
 
 function ConfidenceMeter({ value }: { value: number }) {
@@ -82,6 +193,218 @@ function MetaBadge({ label, color }: { label: string; color: string }) {
   );
 }
 
+function listItems(items?: string[], limit = 5): string[] {
+  return (items ?? []).map((item) => item.trim()).filter(Boolean).slice(0, limit);
+}
+
+function savingsItems(plan: ActionPlan): string[] {
+  const savings = plan.savings_estimate;
+  if (!savings) return [];
+  const items: string[] = [];
+  if (savings.duplicate_node_count !== undefined) items.push(`${savings.duplicate_node_count} top duplicate pair(s) to review`);
+  if (savings.affected_files !== undefined) items.push(`${savings.affected_files} affected file(s)`);
+  if (savings.semantic_edge_reduction !== undefined) items.push(`up to ${savings.semantic_edge_reduction} repeated semantic edge(s) to reduce`);
+  if (savings.rough_context_savings) items.push(String(savings.rough_context_savings));
+  if (savings.caveat) items.push(String(savings.caveat));
+  return items;
+}
+
+function pct(value?: number): string {
+  if (typeof value !== "number" || Number.isNaN(value)) return "unknown";
+  return `${Math.round(value * 100)}%`;
+}
+
+function ActionPlanBlock({ plan }: { plan: ActionPlan }) {
+  const sources = listItems(plan.merge_sources, 6);
+  const steps = listItems(plan.concrete_steps, 6);
+  const savings = savingsItems(plan);
+  const risks = listItems(plan.risks, 5);
+  const doneWhen = listItems(plan.acceptance_criteria, 5);
+  const questions = listItems(plan.open_questions, 5);
+
+  return (
+    <div className="rec-action-plan">
+      <div className="rec-plan-head">Implementation Brief</div>
+      {plan.canonical_target && (
+        <section className="rec-plan-section rec-plan-wide">
+          <h4>Where</h4>
+          <p>{plan.canonical_target}</p>
+        </section>
+      )}
+      {sources.length > 0 && (
+        <section className="rec-plan-section rec-plan-wide">
+          <h4>Merge / Review Sources</h4>
+          <ul>{sources.map((item) => <li key={item}>{item}</li>)}</ul>
+        </section>
+      )}
+      <div className="rec-plan-grid">
+        {steps.length > 0 && (
+          <section className="rec-plan-section">
+            <h4>How</h4>
+            <ol>{steps.map((item) => <li key={item}>{item}</li>)}</ol>
+          </section>
+        )}
+        {savings.length > 0 && (
+          <section className="rec-plan-section">
+            <h4>Savings</h4>
+            <ul>{savings.map((item) => <li key={item}>{item}</li>)}</ul>
+          </section>
+        )}
+        {risks.length > 0 && (
+          <section className="rec-plan-section">
+            <h4>Risks</h4>
+            <ul>{risks.map((item) => <li key={item}>{item}</li>)}</ul>
+          </section>
+        )}
+        {doneWhen.length > 0 && (
+          <section className="rec-plan-section">
+            <h4>Done When</h4>
+            <ul>{doneWhen.map((item) => <li key={item}>{item}</li>)}</ul>
+          </section>
+        )}
+      </div>
+      {questions.length > 0 && (
+        <section className="rec-plan-section rec-plan-wide">
+          <h4>Open Questions</h4>
+          <ul>{questions.map((item) => <li key={item}>{item}</li>)}</ul>
+        </section>
+      )}
+      {plan.rollback_note && (
+        <section className="rec-plan-section rec-plan-wide">
+          <h4>Rollback</h4>
+          <p>{plan.rollback_note}</p>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function PacketList({ items, empty }: { items?: string[]; empty: string }) {
+  const values = listItems(items, 5);
+  if (values.length === 0) return <p className="rec-packet-muted">{empty}</p>;
+  return <ul>{values.map((item) => <li key={item}>{item}</li>)}</ul>;
+}
+
+function DecisionPacketBlock({
+  packet,
+  onEvidenceNavigate,
+}: {
+  packet: DecisionPacket;
+  onEvidenceNavigate?: (context: ActiveCockpitContext) => void;
+}) {
+  const plan = packet.recommendation_plan;
+  const dossier = packet.evidence.overlap_dossier;
+  const queuedActions = packet.approval.queued_actions ?? [];
+
+  function handleCopyMarkdown() {
+    void navigator.clipboard?.writeText(packet.markdown);
+  }
+
+  return (
+    <div className="rec-decision-packet">
+      <div className="rec-packet-head">
+        <div>
+          <span className="rec-packet-eyebrow">Decision Packet</span>
+          <strong>{packet.recommendation.title}</strong>
+        </div>
+        <div className="rec-packet-tools">
+          <button type="button" onClick={handleCopyMarkdown}>Copy MD</button>
+          <button type="button" onClick={() => downloadText(packet.markdown, "decision-packet.md")}>Markdown</button>
+          <button type="button" onClick={() => downloadJson(packet, "decision-packet.json")}>JSON</button>
+        </div>
+      </div>
+
+      <div className="rec-packet-grid">
+        <section className="rec-packet-section">
+          <h4>Evidence</h4>
+          {packet.evidence.nodes.length > 0 ? (
+            <div className="rec-packet-node-list">
+              {packet.evidence.nodes.map((node) => (
+                <button
+                  key={node.id}
+                  type="button"
+                  className="rec-packet-node"
+                  onClick={() => onEvidenceNavigate?.({
+                    kind: "node",
+                    source: "recommendations",
+                    nodeId: node.id,
+                    label: node.label || node.id,
+                    clusterId: node.cluster,
+                    viewMode: "full",
+                  })}
+                  title="Open this evidence on the Map"
+                >
+                  <span>{node.label || node.id}</span>
+                  <small>{node.repo || "unknown repo"} / {node.relative_path || node.source_file || "unknown path"}</small>
+                  {node.purpose && <em>{node.purpose}</em>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="rec-packet-muted">No exact graph nodes matched this recommendation's evidence.</p>
+          )}
+        </section>
+
+        <section className="rec-packet-section">
+          <h4>Judgement</h4>
+          <dl className="rec-packet-facts">
+            <div><dt>Status</dt><dd>{packet.judgement.recommendation_status}</dd></div>
+            <div><dt>Confidence</dt><dd>{pct(packet.judgement.confidence)}</dd></div>
+            <div><dt>Risk</dt><dd>{packet.judgement.risk}</dd></div>
+            <div><dt>Effort</dt><dd>{packet.judgement.effort}</dd></div>
+          </dl>
+          {dossier?.evidence_summary && <p>{dossier.evidence_summary}</p>}
+        </section>
+
+        <section className="rec-packet-section">
+          <h4>Recommendation</h4>
+          <p>{packet.recommendation.proposed_action || packet.recommendation.summary}</p>
+          {plan?.canonical_target && <p className="rec-packet-target">Where: {plan.canonical_target}</p>}
+          {plan && <PacketList items={plan.concrete_steps} empty="No concrete steps recorded." />}
+        </section>
+
+        <section className="rec-packet-section">
+          <h4>Approval</h4>
+          <p>{packet.approval.next_gate}</p>
+          {queuedActions.length > 0 ? (
+            <ul>
+              {queuedActions.map((action) => (
+                <li key={action.id}>{action.status}{action.target_path ? ` — ${action.target_path}` : ""}</li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rec-packet-muted">No queued action yet.</p>
+          )}
+        </section>
+
+        <section className="rec-packet-section">
+          <h4>Decision Status</h4>
+          {packet.decisions.related.length > 0 ? (
+            <ul>
+              {packet.decisions.related.map((decision) => (
+                <li key={decision.id}>
+                  <strong>{decision.target_id}</strong>: {decision.classification}
+                  {decision.rationale ? ` — ${decision.rationale}` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rec-packet-muted">No active decision is linked to this evidence yet.</p>
+          )}
+        </section>
+
+        <section className="rec-packet-section">
+          <h4>Open Questions</h4>
+          <PacketList
+            items={plan?.open_questions ?? dossier?.open_questions}
+            empty="No open questions recorded."
+          />
+        </section>
+      </div>
+    </div>
+  );
+}
+
 // ── Card ──────────────────────────────────────────────────────────────────
 
 function RecCard({
@@ -102,6 +425,31 @@ function RecCard({
   const statusColor = STATUS_COLOR[rec.status] ?? "#9ca3af";
   const riskColor   = RISK_COLOR[rec.risk]   ?? "#9ca3af";
   const effortColor = RISK_COLOR[rec.effort] ?? "#9ca3af";
+  const [packetOpen, setPacketOpen] = useState(false);
+  const [packet, setPacket] = useState<DecisionPacket | null>(null);
+  const [packetLoading, setPacketLoading] = useState(false);
+  const [packetError, setPacketError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!packetOpen || packet || packetLoading) return;
+    let cancelled = false;
+    async function loadPacket() {
+      setPacketLoading(true);
+      setPacketError(null);
+      try {
+        const r = await fetch(`${API}/decision-packets/recommendations/${rec.id}`);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const data: DecisionPacket = await r.json();
+        if (!cancelled) setPacket(data);
+      } catch (e) {
+        if (!cancelled) setPacketError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setPacketLoading(false);
+      }
+    }
+    void loadPacket();
+    return () => { cancelled = true; };
+  }, [packetOpen, packet, packetLoading, rec.id]);
 
   return (
     <div
@@ -156,6 +504,40 @@ function RecCard({
           <span className="rec-proposed-label">Next action:</span>
           {rec.proposed_action}
         </div>
+      )}
+
+      {rec.action_plan && <ActionPlanBlock plan={rec.action_plan} />}
+
+      <div className="rec-packet-toggle-row">
+        <button
+          type="button"
+          className="rec-packet-toggle"
+          onClick={() => setPacketOpen((open) => !open)}
+        >
+          {packetOpen ? "Hide Decision Packet" : "Review Decision Packet"}
+        </button>
+        {packetOpen && (
+          <button
+            type="button"
+            className="rec-packet-toggle rec-packet-refresh"
+            onClick={() => {
+              setPacket(null);
+              setPacketError(null);
+            }}
+          >
+            Refresh Packet
+          </button>
+        )}
+      </div>
+
+      {packetOpen && (
+        packetLoading ? (
+          <div className="rec-packet-loading">Loading decision packet…</div>
+        ) : packetError ? (
+          <div className="rec-packet-error">Decision packet unavailable: {packetError}</div>
+        ) : packet ? (
+          <DecisionPacketBlock packet={packet} onEvidenceNavigate={onEvidenceNavigate} />
+        ) : null
       )}
 
       {/* Meta row */}

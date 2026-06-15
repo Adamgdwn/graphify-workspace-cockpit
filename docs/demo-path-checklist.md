@@ -1,6 +1,6 @@
 # Demo Path Checklist
 
-Last Updated: 2026-06-15T13:16:02-06:00
+Last Updated: 2026-06-15T16:30:47-06:00
 Status: active
 Owner: Adam Goodwin
 
@@ -57,16 +57,18 @@ manual checklist protects the click path.
 5. In `Map`, confirm the mode switch shows `Explore`, `Trace`, `Overlap`, and `Review`.
 6. Click `Decisions`, create or edit one low-risk demo decision, and confirm it appears in the active decision list.
 7. Return to `Map` and confirm the decision badge is visible on the relevant node when that target is present in the graph.
-8. Click `Recommendations` and confirm pending cards show evidence chips, confidence, risk, and `Next action`.
-9. Accept one appropriate recommendation, then click `Queue Action`.
-10. Click `Work Queue`, run `Dry Run` for the queued action, and confirm a preview appears before `Execute` is available.
-11. Do not execute unless the demo explicitly calls for it; execution remains a human approval step.
+8. Click `Recommendations` and confirm pending cards show evidence chips, confidence, risk, `Next action`, and `Review Decision Packet`.
+9. Open one decision packet and confirm it separates evidence, judgement, recommendation, approval, decision status, and open questions; optionally export Markdown or JSON.
+10. Accept one appropriate recommendation, then click `Queue Action`.
+11. Click `Work Queue`, run `Dry Run` for the queued action, and confirm a preview appears before `Execute` is available.
+12. Do not execute unless the demo explicitly calls for it; execution remains a human approval step.
 
 ## Recording Notes
 
 - Prefer the real graph when available; if `demo_mode` is true, call that out.
 - Use Command Center as the opening shot for the world-class decision workflow.
 - Show the Ask evidence click into Map because it proves the app is not just a chat surface.
+- Show one decision packet in Recommendations because it proves the tool is no longer a 50,000-foot recommendation list.
 - Treat action execution as optional. The safety point is the dry-run gate and rollback note.
 
 ## Known Manual Gate

@@ -6,6 +6,35 @@ changed, or fixed in that chunk.
 
 ---
 
+## Chunk Thirty — Decision Packet View (2026-06-15)
+
+### Added
+- `GET /decision-packets/recommendations/{rec_id}` read-only endpoint for recommendation decision packets
+- Expandable Decision Packet panel in Recommendation cards
+- Markdown copy/export and JSON export for decision packets
+
+### Changed
+- Overlap-created recommendations now retain overlap metadata and triage dossier details for future packet review
+- Recommendation packets combine evidence provenance, overlap dossier, action plan, related decisions, queued action state, and the existing approval gate
+
+## Chunk Twenty-Nine — Recommendation Action Plans (2026-06-15)
+
+### Added
+- Optional `action_plan` on recommendations with canonical target, sources, concrete steps, conservative savings, risks, acceptance criteria, rollback, and open questions
+- Implementation Brief sections in Recommendations and Work Queue
+- Dry-run note content now includes richer action-plan context when present
+
+## Chunk Twenty-Eight — Overlap Evidence Dossier (2026-06-15)
+
+### Added
+- Structured overlap triage dossier: why it matters, per-side purpose, similarities, differences, canonicality signals, and open questions
+- Full path context under overlap pair labels in the Map panel
+
+## Chunk Twenty-Seven — Node Provenance Inspector (2026-06-15)
+
+### Added
+- Full-graph node inspector provenance: repo, container, path, source location, symbol, kind, language, origin, root, id, purpose, metadata, and safe source excerpt
+
 ## Chunk Twenty-Six — Final Owner UI Readiness Sweep (2026-06-15)
 
 ### Added

@@ -1,18 +1,18 @@
 # Start Here
 
-Last Updated: 2026-06-15T14:17:38-06:00
-Status: integration complete — documentation sweep complete; awaiting owner UI testing
+Last Updated: 2026-06-15T16:30:47-06:00
+Status: integration complete — decision packet polish complete; awaiting owner UI testing
 Owner: Adam Goodwin
 
 ## State at Pause
 
-The first 26 build chunks are complete. The cockpit is a working local-first decision
+The first 30 build chunks are complete. The cockpit is a working local-first decision
 surface: seven tabs (Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings)
 plus a floating AI assistant overlay. Desktop launcher is at
 `~/Desktop/graphify-cockpit.desktop`.
 
-The active path is decision-flow polish, split into token-friendly chunks in
-`docs/current-build-pathway.md`. Chunk Twenty established the shared decision
+The current decision-tool polish path is integration complete and split into
+token-friendly chunks in `docs/current-build-pathway.md`. Chunk Twenty established the shared decision
 vocabulary and App-level active cockpit context. Chunk Twenty-One made Ask and
 Recommendation evidence navigate into focused Map context. Chunk Twenty-Two
 grouped the Map toolbar into explicit Explore / Trace / Overlap / Review modes.
@@ -28,7 +28,10 @@ owner-reported UI blocker was supplied in Chunk Twenty-Six, so no speculative
 product-code change was made. A post-close-out documentation sweep aligned the
 README, manual, architecture, deployment guide, roadmap, handover, changelog,
 runbook, risk register, integration guide, tool permission matrix, vision, and
-video prompts with the current seven-tab/demo-ready state.
+video prompts with the current seven-tab/demo-ready state. Chunks Twenty-Seven
+through Thirty then deepened the decision surface: node provenance inspector,
+overlap evidence dossier, recommendation action plans, and read-only decision
+packets in Recommendation cards.
 
 **Chunks 18–19 highlights:**
 - Map → Overlap Analysis panel: 14 cross-cluster pairs, 1,988 semantic edges
@@ -54,8 +57,8 @@ loading, and `79ccf42` Fix overlap semantic highlight clearing.
 
 ## To Resume
 
-1. `git status --short` — confirm whether the Chunk Twenty-Five/Twenty-Six close-out and documentation-sweep packet has been committed.
-2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Twenty-Six - Final Owner UI Readiness Sweep" sections in `docs/current-build-pathway.md`.
+1. `git status --short` — confirm whether the Chunk Twenty-Seven through Thirty decision-tool polish packet has been committed.
+2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Thirty - Decision Packet View" sections in `docs/current-build-pathway.md`.
 3. If Adam reports a specific UI issue, load only the affected tab/component and the related backend endpoint if needed.
 4. Use `docs/context-map.md` if routing is still unclear.
 

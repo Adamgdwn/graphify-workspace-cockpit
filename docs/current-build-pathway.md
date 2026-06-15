@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-15T14:17:38-06:00
-Status: integration complete — documentation sweep complete; awaiting owner UI testing
+Last Updated: 2026-06-15T16:34:48-06:00
+Status: integration complete — Chunk Thirty complete; awaiting owner UI testing
 Owner: Adam Goodwin
 
 ## Purpose
@@ -56,12 +56,16 @@ For material or risk-triggering work:
 | Chunk Twenty-Four — decision command center | Complete | 2026-06-15T12:53:28-06:00 | Added first-tab Command Center with pending recommendation, accepted-not-queued, dry-run-ready action, untriaged overlap, graph freshness, and semantic freshness signals |
 | Chunk Twenty-Five — confidence and shipped evidence | Complete | 2026-06-15T13:16:02-06:00 | Added live demo smoke check, demo checklist, updated recording prompt, and runbook evidence gate |
 | Chunk Twenty-Six — final owner UI readiness sweep | Complete | 2026-06-15T14:00:05-06:00 | No new owner-reported UI blocker supplied; completed final live validation, fixed stale handoff wording, and closed the decision-flow polish path |
+| Chunk Twenty-Seven — node provenance inspector | Complete | 2026-06-15T15:37:51-06:00 | Full-graph node click now shows repo/container/path/location/symbol/kind/language/origin/root/id, purpose, and safe source excerpt |
+| Chunk Twenty-Eight — overlap evidence dossier | Complete | 2026-06-15T16:10:13-06:00 | Overlap triage now returns and renders a structured dossier: why it matters, per-side purpose, similarities, differences, canonicality signals, open questions, and full path context |
+| Chunk Twenty-Nine — recommendation action plans | Complete | 2026-06-15T16:15:53-06:00 | Overlap-created recommendations now include action_plan briefs with canonical target, sources, steps, conservative savings, risks, acceptance criteria, rollback, and open questions; queue/dry-run carries the plan |
+| Chunk Thirty — decision packet view | Complete | 2026-06-15T16:30:47-06:00 | Recommendations now expose a read-only decision packet that combines evidence provenance, overlap dossier, action plan, related decisions, queued action state, approval gate, and Markdown/JSON export |
 
 ---
 
 ## Next Path - World-Class Decision Tool Polish
 
-Status: **integration complete** — Chunk Twenty-Six complete; decision-flow polish closed — 2026-06-15T14:00:05-06:00
+Status: **integration complete** — Chunk Thirty complete; awaiting Adam's hands-on UI testing — 2026-06-15T16:34:48-06:00
 
 Completion target: Integration complete
 
@@ -516,6 +520,316 @@ Validation:
   - frontend Command shell: 11 labels rendered
 
 Stop condition: stop with docs aligned and validation recorded; do not add product behavior before Adam's hands-on UI testing.
+
+---
+
+## Next Path - Ground-Level Decision Evidence
+
+Status: **in progress** — Chunk Twenty-Seven complete; Chunk Twenty-Eight is next — 2026-06-15T15:37:51-06:00
+
+Completion target: Integration complete
+
+Budget class: Medium overall, split into Small chunks
+
+Owner critique being addressed:
+
+- Triage is too light and vague; "high semantic similarity" repeats what the
+  operator already knows.
+- Node click does not explain enough provenance: drive/source root, larger
+  container, repo, path, line/symbol, and what the node does.
+- Recommendations do not explain how work should happen: where to merge, how to
+  merge, what to preserve, and what savings or risk the operator should expect.
+- The cockpit is currently too "50,000 ft" for a world-class decision-making
+  tool.
+
+Objective: Move the cockpit from signal detection to ground-level decision
+support. Every important surface should answer: where did this evidence come
+from, what does it do, why does it matter, what exactly should happen next, what
+could go wrong, and what would be saved?
+
+Non-goals:
+
+- No autonomous execution or broader write permissions
+- No destructive merge/delete behavior
+- No hosted model adapter work
+- No large storage migration unless a later chunk explicitly accepts it
+- No broad visual redesign; keep changes inside existing Map, Recommendations,
+  and Work Queue surfaces
+- No claim that estimated savings are exact; label them as estimates
+
+Context hygiene:
+
+- Start each chunk with `git status --short`, `AGENTS.md`, and this section.
+- Load only the directly touched source files for the current chunk.
+- For backend work, prefer small helper functions over broad route rewrites.
+- Preserve existing recommendation records; new fields must be optional and
+  backward-compatible.
+- Keep each chunk independently shippable and commit-ready.
+- Update this section as chunks move from planned to complete.
+
+Recommended validation per chunk:
+
+- `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Backend compile check if `backend/main.py` changes
+- Targeted `curl` checks for any changed endpoint
+- Manual browser check of the affected tab against `http://127.0.0.1:5173`
+- `graphify update . --no-cluster` after code changes
+
+Stop condition: stop after each chunk once the specific evidence-depth workflow
+is usable, validated, and documented. Do not roll into the next chunk unless
+the tree is clean and the follow-up is tiny.
+
+---
+
+## Chunk Twenty-Seven - Node Provenance Inspector
+
+Status: **complete** — 2026-06-15T15:37:51-06:00
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Make clicking a Map node answer the operator's first practical
+questions: where is this from, what container/repo owns it, what exact file or
+symbol is it, and what does it appear to do?
+
+Context to load:
+
+- `frontend/src/tabs/Map.tsx`
+- Map inspect-panel styles in `frontend/src/styles.css`
+- `backend/main.py` graph full route only if the frontend needs richer node
+  fields from the API
+- A small sample from `graphify-out/graph.json` to confirm available metadata
+
+Outputs:
+
+- Full-graph node inspector shows source root/container where available
+- Inspector shows repo/container, relative path, line or source location,
+  language/kind metadata, origin, and node id
+- Inspector includes a short "What this appears to do" section derived from
+  graph label, metadata, and source excerpt
+- Inspector shows a compact source excerpt when the backend can safely read it
+- Missing provenance fields render calmly as "unknown" or are hidden rather than
+  creating noisy blank rows
+- No node click behavior regresses: focus from Ask and Recommendations still
+  lands on the selected node
+
+Acceptance criteria:
+
+- [x] Clicking a code node shows repo/container, path, line/symbol, kind, and
+  purpose/excerpt
+- [x] Clicking a document node shows repo/container, path, document type, and a
+  useful excerpt
+- [x] Clicking a rootless/external node does not crash and clearly shows what is
+  unknown
+- [x] Ask evidence and Recommendation evidence navigation still focuses nodes
+- [x] No secrets or environment values are read into the UI
+
+Validation:
+
+- Passed: `bash scripts/governance-preflight.sh`
+- Passed: `cd backend && .venv/bin/python -m py_compile main.py`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed with existing Vite warning: production bundle is still larger than 500 kB
+- Passed: direct backend `graph_full()` sample returned repo, container, relative path, source location, origin, purpose, and excerpt fields
+- Passed: direct backend `graph_full()` rootless node sample returned `container: other`, unknown provenance values, no excerpt, and no crash
+- Passed: temporary updated backend on `127.0.0.1:8011` returned enriched `/graph/full` data for a code node
+- Passed: temporary Vite shell on `127.0.0.1:5174` loaded with backend connected and live graph counts after temporary CORS origin was allowed
+- Passed: `graphify update . --no-cluster` rebuilt the local graph (`933 nodes`, `11369 edges`)
+
+Stop condition: stop before changing overlap triage prompts or recommendation
+schemas.
+
+---
+
+## Chunk Twenty-Eight - Overlap Evidence Dossier
+
+Status: **complete** — 2026-06-15T16:10:13-06:00
+
+Completion target: Task complete
+
+Budget class: Small to Medium
+
+Objective: Replace vague overlap triage with a structured dossier that explains
+why the overlap matters and what the operator should inspect before deciding.
+
+Context to load:
+
+- `backend/main.py` overlap report, triage, and overlap status routes
+- `frontend/src/tabs/Map.tsx` overlap panel
+- Relevant overlap styles in `frontend/src/styles.css`
+- Existing `workspace/state/overlap-status.json` shape if present
+
+Outputs:
+
+- `POST /overlap/triage` returns a backward-compatible structured result:
+  verdict, confidence, reason, action, evidence summary, per-side purpose,
+  similarities, differences, canonicality signals, open questions, and model
+- Triage prompt asks for decision-useful evidence, not a restatement of semantic
+  similarity
+- Map overlap panel renders a dossier card with sections the operator can scan
+- Top overlapping pairs show full path context, not only labels
+- Durable overlap status preserves the richer triage result when saved
+- Existing saved triage records with only reason/action still render safely
+
+Acceptance criteria:
+
+- [x] A triaged overlap explains what each side does
+- [x] It names why the overlap matters beyond "high similarity"
+- [x] It lists similarities and meaningful differences
+- [x] It offers canonicality signals or states when canonicality is unclear
+- [x] It lists open questions before merge/review/document action
+- [x] Dismiss/task-created workflow still works
+
+Validation:
+
+- Passed: `bash scripts/governance-preflight.sh`
+- Passed: `cd backend && .venv/bin/python -m py_compile main.py`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed with existing Vite warning: production bundle is still larger than 500 kB
+- Passed: direct backend `triage_overlap()` contract check with mocked Ollama output returned verdict, confidence, evidence summary, per-side purpose, similarities, differences, canonicality signals, and open questions
+- Passed: `git diff --check`
+- Passed: `graphify update . --no-cluster` rebuilt the local graph (`942 nodes`, `12616 edges`)
+- Pending: live browser click-through of one owner-selected overlap after Adam's next UI test pass
+
+Stop condition: stop before changing recommendation cards or queued action
+payloads.
+
+---
+
+## Chunk Twenty-Nine - Recommendation Action Plans
+
+Status: **complete** — 2026-06-15T16:15:53-06:00
+
+Completion target: Task complete
+
+Budget class: Small to Medium
+
+Objective: Turn recommendation cards, especially overlap-created
+recommendations, into actionable implementation briefs instead of one-line
+suggestions.
+
+Context to load:
+
+- `backend/main.py` recommendation creation and queue routes
+- `frontend/src/tabs/Recommendations.tsx`
+- `frontend/src/tabs/WorkQueue.tsx` only if queued actions should display the
+  new plan fields
+- Recommendation styles in `frontend/src/styles.css`
+- `backend/prompts/recommend_*.txt` if generated recommendations need matching
+  prompt guidance
+
+Outputs:
+
+- Recommendation records support optional `action_plan` fields:
+  canonical_target, merge_sources, concrete_steps, savings_estimate,
+  risks, acceptance_criteria, rollback_note, and open_questions
+- Overlap-created recommendations populate those fields from overlap evidence
+  and triage dossier when available
+- Recommendations UI renders the plan in compact sections: where, how, savings,
+  risks, done when
+- Savings estimate is explicit and conservative: duplicate node count, affected
+  files, semantic edge reduction, and rough context/token savings where data is
+  available
+- Queueing a recommendation preserves enough plan context for Work Queue dry-run
+  review
+- Older recommendation records without `action_plan` still render
+
+Acceptance criteria:
+
+- [x] Overlap recommendation says what to merge where
+- [x] It lists concrete first steps rather than only a broad action
+- [x] It gives a conservative savings estimate with clear caveat wording
+- [x] It lists risks and acceptance criteria
+- [x] Queue Action still works for old and new recommendations
+- [x] Work Queue dry-run preview includes the richer plan context when present
+
+Validation:
+
+- Passed: `bash scripts/governance-preflight.sh`
+- Passed: `cd backend && .venv/bin/python -m py_compile main.py`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed with existing Vite warning: production bundle is still larger than 500 kB
+- Passed: direct backend overlap recommendation contract check created `action_plan`, queued it, and confirmed dry-run markdown includes Action Plan / Where / How / Savings / Risks / Done When sections
+- Passed: `git diff --check`
+- Passed: `graphify update . --no-cluster` rebuilt the local graph (`951 nodes`, `13854 edges`)
+- Pending: live browser review of the Recommendations card plan and Work Queue dry-run panel
+
+Stop condition: stop before creating a combined decision packet or changing the
+global navigation model.
+
+---
+
+## Chunk Thirty - Decision Packet View
+
+Status: **complete** — 2026-06-15T16:30:47-06:00
+
+Completion target: Integration complete
+
+Budget class: Medium
+
+Objective: Create a reviewable decision packet that gathers the evidence needed
+for one decision without making the operator bounce between Map,
+Recommendations, Decisions, and Work Queue.
+
+Context to load:
+
+- `frontend/src/App.tsx`
+- `frontend/src/domain/cockpitContext.ts`
+- `frontend/src/tabs/Map.tsx`
+- `frontend/src/tabs/Recommendations.tsx`
+- `frontend/src/tabs/WorkQueue.tsx`
+- `frontend/src/tabs/Decisions.tsx`
+- Backend endpoints only if a new read-only packet endpoint is needed
+
+Outputs:
+
+- `GET /decision-packets/recommendations/{rec_id}` read-only endpoint
+  assembles recommendation, matched evidence-node provenance, overlap metadata,
+  overlap dossier, action plan, related active decisions, queued action state,
+  next approval gate, operator choices, and Markdown export text
+- Overlap-created recommendations now persist overlap metadata and the triage
+  dossier so future packets keep the ground-level decision evidence
+- Recommendations cards expose an expandable Decision Packet panel with
+  evidence, judgement, recommendation, approval, decision status, and open
+  questions
+- Packet can copy Markdown and export Markdown or JSON
+- Packet remains read-only; accepting, queueing, dry-run, and execution still
+  use the existing explicit controls
+
+Acceptance criteria:
+
+- [x] Operator can review one overlap/recommendation as a complete decision
+  packet
+- [x] Packet clearly separates evidence, judgement, recommendation, and approval
+- [x] Existing tab workflows still work independently
+- [x] No action executes from the packet without the existing dry-run/approval
+  gate
+- [x] Documentation and demo checklist are updated if the packet becomes part of
+  the preferred demo path
+
+Validation:
+
+- Passed: `bash scripts/governance-preflight.sh`
+- Passed: `cd backend && .venv/bin/python -m py_compile main.py`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed with existing Vite warning: production bundle is still larger than 500 kB
+- Passed: direct backend decision-packet contract check returned recommendation,
+  evidence, judgement, action plan, related decision, queued action state, and
+  Markdown export text
+- Passed: `git diff --check`
+- Passed: `graphify update . --no-cluster` rebuilt the local graph (`976 nodes`,
+  `14961 edges`)
+- Pending: live browser review of the expandable packet panel after Adam's
+  hands-on UI test pass
+
+Stop condition: stop with the ground-level decision evidence path integrated and
+demo-ready; future polish should be based on Adam's hands-on testing notes.
 
 ---
 

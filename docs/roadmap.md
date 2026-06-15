@@ -1,9 +1,9 @@
 # Roadmap
 
-Last Updated: 2026-06-15T14:12:27-06:00
+Last Updated: 2026-06-15T16:30:47-06:00
 Owner: Adam Goodwin
 
-## Done — Chunks 1–26 (integration complete as of 2026-06-15)
+## Done — Chunks 1–30 (integration complete as of 2026-06-15)
 
 - **Chunk One** — Governance baseline: docs, risk register, agent inventory, prompt register, tool permission matrix
 - **Chunk Two** — App shell: FastAPI backend, React/Vite frontend, initial cockpit shell, `start.sh` launcher
@@ -31,11 +31,15 @@ Owner: Adam Goodwin
 - **Chunk Twenty-Four** — Decision Command Center: first-tab attention view for recommendations, actions, overlaps, and graph freshness
 - **Chunk Twenty-Five** — Confidence and shipped evidence: live smoke check, demo checklist, runbook gate, and current video prompt
 - **Chunk Twenty-Six** — Final owner UI readiness sweep: browser walkthrough across all seven tabs and Ask evidence submission; no speculative product-code changes
+- **Chunk Twenty-Seven** — Node provenance inspector: node click reveals repo, container, path, purpose, metadata, and safe source excerpts
+- **Chunk Twenty-Eight** — Overlap evidence dossier: overlap triage explains why a similarity matters, what each side does, similarities, differences, canonicality, and open questions
+- **Chunk Twenty-Nine** — Recommendation action plans: overlap recommendations say where to merge/review, how to proceed, estimated savings, risks, acceptance criteria, rollback, and open questions
+- **Chunk Thirty** — Decision packet view: Recommendation cards expose a read-only packet that gathers evidence provenance, judgement, action plan, related decisions, queued action state, approval gate, and Markdown/JSON export
 
 ## Now
 
-The 26-chunk build pathway is integration complete for the current
-decision-flow polish path. The next work should come from Adam's hands-on UI
+The 30-chunk build pathway is integration complete for the current
+decision-tool polish path. The next work should come from Adam's hands-on UI
 testing: capture one concrete issue at a time, fix it in a bounded slice, and
 rerun the smoke gate plus targeted browser/API validation.
 
@@ -44,7 +48,8 @@ The cockpit is a working local-first decision surface with:
 - Command Center, graph-backed Q&A, interactive map, decision ledger, recommendation queue, and action log
 - Floating AI assistant available in every tab
 - Knowledge base cluster selector for focused graph context
-- Overlap analysis with duplicate/reference/related triage and durable workflow status
+- Overlap analysis with duplicate/reference/related triage, evidence dossier, and durable workflow status
+- Read-only decision packets that combine recommendation evidence, judgement, action plan, related decisions, and approval state
 - Cloud connector sync (SharePoint + OneNote)
 - Cross-device shared state via Supabase
 - API key auth, Caddy HTTPS, Docker deployment, rate limiting, and session pruning

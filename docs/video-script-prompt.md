@@ -1,5 +1,7 @@
 # Video Script Generation Prompt
 
+Last Updated: 2026-06-15T16:30:47-06:00
+
 Copy everything from the horizontal rule below and paste it to Claude or ChatGPT.
 Replace `[TOPIC]` with your chosen topic from the list at the bottom, then send.
 
@@ -62,7 +64,12 @@ never makes decisions — only surfaces options.
 
 **Recommendations tab**
 Ollama-generated cards with: evidence nodes, confidence score, risk level, and
-a proposed action. You accept, reject, or defer each one. Accepted
+a proposed action. Overlap-created recommendations include implementation
+briefs: where to merge or review, how to proceed, conservative savings, risks,
+acceptance criteria, rollback, and open questions. Each card can open a
+read-only Decision Packet that gathers evidence provenance, overlap dossier
+details, judgement, recommendation plan, related decisions, queued action state,
+and the next approval gate. You accept, reject, or defer each one. Accepted
 recommendations flow into the Work Queue.
 
 **Work Queue tab**
@@ -83,6 +90,52 @@ position, size, and expanded state persist across page loads via localStorage.
 The system prompt and model are configurable in Settings → AI Assistant. The
 assistant is read-only: it cannot trigger actions, write decisions, or mutate
 anything.
+
+---
+
+### Decision-Making Story To Weave In
+
+When the topic allows it, frame the cockpit as a decision instrument, not a
+dashboard and not a chat app. The strongest story is:
+
+1. **Signal** — Command tells me where attention is needed.
+2. **Question** — Ask turns a vague concern into graph-backed evidence.
+3. **Context** — Map shows the relationship and lets me trace or review it.
+4. **Judgement** — Decisions records the human call with durable rationale.
+5. **Proposal** — Recommendations suggests next steps with evidence,
+   confidence, risk, action plan, and a decision packet.
+6. **Approval** — Work Queue requires a dry-run preview before anything can
+   execute.
+7. **Handoff** — UAOS export turns the decision trail into governed agent
+   input.
+
+Useful decision-making features to show or mention:
+
+- **Attention routing:** Command Center surfaces pending recommendations,
+  accepted-but-not-queued work, dry-run-ready actions, untriaged overlaps, graph
+  freshness, and semantic freshness before the operator gets lost in the map.
+- **Evidence continuity:** Ask evidence and Recommendation evidence are
+  clickable and navigate into focused Map context with a visible focus notice.
+- **Mental modes:** Map's Explore / Trace / Overlap / Review modes match common
+  operator questions: what exists, how is it connected, where is duplication,
+  and what evidence should I inspect?
+- **Overlap triage:** Semantic overlaps are not just highlighted; they can be
+  reviewed as durable untriaged, triaged, task-created, or dismissed records.
+- **Ground-level packets:** Recommendation cards can open a Decision Packet
+  that separates evidence, judgement, recommendation, decision status, and
+  approval so the operator can see how the action would happen.
+- **Human-owned decisions:** The system never decides for the user. It records
+  classifications such as invest, client-ready, monitor, archive, and paused.
+- **Action safety:** Accepted recommendations do not execute. Work Queue keeps
+  execution behind dry-run preview, explicit approval, and rollback notes.
+- **Local context control:** Knowledge Sources and cluster toggles narrow Ask,
+  Chat, and Recommendation context so the operator can reduce noise deliberately.
+- **Read-only copilot:** The floating assistant is best framed as a thinking
+  companion over the active graph context, not an autonomous agent.
+
+Avoid making it sound like the model is the decision-maker. The product's point
+is that AI compresses evidence and proposes options, while the human remains the
+governor.
 
 ---
 
@@ -134,14 +187,26 @@ Layer 3 — Mission Execution
 
 ### Suggested Demo Path
 
-1. Start on `Command` and show the attention cards.
-2. Open `Ask`, ask a workspace question, and show evidence nodes.
-3. Click evidence into `Map`, then show Explore / Trace / Overlap / Review.
-4. Create or edit a human decision in `Decisions`.
-5. Review evidence-backed cards in `Recommendations`.
-6. Accept and queue one safe recommendation.
-7. Open `Work Queue`, run `Dry Run`, and stop at the human approval gate unless
+1. Start on `Command` and show the attention cards as the "what needs my
+   judgement?" view.
+2. Open `Ask`, ask a workspace question, and show the evidence nodes.
+3. Click evidence into `Map`, then show Explore / Trace / Overlap / Review as
+   four different decision modes.
+4. In `Map`, highlight one overlap, clear it, and explain that overlap review is
+   durable rather than a temporary visual trick.
+5. Create or edit a human decision in `Decisions`, using the classification as
+   the visible moment where the operator makes the call.
+6. Review evidence-backed cards in `Recommendations`; call out confidence, risk,
+   evidence chips, proposed action, and the implementation brief.
+7. Open `Review Decision Packet` and show evidence, judgement, recommendation,
+   approval state, and export controls in one place.
+8. Accept and queue one safe recommendation.
+9. Open `Work Queue`, run `Dry Run`, and stop at the human approval gate unless
    execution is explicitly part of the demo.
+
+Shorter "decision spine" if the video is under three minutes:
+
+`Command → Ask → Evidence click into Map → Decision → Decision Packet → Dry Run`
 
 ### Script Format
 
@@ -219,3 +284,26 @@ Write a full script for this topic:
 8. **Ask vs. Chat** — When to use the Ask tab (structured Q&A with evidence
    nodes) vs. the AI assistant (conversational follow-up). How they share cluster
    context but serve different mental modes.
+
+9. **Command Center as an operator console** — Why the first screen is not a
+   graph. Demo: start from attention cards, jump into an untriaged overlap, then
+   return to Command after the decision is made.
+
+10. **Evidence continuity** — The cockpit's core UX idea: every answer should
+    point somewhere inspectable. Demo: Ask evidence → focused Map context →
+    Recommendation evidence → same Map context.
+
+11. **Semantic overlap triage** — Turning "these things look related" into a
+    review queue. Demo: same-name signals, similarity filters, LLM verdicts,
+    durable statuses, and Create Task.
+
+12. **The decision spine** — A complete operator workflow in one take: Command →
+    Ask → Map → Decisions → Recommendations → Work Queue. The point is not
+    automation; it is governed momentum.
+
+13. **From recommendation to approved action** — Why a recommendation, queued
+    action, dry run, execution approval, and rollback note are separate objects.
+
+14. **Local-first decision intelligence** — Why the strongest feature is not one
+    screen, but the constraint that graph data, decisions, and action state stay
+    local unless the user opts into sync.

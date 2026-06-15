@@ -32,6 +32,7 @@ interface QueuedAction {
   proposed_action_text: string;
   rec_title: string;
   rec_summary: string;
+  action_plan?: ActionPlan | null;
   dry_run_preview: DryRunPreview | null;
   dry_run_at: string | null;
   approved_at: string | null;
@@ -40,6 +41,24 @@ interface QueuedAction {
   rollback_note: string;
   status: ActionStatus;
   created_at: string;
+}
+
+interface ActionPlan {
+  canonical_target?: string;
+  merge_sources?: string[];
+  concrete_steps?: string[];
+  savings_estimate?: {
+    duplicate_node_count?: number;
+    affected_files?: number;
+    semantic_edge_reduction?: number;
+    rough_context_savings?: string;
+    caveat?: string;
+    [key: string]: string | number | undefined;
+  };
+  risks?: string[];
+  acceptance_criteria?: string[];
+  rollback_note?: string;
+  open_questions?: string[];
 }
 
 interface Mission {
@@ -114,6 +133,54 @@ function downloadJson(data: unknown, filename: string) {
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+function listItems(items?: string[], limit = 4): string[] {
+  return (items ?? []).map((item) => item.trim()).filter(Boolean).slice(0, limit);
+}
+
+function ActionPlanSummary({ plan }: { plan: ActionPlan }) {
+  const steps = listItems(plan.concrete_steps, 4);
+  const risks = listItems(plan.risks, 3);
+  const doneWhen = listItems(plan.acceptance_criteria, 3);
+  const savings = plan.savings_estimate;
+
+  return (
+    <div className="wq-action-plan">
+      {plan.canonical_target && (
+        <div className="wq-plan-row">
+          <strong>Where</strong>
+          <span>{plan.canonical_target}</span>
+        </div>
+      )}
+      {steps.length > 0 && (
+        <div className="wq-plan-row">
+          <strong>How</strong>
+          <span>{steps.join(" ")}</span>
+        </div>
+      )}
+      {savings && (
+        <div className="wq-plan-row">
+          <strong>Savings</strong>
+          <span>
+            {savings.duplicate_node_count ?? 0} pair(s), {savings.affected_files ?? 0} file(s), up to {savings.semantic_edge_reduction ?? 0} semantic edge(s). {savings.caveat ?? ""}
+          </span>
+        </div>
+      )}
+      {risks.length > 0 && (
+        <div className="wq-plan-row">
+          <strong>Risks</strong>
+          <span>{risks.join(" ")}</span>
+        </div>
+      )}
+      {doneWhen.length > 0 && (
+        <div className="wq-plan-row">
+          <strong>Done When</strong>
+          <span>{doneWhen.join(" ")}</span>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Main component ────────────────────────────────────────────────────────
@@ -472,6 +539,8 @@ export function WorkQueue() {
                   </div>
 
                   <div className="wq-action-proposed">{action.proposed_action_text}</div>
+
+                  {action.action_plan && <ActionPlanSummary plan={action.action_plan} />}
 
                   <div className="wq-action-footer">
                     {action.status === "pending" && (

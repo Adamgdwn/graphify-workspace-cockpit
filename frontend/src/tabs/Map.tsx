@@ -56,6 +56,21 @@ interface FullNode {
   type: "code" | "document" | "rationale";
   cluster: string;
   source_file: string;
+  source_location?: string;
+  source_root?: string;
+  source_root_name?: string;
+  repo?: string;
+  container?: string;
+  relative_path?: string;
+  origin?: string;
+  metadata?: Record<string, unknown>;
+  symbol?: string;
+  purpose?: string;
+  source_excerpt?: {
+    start_line: number | null;
+    lines: string[];
+    unavailable_reason?: string;
+  };
 }
 
 interface FullEdge {
@@ -82,6 +97,31 @@ const MAP_MODES: Array<{ id: MapMode; label: string; hint: string }> = [
   { id: "overlap", label: "Overlap", hint: "Review cross-repo semantic overlap and consolidation candidates." },
   { id: "review", label: "Review", hint: "Filter repositories, layers, and node types for evidence review." },
 ];
+
+const UNKNOWN_VALUE = "unknown";
+
+function presentValue(value: unknown): string {
+  if (value === null || value === undefined) return UNKNOWN_VALUE;
+  const text = String(value).trim();
+  return text || UNKNOWN_VALUE;
+}
+
+function prettyMetadataKey(key: string): string {
+  return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function prettyMetadataValue(value: unknown): string {
+  if (Array.isArray(value)) return value.map(prettyMetadataValue).join(", ");
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return presentValue(value);
+}
+
+function metadataEntries(node: FullNode) {
+  return Object.entries(node.metadata ?? {})
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
+    .filter(([key]) => !["kind", "language"].includes(key))
+    .sort(([a], [b]) => a.localeCompare(b));
+}
 
 // ── Overlap analysis ──────────────────────────────────────────────────────
 
@@ -111,6 +151,16 @@ interface TriageResult {
   confidence: number;
   reason: string;
   action: string;
+  evidence_summary?: string;
+  per_side_purpose?: {
+    cluster_a?: string;
+    cluster_b?: string;
+    [key: string]: string | undefined;
+  };
+  similarities?: string[];
+  differences?: string[];
+  canonicality_signals?: string[];
+  open_questions?: string[];
   model: string;
 }
 
@@ -134,6 +184,18 @@ const OVERLAP_STATUS_LABELS: Record<OverlapWorkflowStatus, string> = {
   "task-created": "Task Created",
   dismissed: "Dismissed",
 };
+
+function compactPath(path: string): string {
+  const normalized = path.replace(/\\/g, "/").trim();
+  if (!normalized) return UNKNOWN_VALUE;
+  const parts = normalized.split("/").filter(Boolean);
+  if (parts.length <= 4) return normalized;
+  return `${parts[0]}/…/${parts.slice(-2).join("/")}`;
+}
+
+function dossierList(items?: string[]): string[] {
+  return (items ?? []).map((item) => item.trim()).filter(Boolean).slice(0, 5);
+}
 
 const DECISION_META = Object.fromEntries(
   DECISION_CLASSIFICATIONS.map((c) => [c.id, { label: c.label, color: c.color }]),
@@ -1476,6 +1538,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
             triage_verdict: triage.verdict,
             triage_action: triage.action,
             triage_confidence: triage.confidence,
+            triage_result: triage,
           } : {}),
         }),
       });
@@ -2033,6 +2096,10 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                     const creating = creatingTask === taskKey;
                     const triage = triageResults[triageKey];
                     const isTriaging = triaging[triageKey] ?? false;
+                    const similarities = dossierList(triage?.similarities);
+                    const differences = dossierList(triage?.differences);
+                    const canonicalitySignals = dossierList(triage?.canonicality_signals);
+                    const openQuestions = dossierList(triage?.open_questions);
                     return (
                       <div
                         key={taskKey}
@@ -2081,6 +2148,61 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                                 {triage.action}
                               </p>
                             )}
+                            {(triage.evidence_summary || triage.per_side_purpose || similarities.length > 0 || differences.length > 0 || canonicalitySignals.length > 0 || openQuestions.length > 0) && (
+                              <div className="map-overlap-dossier">
+                                {triage.evidence_summary && (
+                                  <section className="map-overlap-dossier-section">
+                                    <h4>Why it matters</h4>
+                                    <p>{triage.evidence_summary}</p>
+                                  </section>
+                                )}
+                                {triage.per_side_purpose && (
+                                  <section className="map-overlap-dossier-section">
+                                    <h4>What each side does</h4>
+                                    <div className="map-overlap-side-purpose">
+                                      <strong>{g.clusterA}</strong>
+                                      <span>{triage.per_side_purpose.cluster_a || UNKNOWN_VALUE}</span>
+                                    </div>
+                                    <div className="map-overlap-side-purpose">
+                                      <strong>{g.clusterB}</strong>
+                                      <span>{triage.per_side_purpose.cluster_b || UNKNOWN_VALUE}</span>
+                                    </div>
+                                  </section>
+                                )}
+                                {(similarities.length > 0 || differences.length > 0) && (
+                                  <div className="map-overlap-dossier-grid">
+                                    {similarities.length > 0 && (
+                                      <section className="map-overlap-dossier-section">
+                                        <h4>Similar</h4>
+                                        <ul>{similarities.map((item, i) => <li key={i}>{item}</li>)}</ul>
+                                      </section>
+                                    )}
+                                    {differences.length > 0 && (
+                                      <section className="map-overlap-dossier-section">
+                                        <h4>Different</h4>
+                                        <ul>{differences.map((item, i) => <li key={i}>{item}</li>)}</ul>
+                                      </section>
+                                    )}
+                                  </div>
+                                )}
+                                {(canonicalitySignals.length > 0 || openQuestions.length > 0) && (
+                                  <div className="map-overlap-dossier-grid">
+                                    {canonicalitySignals.length > 0 && (
+                                      <section className="map-overlap-dossier-section">
+                                        <h4>Canonicality</h4>
+                                        <ul>{canonicalitySignals.map((item, i) => <li key={i}>{item}</li>)}</ul>
+                                      </section>
+                                    )}
+                                    {openQuestions.length > 0 && (
+                                      <section className="map-overlap-dossier-section">
+                                        <h4>Open Questions</h4>
+                                        <ul>{openQuestions.map((item, i) => <li key={i}>{item}</li>)}</ul>
+                                      </section>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                         <div className="map-overlap-pairs-list">
@@ -2089,9 +2211,15 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                               key={i}
                               className={`map-overlap-pair-row${p.sameName ? " map-overlap-pair-row-samename" : ""}`}
                             >
-                              <span className="map-overlap-pair-label" title={p.fileA}>{p.labelA}</span>
+                              <span className="map-overlap-pair-side" title={p.fileA}>
+                                <span className="map-overlap-pair-label">{p.labelA}</span>
+                                <span className="map-overlap-pair-path">{compactPath(p.fileA)}</span>
+                              </span>
                               <span className="map-overlap-pair-sep">↔</span>
-                              <span className="map-overlap-pair-label" title={p.fileB}>{p.labelB}</span>
+                              <span className="map-overlap-pair-side" title={p.fileB}>
+                                <span className="map-overlap-pair-label">{p.labelB}</span>
+                                <span className="map-overlap-pair-path">{compactPath(p.fileB)}</span>
+                              </span>
                               {p.sameName && (
                                 <span className="map-overlap-pair-samename" title="Same filename in different repos">≡</span>
                               )}
@@ -2196,9 +2324,90 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                 {selectedFull.cluster}
               </span>
             </div>
+
+            <div className="map-inspector-block">
+              <div className="map-inspector-title">What this appears to do</div>
+              <p className="map-inspector-purpose">
+                {selectedFull.purpose || `${selectedFull.label} is a ${selectedFull.type} node. Source detail is limited for this item.`}
+              </p>
+            </div>
+
+            <div className="map-provenance-grid">
+              <div className="map-provenance-row">
+                <span>Repo</span>
+                <strong>{presentValue(selectedFull.repo || selectedFull.source_root_name)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Container</span>
+                <strong>{presentValue(selectedFull.container || selectedFull.cluster)}</strong>
+              </div>
+              <div className="map-provenance-row map-provenance-wide">
+                <span>Path</span>
+                <strong>{presentValue(selectedFull.relative_path || selectedFull.source_file)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Location</span>
+                <strong>{presentValue(selectedFull.source_location)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Symbol</span>
+                <strong>{presentValue(selectedFull.symbol || selectedFull.label)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Kind</span>
+                <strong>{presentValue(selectedFull.metadata?.kind || selectedFull.type)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Language</span>
+                <strong>{presentValue(selectedFull.metadata?.language)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Origin</span>
+                <strong>{presentValue(selectedFull.origin)}</strong>
+              </div>
+              <div className="map-provenance-row map-provenance-wide">
+                <span>Source root</span>
+                <strong>{presentValue(selectedFull.source_root)}</strong>
+              </div>
+              <div className="map-provenance-row map-provenance-wide">
+                <span>Node id</span>
+                <strong>{selectedFull.id}</strong>
+              </div>
+            </div>
+
+            {metadataEntries(selectedFull).length > 0 && (
+              <div className="map-inspector-block">
+                <div className="map-inspector-title">Extra metadata</div>
+                <div className="map-metadata-list">
+                  {metadataEntries(selectedFull).map(([key, value]) => (
+                    <div className="map-metadata-row" key={key}>
+                      <span>{prettyMetadataKey(key)}</span>
+                      <strong>{prettyMetadataValue(value)}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="map-inspector-block">
+              <div className="map-inspector-title">Source excerpt</div>
+              {selectedFull.source_excerpt?.lines?.length ? (
+                <pre className="map-source-excerpt">
+                  {selectedFull.source_excerpt.lines.map((line, idx) => {
+                    const lineNumber = (selectedFull.source_excerpt?.start_line ?? 1) + idx;
+                    return `${String(lineNumber).padStart(4, " ")}  ${line}`;
+                  }).join("\n")}
+                </pre>
+              ) : (
+                <div className="map-provenance-empty">
+                  {selectedFull.source_excerpt?.unavailable_reason || "No source excerpt available for this node."}
+                </div>
+              )}
+            </div>
+
             {selectedFull.source_file && (
-              <div className="map-panel-stats" style={{ fontSize: 11, color: "#6b8cff", wordBreak: "break-all", padding: "8px 0" }}>
-                {selectedFull.source_file}
+              <div className="map-inspector-footnote">
+                Graph source: {selectedFull.source_file}
               </div>
             )}
           </aside>

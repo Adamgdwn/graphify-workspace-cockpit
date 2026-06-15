@@ -1,5 +1,7 @@
 # Video Script: "I Skipped Obsidian Entirely"
 
+Last Updated: 2026-06-15T16:30:47-06:00
+
 Reference video: https://www.youtube.com/watch?v=mWLDn49_8HA
 ("Graphify + Obsidian + Claude Code = CHEAT CODE")
 
@@ -17,8 +19,11 @@ SharePoint and OneNote are now built as opt-in sources.
 > `graphify update` against your workspace root (not just a single repo) and you
 > get one unified graph spanning everything. I built a cockpit UI on top of that —
 > browser-based, no Obsidian install needed — with Command, Ask, Map, Decisions,
-> Recommendations, and a Work Queue all querying the same live graph. SharePoint
-> and OneNote can fold in as opt-in cloud sources. Happy to share more when it's ready to show.
+> Recommendations, Work Queue, and a floating assistant all querying the same
+> live graph. The useful part is the decision flow: evidence, map context,
+> human decisions, decision packets, recommendations, and dry-run-gated actions
+> in one place.
+> SharePoint and OneNote can fold in as opt-in cloud sources. Happy to share more when it's ready to show.
 
 ---
 
@@ -54,21 +59,42 @@ everything. That's already a Graphify feature. Nobody's talking about it.
 This is the Graphify Workspace Cockpit. It's a local web app — no account, no
 cloud, no Obsidian install.
 
-[Ask tab] Watch this. I'm going to ask a question that spans multiple repos.
+[Command tab] The first screen is not a graph. It's an operator console. It
+shows me where attention is needed: pending recommendations, accepted work that
+hasn't been queued, dry-run-ready actions, untriaged overlaps, and whether the
+graph is fresh enough to trust.
+
+[Ask tab] Now watch this. I'm going to ask a question that spans multiple repos.
 "What decisions have been made about the authentication layer across my projects?"
 [show result — real graph-backed answer, node citations]
 
-[Map tab] Here's the graph view — this isn't a single repo. These are real edges
-across the workspace. Every node is a concept, file, or decision. Every edge is a
-real relationship Graphify found.
+[click evidence node into Map] The evidence is clickable, so the answer is not
+just text. It lands me directly on the map context that produced it.
 
-[Decisions tab] These aren't notes I wrote. These were extracted from the graph —
-architectural decisions surfaced automatically.
+[Map tab] Here's the graph view — this isn't a single repo. These are real edges
+across the workspace. I can explore, trace why two things are connected, review
+semantic overlaps, or inspect evidence for a decision.
+
+[Overlap mode] This is where the tool starts acting less like a dashboard and
+more like a decision surface. It can show me possible duplication across
+clusters, triage those overlaps, and turn the ones worth acting on into
+recommendations.
+
+[Decisions tab] This is the human ledger. The model doesn't decide for me. I
+classify an area as invest, client-ready, monitor, archive, or paused, and the
+decision persists with rationale.
 
 [Recommendations tab] Actionable next steps, grounded in what the graph actually shows.
+The recommendation is not just "merge this." It has a decision packet: what
+evidence supports it, what each side does, where the work should happen, what
+the likely savings are, what risks remain, and where the approval gate is.
 
-[Work Queue] And this exports directly in a format my AI agents can consume — no
-copy-paste into Obsidian, no manual wikilinks.
+[Work Queue] And accepted recommendations still don't execute anything. They
+become queued actions, each action has to pass a dry run, and execution remains
+behind explicit human approval.
+
+[Settings or export mention] The output can also be exported in a format my AI
+agents can consume — no copy-paste into Obsidian, no manual wikilinks.
 
 ---
 
@@ -78,10 +104,10 @@ What does Obsidian give you that this doesn't? A pretty graph view, backlinks,
 and a place to write your own notes alongside the auto-generated ones. That's
 genuinely useful — I'm not saying Obsidian is wrong.
 
-But if what you actually need is: ask questions across all your repos, get
-structured answers, and pipe the output into the next step of your workflow —
+But if what you actually need is: ask questions across all your repos, inspect
+the evidence, make a durable call, and safely hand the next step to an agent —
 you don't need Obsidian in that chain. You need a graph that spans everything
-and a UI that queries it. That's this.
+and a cockpit that turns that graph into decisions. That's this.
 
 ---
 
@@ -91,8 +117,9 @@ The next step is deciding which sources to connect. SharePoint and OneNote use
 the same interface and the same Ask tab, so your questions can span code and
 documents without adding a second knowledge app.
 
-That's the thing Obsidian can't easily do — pull live cloud content into the
-same queryable structure as your codebase.
+That's the thing I care about most: not just a bigger graph, but a better
+decision loop. Code, docs, recommendations, decisions, and approved actions all
+stay connected.
 
 ---
 
@@ -111,5 +138,5 @@ description. If you already use Graphify, you're one command away from this.
 - Cloud connectors are now built and opt-in. Only include them in the recording
   if the demo environment has SharePoint or OneNote configured.
 - The rest of the cockpit (Command, Ask, Map, Decisions, Recommendations, Work
-  Queue, Settings, AI assistant, demo-mode banner) is demo-ready now against the
+  Queue, Settings, AI assistant, decision packet panel, demo-mode banner) is demo-ready now against the
   real graph.

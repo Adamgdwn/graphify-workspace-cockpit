@@ -71,6 +71,23 @@ if STORAGE_BACKEND == "supabase":
 _graph_cache: dict | None = None
 _summary_cache: dict[str, dict] = {}
 
+_REPO_ROOT = Path(__file__).parent.parent
+_SECRET_PATH_MARKERS = (
+    ".env",
+    ".pem",
+    ".key",
+    "secret",
+    "credential",
+    "password",
+    "private-key",
+    "api-key",
+    "api_key",
+    "access_token",
+    "refresh_token",
+    "token",
+    "users.json",
+)
+
 app = FastAPI(title="Graphify Workspace Cockpit", version="0.1.0")
 
 _limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
@@ -611,19 +628,174 @@ def graph_full() -> dict:
         raise HTTPException(status_code=503, detail=f"Graph not loaded: {exc}")
 
     def _cluster(source_file: str) -> str:
-        parts = source_file.replace("\\", "/").split("/")
+        parts = [p for p in source_file.replace("\\", "/").split("/") if p]
         return parts[0] if parts else "other"
 
-    nodes = [
-        {
+    def _safe_relative_path(path: Path, root: Path) -> str:
+        try:
+            return str(path.relative_to(root)).replace("\\", "/")
+        except ValueError:
+            return ""
+
+    def _source_roots() -> list[Path]:
+        roots = [_REPO_ROOT]
+        for raw in _load_scan_dirs():
+            try:
+                root = Path(raw).expanduser().resolve()
+            except Exception:
+                continue
+            if root not in roots:
+                roots.append(root)
+        return roots
+
+    def _path_is_secret_like(source_file: str) -> bool:
+        path = source_file.replace("\\", "/").lower()
+        parts = [p for p in path.split("/") if p]
+        return any(marker in parts or marker in path for marker in _SECRET_PATH_MARKERS)
+
+    source_cache: dict[str, tuple[Path | None, Path | None, str]] = {}
+    excerpt_cache: dict[tuple[str, str], dict] = {}
+
+    def _resolve_source(source_file: str) -> tuple[Path | None, Path | None, str]:
+        if source_file in source_cache:
+            return source_cache[source_file]
+        if not source_file:
+            result = (None, None, "")
+            source_cache[source_file] = result
+            return result
+
+        raw_path = Path(source_file).expanduser()
+        for root in _source_roots():
+            try:
+                root_resolved = root.resolve()
+                candidate = raw_path.resolve() if raw_path.is_absolute() else (root_resolved / raw_path).resolve()
+            except Exception:
+                continue
+
+            relative = _safe_relative_path(candidate, root_resolved)
+            if not relative and candidate != root_resolved:
+                continue
+            if candidate.exists() and candidate.is_file():
+                result = (candidate, root_resolved, relative)
+                source_cache[source_file] = result
+                return result
+
+        result = (None, None, "")
+        source_cache[source_file] = result
+        return result
+
+    def _line_from_location(source_location: str) -> int | None:
+        match = re.search(r"L(\d+)", source_location or "")
+        if not match:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+
+    def _read_node_excerpt(source_file: str, source_location: str, radius: int = 4) -> dict:
+        cache_key = (source_file, source_location)
+        if cache_key in excerpt_cache:
+            return excerpt_cache[cache_key]
+
+        result: dict
+        if not source_file:
+            result = {"start_line": None, "lines": [], "unavailable_reason": "No source file recorded."}
+        elif _path_is_secret_like(source_file):
+            result = {"start_line": None, "lines": [], "unavailable_reason": "Source excerpt hidden for secret-like path."}
+        else:
+            source_path, _, _ = _resolve_source(source_file)
+            if source_path is None:
+                result = {"start_line": None, "lines": [], "unavailable_reason": "Source file is outside the active roots or unavailable."}
+            else:
+                try:
+                    lines = source_path.read_text(errors="replace").splitlines()
+                except Exception:
+                    result = {"start_line": None, "lines": [], "unavailable_reason": "Source file could not be read."}
+                else:
+                    if not lines:
+                        result = {"start_line": None, "lines": [], "unavailable_reason": "Source file is empty."}
+                    else:
+                        line_number = _line_from_location(source_location) or 1
+                        index = max(0, min(len(lines) - 1, line_number - 1))
+                        start = max(0, index - radius)
+                        end = min(len(lines), index + radius + 1)
+                        excerpt_lines = [line[:220] for line in lines[start:end]]
+                        result = {
+                            "start_line": start + 1,
+                            "lines": excerpt_lines,
+                            "unavailable_reason": "",
+                        }
+        excerpt_cache[cache_key] = result
+        return result
+
+    def _first_meaningful_excerpt_line(excerpt: dict) -> str:
+        for raw in excerpt.get("lines", []):
+            line = str(raw).strip()
+            if not line or line in {"{", "}", ")", "];"}:
+                continue
+            return line[:160]
+        return ""
+
+    def _node_purpose(node: dict, excerpt: dict) -> str:
+        label = node.get("label") or node.get("id", "This node")
+        node_type = node.get("file_type", "code")
+        source_file = node.get("source_file", "")
+        metadata = node.get("metadata") or {}
+        kind = str(metadata.get("kind", "")).replace("_", " ").strip()
+        language = str(metadata.get("language", "")).strip()
+        clue = _first_meaningful_excerpt_line(excerpt)
+
+        if node_type == "document":
+            base = f"{label} is a document node"
+            if source_file:
+                base += f" from {source_file}"
+            if clue:
+                base += f"; the nearby text starts with: {clue}"
+            return base + "."
+
+        if node_type == "rationale":
+            base = f"{label} is a rationale or decision-context node"
+            if source_file:
+                base += f" from {source_file}"
+            if clue:
+                base += f"; the nearby evidence starts with: {clue}"
+            return base + "."
+
+        descriptor = kind or "code symbol"
+        if language:
+            descriptor = f"{language} {descriptor}"
+        base = f"{label} appears to be a {descriptor}"
+        if source_file:
+            base += f" in {source_file}"
+        if clue:
+            base += f"; the source nearby starts with: {clue}"
+        return base + "."
+
+    nodes = []
+    for n in g.get("nodes", []):
+        source_file = n.get("source_file", "")
+        source_location = n.get("source_location", "")
+        _, source_root, relative_path = _resolve_source(source_file)
+        excerpt = _read_node_excerpt(source_file, source_location)
+        nodes.append({
             "id": n["id"],
             "label": n.get("label", n["id"]),
             "type": n.get("file_type", "code"),
-            "cluster": _cluster(n.get("source_file", "")),
-            "source_file": n.get("source_file", ""),
-        }
-        for n in g.get("nodes", [])
-    ]
+            "cluster": _cluster(source_file),
+            "source_file": source_file,
+            "source_location": source_location,
+            "source_root": str(source_root) if source_root else "",
+            "source_root_name": source_root.name if source_root else "",
+            "repo": source_root.name if source_root else "",
+            "container": _cluster(source_file),
+            "relative_path": relative_path or source_file,
+            "origin": n.get("_origin", ""),
+            "metadata": n.get("metadata") or {},
+            "symbol": n.get("label", n["id"]),
+            "purpose": _node_purpose(n, excerpt),
+            "source_excerpt": excerpt,
+        })
 
     seen: set[str] = set()
     edges = []
@@ -810,6 +982,209 @@ def _load_recommendation(rec_id: str) -> dict | None:
     return None
 
 
+def _recommendation_evidence_terms(rec: dict) -> list[str]:
+    raw_items: list[object] = []
+    raw_items.extend(rec.get("evidence") if isinstance(rec.get("evidence"), list) else [])
+    action_plan = rec.get("action_plan") if isinstance(rec.get("action_plan"), dict) else {}
+    raw_items.extend(action_plan.get("source_pairs") if isinstance(action_plan.get("source_pairs"), list) else [])
+    overlap = rec.get("overlap") if isinstance(rec.get("overlap"), dict) else {}
+    overlap_pairs = overlap.get("top_pairs", []) if isinstance(overlap.get("top_pairs"), list) else []
+    for pair in overlap_pairs:
+        raw_items.extend([pair.get("label_a"), pair.get("label_b"), pair.get("source"), pair.get("target")])
+
+    terms: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_items:
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        for chunk in re.split(r"↔|<->|->|—", text):
+            term = re.sub(r"\s*\(\d+%?\)\s*$", "", chunk).strip(" `[]")
+            if term and term not in seen:
+                terms.append(term)
+                seen.add(term)
+    return terms[:20]
+
+
+def _compact_packet_node(node: dict) -> dict:
+    return {
+        "id": node.get("id", ""),
+        "label": node.get("label", ""),
+        "type": node.get("type", ""),
+        "cluster": node.get("cluster", ""),
+        "repo": node.get("repo", ""),
+        "container": node.get("container", ""),
+        "relative_path": node.get("relative_path", ""),
+        "source_file": node.get("source_file", ""),
+        "source_location": node.get("source_location", ""),
+        "symbol": node.get("symbol", ""),
+        "purpose": node.get("purpose", ""),
+    }
+
+
+def _packet_evidence_nodes(rec: dict) -> list[dict]:
+    terms = _recommendation_evidence_terms(rec)
+    if not terms:
+        return []
+    try:
+        graph = graph_full()
+    except Exception:
+        return []
+
+    nodes = graph.get("nodes", [])
+    by_id = {str(n.get("id", "")): n for n in nodes}
+    by_label = {str(n.get("label", "")): n for n in nodes}
+    picked: list[dict] = []
+    seen: set[str] = set()
+    for term in terms:
+        node = by_id.get(term) or by_label.get(term)
+        if not node:
+            continue
+        node_id = str(node.get("id", ""))
+        if node_id in seen:
+            continue
+        picked.append(_compact_packet_node(node))
+        seen.add(node_id)
+        if len(picked) >= 8:
+            break
+    return picked
+
+
+def _related_packet_decisions(rec: dict, evidence_nodes: list[dict]) -> list[dict]:
+    decisions = [d for d in _load_decisions() if d.get("status") == "active"]
+    if not decisions:
+        return []
+    search_parts = [
+        rec.get("title", ""),
+        rec.get("summary", ""),
+        rec.get("proposed_action", ""),
+        rec.get("mode", ""),
+    ]
+    search_parts.extend(_recommendation_evidence_terms(rec))
+    for node in evidence_nodes:
+        search_parts.extend([node.get("id", ""), node.get("label", ""), node.get("cluster", ""), node.get("container", "")])
+    haystack = " ".join(str(part).lower() for part in search_parts if part)
+
+    related: list[dict] = []
+    for decision in decisions:
+        target = str(decision.get("target_id", "")).lower()
+        label = str(decision.get("label", "")).lower()
+        if target and (target in haystack or any(target == str(n.get("cluster", "")).lower() for n in evidence_nodes)):
+            related.append(decision)
+        elif label and label in haystack:
+            related.append(decision)
+    return related[:6]
+
+
+def _packet_markdown(packet: dict) -> str:
+    rec = packet["recommendation"]
+    lines = [
+        f"# Decision Packet: {rec.get('title', 'Recommendation')}",
+        "",
+        "## Evidence",
+        "",
+        rec.get("summary", ""),
+        "",
+    ]
+    for node in packet["evidence"].get("nodes", []):
+        path = node.get("relative_path") or node.get("source_file") or "unknown path"
+        lines.append(f"- {node.get('label') or node.get('id')}: {node.get('repo') or 'unknown repo'} / {path}")
+    dossier = packet["evidence"].get("overlap_dossier")
+    if isinstance(dossier, dict) and dossier.get("evidence_summary"):
+        lines += ["", "## Overlap Dossier", "", str(dossier["evidence_summary"])]
+    lines += [
+        "",
+        "## Judgement",
+        "",
+        f"- Status: {packet['judgement'].get('recommendation_status')}",
+        f"- Confidence: {packet['judgement'].get('confidence')}",
+        f"- Risk: {packet['judgement'].get('risk')}",
+        f"- Effort: {packet['judgement'].get('effort')}",
+        "",
+        "## Recommendation",
+        "",
+        rec.get("proposed_action", ""),
+    ]
+    plan = packet.get("recommendation_plan")
+    if isinstance(plan, dict):
+        lines += ["", f"Canonical target: {plan.get('canonical_target', 'not specified')}"]
+        for step in plan.get("concrete_steps", []) if isinstance(plan.get("concrete_steps"), list) else []:
+            lines.append(f"- {step}")
+    lines += ["", "## Approval Gate", ""]
+    for choice in packet.get("operator_choices", []):
+        lines.append(f"- {choice}")
+    return "\n".join(lines).strip() + "\n"
+
+
+@app.get("/decision-packets/recommendations/{rec_id}")
+def get_recommendation_decision_packet(rec_id: str) -> dict:
+    rec = _load_recommendation(rec_id)
+    if rec is None:
+        raise HTTPException(status_code=404, detail=f"Recommendation {rec_id} not found.")
+
+    actions = [
+        action for action in _load_all_actions()
+        if action.get("source_recommendation_id") == rec_id
+    ]
+    evidence_nodes = _packet_evidence_nodes(rec)
+    related_decisions = _related_packet_decisions(rec, evidence_nodes)
+    rec_status = rec.get("status", "pending")
+    queued_status = actions[0].get("status") if actions else None
+    next_gate = (
+        "Action has executed; review the result and rollback note in Work Queue."
+        if queued_status == "executed"
+        else "Action failed; review the failure and recovery note in Work Queue."
+        if queued_status == "failed"
+        else
+        "Review dry-run output in Work Queue before approving execution."
+        if queued_status == "dry-run-ready"
+        else "Run dry-run in Work Queue before approving execution."
+        if queued_status == "pending"
+        else "Accept this recommendation before queueing an action."
+        if rec_status != "accepted"
+        else "Queue an action, then use Work Queue dry-run before execution."
+    )
+
+    packet = {
+        "schema_version": "1.0",
+        "packet_type": "recommendation-decision",
+        "id": f"packet-{rec_id}",
+        "created_at": datetime.now(tz=timezone.utc).isoformat(),
+        "recommendation": rec,
+        "evidence": {
+            "nodes": evidence_nodes,
+            "overlap": rec.get("overlap") if isinstance(rec.get("overlap"), dict) else None,
+            "overlap_dossier": rec.get("overlap_dossier") if isinstance(rec.get("overlap_dossier"), dict) else None,
+        },
+        "judgement": {
+            "recommendation_status": rec_status,
+            "confidence": rec.get("confidence", 0.0),
+            "risk": rec.get("risk", "unknown"),
+            "effort": rec.get("effort", "unknown"),
+            "model": rec.get("model", ""),
+        },
+        "recommendation_plan": rec.get("action_plan") if isinstance(rec.get("action_plan"), dict) else None,
+        "decisions": {
+            "related": related_decisions,
+            "count": len(related_decisions),
+        },
+        "approval": {
+            "queued_actions": actions,
+            "queued_action_count": len(actions),
+            "next_gate": next_gate,
+            "execution_locked_to_work_queue": True,
+        },
+        "operator_choices": [
+            "Record or update the decision rationale in the Decisions tab.",
+            "Accept, defer, or reject the recommendation in this card.",
+            "Queue accepted recommendations from this card.",
+            "Run dry-run and approve execution only in Work Queue.",
+        ],
+    }
+    packet["markdown"] = _packet_markdown(packet)
+    return packet
+
+
 def _build_graph_context(summary: dict) -> str:
     nodes = summary.get("nodes", [])
     edges = summary.get("edges", [])
@@ -930,6 +1305,8 @@ def generate_recommendation(req: GenerateRecommendationRequest, request: Request
         "model": model_used,
         "created_by": getattr(request.state, "user_id", "local"),
     }
+    if isinstance(parsed.get("action_plan"), dict):
+        rec["action_plan"] = parsed["action_plan"]
     _save_recommendation(rec)
     return rec
 
@@ -1178,6 +1555,7 @@ def _load_all_actions(status_filter: str | None = None) -> list[dict]:
 
 
 def _build_note_content(action: dict) -> str:
+    action_plan = action.get("action_plan") if isinstance(action.get("action_plan"), dict) else None
     lines = [
         f"# {action['rec_title']}",
         "",
@@ -1192,6 +1570,49 @@ def _build_note_content(action: dict) -> str:
         action.get("proposed_action_text", ""),
         "",
     ]
+    if action_plan:
+        lines += ["## Action Plan", ""]
+        if action_plan.get("canonical_target"):
+            lines += ["### Where", "", str(action_plan["canonical_target"]), ""]
+        merge_sources = action_plan.get("merge_sources") if isinstance(action_plan.get("merge_sources"), list) else []
+        if merge_sources:
+            lines += ["### Sources", ""]
+            for source in merge_sources:
+                lines.append(f"- {source}")
+            lines.append("")
+        concrete_steps = action_plan.get("concrete_steps") if isinstance(action_plan.get("concrete_steps"), list) else []
+        if concrete_steps:
+            lines += ["### How", ""]
+            for step in concrete_steps:
+                lines.append(f"- {step}")
+            lines.append("")
+        savings = action_plan.get("savings_estimate") if isinstance(action_plan.get("savings_estimate"), dict) else {}
+        if savings:
+            lines += ["### Savings Estimate", ""]
+            for key in ("duplicate_node_count", "affected_files", "semantic_edge_reduction", "rough_context_savings", "caveat"):
+                if savings.get(key) is not None:
+                    lines.append(f"- {key.replace('_', ' ')}: {savings[key]}")
+            lines.append("")
+        risks = action_plan.get("risks") if isinstance(action_plan.get("risks"), list) else []
+        if risks:
+            lines += ["### Risks", ""]
+            for risk in risks:
+                lines.append(f"- {risk}")
+            lines.append("")
+        acceptance = action_plan.get("acceptance_criteria") if isinstance(action_plan.get("acceptance_criteria"), list) else []
+        if acceptance:
+            lines += ["### Done When", ""]
+            for item in acceptance:
+                lines.append(f"- {item}")
+            lines.append("")
+        questions = action_plan.get("open_questions") if isinstance(action_plan.get("open_questions"), list) else []
+        if questions:
+            lines += ["### Open Questions", ""]
+            for question in questions:
+                lines.append(f"- {question}")
+            lines.append("")
+        if action_plan.get("rollback_note"):
+            lines += ["### Rollback", "", str(action_plan["rollback_note"]), ""]
     if action.get("evidence"):
         lines += ["## Evidence", ""]
         for ev in action["evidence"]:
@@ -1226,6 +1647,7 @@ def _build_action_from_rec(rec: dict, created_by: str = "local") -> dict:
         "evidence":                  rec.get("evidence", []),
         "rec_title":                 rec.get("title", ""),
         "rec_summary":               rec.get("summary", ""),
+        "action_plan":               rec.get("action_plan") if isinstance(rec.get("action_plan"), dict) else None,
         "confidence":                rec.get("confidence", 0.0),
         "risk":                      rec.get("risk", "unknown"),
         "dry_run_preview":           None,
@@ -1272,6 +1694,7 @@ def _to_uaos_envelope(actions: list[dict]) -> dict:
             "confidence": a.get("confidence", 0.0),
             "risk": a.get("risk", "unknown"),
             "proposed_action_text": a.get("proposed_action_text", ""),
+            "action_plan": a.get("action_plan") if isinstance(a.get("action_plan"), dict) else None,
             "result": a.get("result"),
             "rollback_note": a.get("rollback_note"),
             "approved_at": a.get("approved_at"),
@@ -1944,6 +2367,7 @@ class CreateOverlapRecommendationRequest(BaseModel):
     triage_verdict: Optional[str] = None   # "duplicate" | "reference" | "related"
     triage_action: Optional[str] = None
     triage_confidence: Optional[float] = None
+    triage_result: Optional[dict] = None
 
 
 class TriageOverlapRequest(BaseModel):
@@ -1953,6 +2377,279 @@ class TriageOverlapRequest(BaseModel):
     avg_similarity: float
     top_pairs: list[dict]
     model: Optional[str] = None
+
+
+def _truncate_text(value: object, max_len: int) -> str:
+    text = str(value or "").strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def _bounded_text_list(value: object, *, max_items: int = 5, max_len: int = 180) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    items: list[str] = []
+    for raw in value:
+        text = _truncate_text(raw, max_len)
+        if text:
+            items.append(text)
+        if len(items) >= max_items:
+            break
+    return items
+
+
+def _overlap_pair_name(pair: dict) -> str:
+    left = pair.get("label_a") or pair.get("source") or "left side"
+    right = pair.get("label_b") or pair.get("target") or "right side"
+    return f"{left} ↔ {right}"
+
+
+def _path_container(path: object) -> str:
+    parts = [part for part in str(path or "").replace("\\", "/").split("/") if part]
+    if not parts:
+        return "unknown"
+    return "/".join(parts[:2]) if len(parts) > 1 else parts[0]
+
+
+def _side_examples(top_pairs: list[dict], side: str) -> str:
+    label_key = "label_a" if side == "a" else "label_b"
+    file_key = "file_a" if side == "a" else "file_b"
+    examples: list[str] = []
+    for pair in top_pairs[:4]:
+        label = str(pair.get(label_key) or "").strip()
+        path = str(pair.get(file_key) or "").strip()
+        if label and path:
+            examples.append(f"{label} ({path})")
+        elif label:
+            examples.append(label)
+        elif path:
+            examples.append(path)
+    return "; ".join(examples) if examples else "No concrete node examples were supplied."
+
+
+def _fallback_overlap_dossier(req: TriageOverlapRequest, verdict: str = "related") -> dict:
+    pairs = req.top_pairs[:6]
+    same_name_count = sum(1 for pair in pairs if pair.get("same_name"))
+    max_pair = max(pairs, key=lambda pair: float(pair.get("similarity") or 0), default={})
+    max_pct = round(float(max_pair.get("similarity") or req.avg_similarity or 0) * 100)
+    avg_pct = round(req.avg_similarity * 100)
+
+    similarities = [
+        f"{_overlap_pair_name(pair)} shares {round(float(pair.get('similarity') or 0) * 100)}% semantic similarity"
+        + (" and the same filename" if pair.get("same_name") else "")
+        + "."
+        for pair in pairs[:3]
+    ]
+    if not similarities:
+        similarities = [f"{req.cluster_a} and {req.cluster_b} have overlapping graph terms, but no top pair details were supplied."]
+
+    differences: list[str] = []
+    for pair in pairs[:3]:
+        left_container = _path_container(pair.get("file_a"))
+        right_container = _path_container(pair.get("file_b"))
+        if left_container != right_container:
+            differences.append(f"Different containers: {left_container} versus {right_container}.")
+        left_label = str(pair.get("label_a") or "").strip()
+        right_label = str(pair.get("label_b") or "").strip()
+        if left_label and right_label and left_label != right_label:
+            differences.append(f"Different node names: {left_label} versus {right_label}.")
+        if len(differences) >= 4:
+            break
+    if not differences:
+        differences.append("No meaningful difference is visible from the overlap metadata alone.")
+
+    canonicality_signals: list[str] = []
+    if same_name_count:
+        canonicality_signals.append(f"{same_name_count} top pair(s) share a filename, which is a strong duplicate/canonical-owner signal.")
+    if req.avg_similarity >= 0.9:
+        canonicality_signals.append(f"Average similarity is {avg_pct}%, so one side may be a redundant copy.")
+    if max_pair:
+        canonicality_signals.append(f"Highest-similarity pair is {_overlap_pair_name(max_pair)} at {max_pct}%.")
+    if not canonicality_signals:
+        canonicality_signals.append("Canonical ownership is not clear from graph data; compare recency, call sites, and owner intent before merging.")
+
+    return {
+        "verdict": verdict if verdict in ("duplicate", "reference", "related", "unknown") else "related",
+        "confidence": round(min(0.85, max(0.35, req.avg_similarity)), 2),
+        "reason": (
+            f"{req.cluster_a} and {req.cluster_b} overlap across {req.edge_count} semantic connections, "
+            f"but the graph alone does not prove whether one side should replace the other."
+        ),
+        "action": "Inspect the named pairs, choose a canonical owner when duplication is confirmed, and preserve explicit references when both sides serve different jobs.",
+        "evidence_summary": (
+            f"This matters because {req.edge_count} cross-container semantic connections link {req.cluster_a} and {req.cluster_b} "
+            f"(average {avg_pct}%). The top evidence points to {_overlap_pair_name(max_pair) if max_pair else 'the listed pairs'}."
+        ),
+        "per_side_purpose": {
+            "cluster_a": f"{req.cluster_a} appears to cover: {_side_examples(pairs, 'a')}",
+            "cluster_b": f"{req.cluster_b} appears to cover: {_side_examples(pairs, 'b')}",
+        },
+        "similarities": similarities,
+        "differences": differences[:5],
+        "canonicality_signals": canonicality_signals[:5],
+        "open_questions": [
+            f"Which side is the intended long-term owner for this knowledge: {req.cluster_a} or {req.cluster_b}?",
+            "Are these files duplicates, or is one an intentional summary/reference of the other?",
+            "Would merging remove needed context for a specific workflow, repo, or operator?",
+        ],
+    }
+
+
+def _normalize_overlap_triage(data: dict, req: TriageOverlapRequest, model: str) -> dict:
+    fallback = _fallback_overlap_dossier(req, str(data.get("verdict", "related")))
+    verdict = str(data.get("verdict", fallback["verdict"]))
+    if verdict not in ("duplicate", "reference", "related"):
+        verdict = "related"
+
+    raw_per_side = data.get("per_side_purpose")
+    per_side = fallback["per_side_purpose"]
+    if isinstance(raw_per_side, dict):
+        per_side = {
+            "cluster_a": _truncate_text(raw_per_side.get("cluster_a") or raw_per_side.get(req.cluster_a) or per_side["cluster_a"], 320),
+            "cluster_b": _truncate_text(raw_per_side.get("cluster_b") or raw_per_side.get(req.cluster_b) or per_side["cluster_b"], 320),
+        }
+
+    try:
+        confidence = float(data.get("confidence", fallback["confidence"]))
+    except (TypeError, ValueError):
+        confidence = float(fallback["confidence"])
+
+    return {
+        "verdict": verdict,
+        "confidence": round(min(1.0, max(0.0, confidence)), 2),
+        "reason": _truncate_text(data.get("reason") or fallback["reason"], 420),
+        "action": _truncate_text(data.get("action") or fallback["action"], 520),
+        "evidence_summary": _truncate_text(data.get("evidence_summary") or fallback["evidence_summary"], 520),
+        "per_side_purpose": per_side,
+        "similarities": _bounded_text_list(data.get("similarities"), max_items=5) or fallback["similarities"],
+        "differences": _bounded_text_list(data.get("differences"), max_items=5) or fallback["differences"],
+        "canonicality_signals": _bounded_text_list(data.get("canonicality_signals"), max_items=5) or fallback["canonicality_signals"],
+        "open_questions": _bounded_text_list(data.get("open_questions"), max_items=5) or fallback["open_questions"],
+        "model": model,
+    }
+
+
+def _unique_texts(values: list[object], limit: int = 8) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _overlap_action_plan(req: CreateOverlapRecommendationRequest, verdict: str, proposed_action: str) -> dict:
+    pairs = req.top_pairs[:6]
+    triage = req.triage_result if isinstance(req.triage_result, dict) else {}
+    side_purpose = triage.get("per_side_purpose") if isinstance(triage.get("per_side_purpose"), dict) else {}
+    open_questions = _bounded_text_list(triage.get("open_questions"), max_items=5)
+    risks = _bounded_text_list(triage.get("risks"), max_items=5)
+
+    files = _unique_texts(
+        [p.get("file_a") for p in pairs] + [p.get("file_b") for p in pairs],
+        limit=10,
+    )
+    pair_names = [_overlap_pair_name(p) for p in pairs[:5]]
+    same_name_count = sum(1 for p in pairs if p.get("same_name"))
+
+    if verdict == "duplicate":
+        canonical_target = (
+            f"Choose one canonical owner between {req.cluster_a} and {req.cluster_b}; "
+            f"start with the side that is newer, more actively maintained, or closer to operator-facing docs."
+        )
+        concrete_steps = [
+            f"Open the top {len(pair_names)} overlap pair(s) and compare source excerpts before editing.",
+            "Select the canonical file or container and list the exact source files that will be merged into it.",
+            "Move only non-duplicate detail into the canonical target; preserve useful links or history notes.",
+            "Update references that still point to the merged-away wording or stale source.",
+            "Re-run graph and overlap checks to confirm the duplicate signal dropped.",
+        ]
+        default_risks = [
+            "A merge could remove context that is intentionally repo-specific.",
+            "Choosing the wrong canonical owner could make future maintenance less obvious.",
+            "Cross-references may become stale if only text is merged.",
+        ]
+    elif verdict == "reference":
+        canonical_target = (
+            f"Keep both {req.cluster_a} and {req.cluster_b}; make the canonical source of truth explicit in the cross-reference."
+        )
+        concrete_steps = [
+            "Identify which side is source-of-truth and which side is reference, summary, or implementation context.",
+            "Add or update cross-links so the relationship is obvious from both sides.",
+            "Remove only duplicated wording that creates maintenance drift.",
+            "Add a short note explaining why both locations remain.",
+            "Re-run overlap review and mark the pair documented if the relationship is intentional.",
+        ]
+        default_risks = [
+            "The pair may be intentional but undocumented, so merging could damage useful context.",
+            "Cross-references could create circular or noisy documentation if overdone.",
+        ]
+    else:
+        canonical_target = (
+            f"Do not merge yet; document the relationship between {req.cluster_a} and {req.cluster_b} and gather owner evidence."
+        )
+        concrete_steps = [
+            "Review the top overlap pairs and decide whether they are same-problem, reference, or shared vocabulary.",
+            "Name the different job each side performs.",
+            "Add a lightweight relationship note where future operators will see it.",
+            "Defer consolidation until a canonical owner is clear.",
+        ]
+        default_risks = [
+            "Similar vocabulary could be mistaken for duplicate implementation.",
+            "Deferring the decision could leave future operators with the same ambiguity.",
+        ]
+
+    if not risks:
+        risks = default_risks
+
+    acceptance_criteria = [
+        "The canonical owner or intentional dual-owner relationship is written down.",
+        "Every top overlap pair has been reviewed against its source path, not only its label.",
+        "Any merged or retained content still preserves repo-specific context needed by an operator.",
+        "A follow-up overlap check shows fewer duplicate signals or a documented reason to keep them.",
+    ]
+
+    if side_purpose:
+        purpose_a = _truncate_text(side_purpose.get("cluster_a") or "", 180)
+        purpose_b = _truncate_text(side_purpose.get("cluster_b") or "", 180)
+        if purpose_a or purpose_b:
+            concrete_steps.insert(
+                1,
+                f"Use the triage purpose notes as a starting hypothesis: {req.cluster_a}: {purpose_a or 'unknown'}; {req.cluster_b}: {purpose_b or 'unknown'}.",
+            )
+
+    return {
+        "canonical_target": canonical_target,
+        "merge_sources": files or pair_names,
+        "concrete_steps": concrete_steps,
+        "savings_estimate": {
+            "duplicate_node_count": len(pair_names),
+            "affected_files": len(files),
+            "semantic_edge_reduction": min(req.edge_count, max(0, len(pair_names) * 2)),
+            "rough_context_savings": (
+                f"Conservative: reviewing or consolidating the top {len(pair_names)} pair(s) could remove "
+                f"roughly {min(req.edge_count, max(1, len(pair_names) * 2))} repeated semantic references from future graph context."
+            ),
+            "caveat": "Estimate is directional only; verify by rerunning Graphify/semantic overlap after the actual edit.",
+        },
+        "risks": risks,
+        "acceptance_criteria": acceptance_criteria,
+        "rollback_note": "Keep the original files until review is accepted; rollback is to restore the pre-merge files and remove added cross-reference notes.",
+        "open_questions": open_questions or [
+            f"Which side should be treated as canonical: {req.cluster_a} or {req.cluster_b}?",
+            "Is the overlap duplicate content, an intentional reference, or shared vocabulary?",
+            "Who owns the follow-up edit after this recommendation is accepted?",
+        ],
+        "source_pairs": pair_names,
+        "same_name_count": same_name_count,
+        "proposed_action": proposed_action,
+    }
 
 
 OverlapWorkflowStatus = Literal["untriaged", "triaged", "task-created", "dismissed"]
@@ -2022,7 +2719,8 @@ def triage_overlap(req: TriageOverlapRequest) -> dict:
     pairs_text = "\n".join(
         f"- '{p.get('label_a', '?')}' ↔ '{p.get('label_b', '?')}'  "
         f"[{round(p.get('similarity', 0) * 100)}% similar"
-        f"{', same filename' if p.get('same_name') else ''}]"
+        f"{', same filename' if p.get('same_name') else ''}] "
+        f"A path: {p.get('file_a') or 'unknown'}; B path: {p.get('file_b') or 'unknown'}"
         for p in req.top_pairs[:6]
     )
     same_name_note = (
@@ -2040,29 +2738,31 @@ def triage_overlap(req: TriageOverlapRequest) -> dict:
         f'- "duplicate": content is nearly identical — should be merged into one canonical location\n'
         f'- "reference": one document intentionally references or extends the other — keep both\n'
         f'- "related": similar topic but different enough in purpose to keep separate\n\n'
+        f"Do not merely restate that semantic similarity is high. Explain what each side appears to do, "
+        f"why the overlap matters to a decision-maker, what looks the same, what differs, whether either "
+        f"side looks canonical, and what questions remain before merge/review/document action.\n\n"
         f"Return ONLY valid JSON with no extra text:\n"
         f'{{"verdict":"duplicate"|"reference"|"related","confidence":0.0-1.0,'
-        f'"reason":"one sentence","action":"one sentence recommended action"}}'
+        f'"reason":"one sentence decision rationale",'
+        f'"action":"one sentence recommended action",'
+        f'"evidence_summary":"why this matters beyond high similarity",'
+        f'"per_side_purpose":{{"cluster_a":"what {req.cluster_a} appears to do","cluster_b":"what {req.cluster_b} appears to do"}},'
+        f'"similarities":["concrete similarity"],'
+        f'"differences":["concrete difference"],'
+        f'"canonicality_signals":["signal or unclear canonicality"],'
+        f'"open_questions":["question to answer before acting"]}}'
     )
     try:
         raw = _call_ollama(prompt, model, timeout=90)
         data = json.loads(raw)
-        verdict = data.get("verdict", "related")
-        if verdict not in ("duplicate", "reference", "related"):
-            verdict = "related"
-        return {
-            "verdict": verdict,
-            "confidence": round(float(data.get("confidence", 0.5)), 2),
-            "reason": str(data.get("reason", ""))[:300],
-            "action": str(data.get("action", ""))[:400],
-            "model": model,
-        }
+        return _normalize_overlap_triage(data, req, model)
     except Exception as exc:
+        fallback = _fallback_overlap_dossier(req, "unknown")
         return {
+            **fallback,
             "verdict": "unknown",
             "confidence": 0.0,
             "reason": f"Triage failed: {exc}",
-            "action": "",
             "model": model,
         }
 
@@ -2103,6 +2803,8 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
 
     confidence = round(req.triage_confidence or min(0.95, req.avg_similarity), 2)
 
+    action_plan = _overlap_action_plan(req, verdict, proposed_action)
+
     rec: dict = {
         "id": str(uuid.uuid4()),
         "mode": "duplicates",
@@ -2121,6 +2823,15 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
         "risk": "low",
         "effort": effort,
         "proposed_action": proposed_action,
+        "action_plan": action_plan,
+        "overlap": {
+            "cluster_a": req.cluster_a,
+            "cluster_b": req.cluster_b,
+            "edge_count": req.edge_count,
+            "avg_similarity": req.avg_similarity,
+            "top_pairs": req.top_pairs[:5],
+        },
+        "overlap_dossier": req.triage_result if isinstance(req.triage_result, dict) else None,
         "status": "pending",
         "created_at": now,
         "updated_at": now,

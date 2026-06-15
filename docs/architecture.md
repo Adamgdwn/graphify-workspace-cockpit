@@ -6,13 +6,13 @@ Last Updated: 2026-06-15
 
 ## Summary
 
-Graphify Workspace Cockpit is a local web application that turns a Graphify `graph.json` into a decision-making surface. The backend exposes graph query, recommendation, decision, action, overlap-review, and AI chat endpoints. The frontend renders a seven-tab cockpit shell (Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings) plus a floating AI assistant overlay that is available in every tab.
+Graphify Workspace Cockpit is a local web application that turns a Graphify `graph.json` into a decision-making surface. The backend exposes graph query, recommendation, decision, action, decision-packet, overlap-review, and AI chat endpoints. The frontend renders a seven-tab cockpit shell (Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings) plus a floating AI assistant overlay that is available in every tab.
 
 ## Components
 
 | Component | Technology | Responsibility |
 |-----------|------------|----------------|
-| Backend API | Python FastAPI | Graph query, recommendation, decision, action, overlap-review, chat, and config endpoints |
+| Backend API | Python FastAPI | Graph query, recommendation, decision, action, decision-packet, overlap-review, chat, and config endpoints |
 | Rate Limiter | slowapi | 60 req/min per IP on all endpoints; `/health` exempt |
 | Graphify Adapter | Graphify CLI subprocess | Run `graphify query/path/explain` against user-selected `graph.json` |
 | Ollama Adapter | Ollama HTTP API | Local model synthesis for Ask, Recommendations, and Chat endpoints (optional — degrades gracefully) |
@@ -30,9 +30,10 @@ Graphify Workspace Cockpit is a local web application that turns a Graphify `gra
 2. User asks a question (Ask tab) → backend selects graphify tool path, runs CLI with cluster-filtered context, optionally synthesizes with Ollama, returns answer + evidence nodes
 3. User inspects map → frontend renders Cytoscape.js at project/cluster level; click expands to file level on demand; source chip shows active source count
 4. Model generates recommendation → backend runs Ollama prompt against cluster-filtered graph context, writes structured card to `workspace/state/recommendations/`
-5. User accepts recommendation → backend writes action record to `workspace/state/action-queue/`; no execution without explicit approval
-6. User approves action → backend runs dry-run preview first, then executes on approval, writes result + rollback note to action record
-7. User sends a chat message (AI assistant panel) → backend prepends cluster-filtered graph nodes as system context, streams SSE tokens from Ollama `/api/chat`; frontend displays tokens in real time via `ReadableStream`
+5. User reviews decision packet → backend assembles recommendation, evidence-node provenance, overlap dossier, related decisions, queued action state, next approval gate, and Markdown export text without mutating state
+6. User accepts recommendation → backend writes action record to `workspace/state/action-queue/`; no execution without explicit approval
+7. User approves action → backend runs dry-run preview first, then executes on approval, writes result + rollback note to action record
+8. User sends a chat message (AI assistant panel) → backend prepends cluster-filtered graph nodes as system context, streams SSE tokens from Ollama `/api/chat`; frontend displays tokens in real time via `ReadableStream`
 
 No sensitive data flows through the backend. Graph files remain on local disk. Ollama is the only external call in the data path; all other calls are local.
 
@@ -64,9 +65,11 @@ workspace/state/
 
 **Decision record:** id, target_type, target_id, classification, rationale, evidence, created_at, created_by, status
 
-**Recommendation record:** id, question, recommendation, recommended_action, target_ids, evidence, risk, confidence, requires_approval, status, created_at
+**Recommendation record:** id, mode, title, summary, evidence, confidence, risk, effort, proposed_action, optional action_plan, optional overlap metadata/dossier, status, created_at
 
 **Action queue record:** id, source_recommendation_id, action_type, description, dry_run_command, approval_required, approved_at, executed_at, result, rollback_note
+
+**Decision packet:** schema_version, recommendation, evidence nodes/provenance, optional overlap dossier, judgement, recommendation_plan, related decisions, queued action state, operator choices, markdown
 
 **Chat config:** system_prompt, model
 
@@ -113,3 +116,4 @@ Set `API_KEY` in the backend environment to require `Authorization: Bearer <key>
 - ADR-005: Env-var configuration over config files (Docker-friendly, no private paths in committed files)
 - ADR-006 (Chunk 17): AI assistant as floating overlay panel, not a tab — available in every tab without navigation, draggable and resizable by the user
 - ADR-007 (Chunks 20–26): Decision-flow polish stays inside the existing surfaces; Command Center is an attention layer, not a replacement for detailed tabs
+- ADR-008 (Chunks 27–30): Ground-level decision evidence should aggregate in read-only packets before mutating workflows; approval and execution remain in existing recommendation and Work Queue controls

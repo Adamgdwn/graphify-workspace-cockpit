@@ -43,7 +43,7 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and HTTPS
 | **Ask** | Ask natural language questions about your workspace graph. Answers are backed by `graphify query/path/explain` with optional Ollama synthesis. Evidence nodes link directly to map view. |
 | **Map** | Interactive Cytoscape.js graph at project/cluster level. Click any node to inspect. Filter by type, theme, or decision status. Use Explore / Trace / Overlap / Review modes to move between browsing, path tracing, semantic overlap review, and evidence review. |
 | **Decisions** | Record durable human decisions about workspace areas. Classifications: invest, client-ready, monitor, archive, paused. Decision badges appear on Map nodes. |
-| **Recommendations** | Review model-backed cards with evidence, confidence, risk, and a proposed action. Accept, reject, or defer. Accepted recommendations flow into the Work Queue. |
+| **Recommendations** | Review model-backed cards with evidence, confidence, risk, proposed action, implementation brief, and an expandable read-only decision packet. Accept, reject, or defer. Accepted recommendations flow into the Work Queue. |
 | **Work Queue** | Review queued actions from accepted recommendations. Every action requires a dry-run preview before execution. Executed actions include a rollback note. |
 | **Settings** | Upload a graph, view Ollama connection status, configure source + cluster toggles for context filtering, configure the AI assistant, and trigger a graph rebuild. |
 
@@ -69,6 +69,17 @@ specific project area and reduces noise.
 
 The Map tab shows a source chip ("X of Y sources active") and links to Settings
 when sources are filtered.
+
+## Decision Packets
+
+Recommendation cards include a **Review Decision Packet** control. The packet
+combines the evidence needed for one decision: matched node provenance,
+overlap dossier details when available, judgement signals, the implementation
+brief, related active decisions, queued action state, and the next approval
+gate. Packets can be copied or exported as Markdown/JSON.
+
+Decision packets are read-only. Use the existing recommendation controls to
+accept, defer, reject, or queue work; use Work Queue for dry-run and approval.
 
 ## Working In This Repo (for agents and developers)
 
