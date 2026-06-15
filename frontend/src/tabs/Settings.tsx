@@ -136,7 +136,7 @@ export function Settings() {
     status: string; progress: number; total: number;
     last_run: string | null; error: string | null; edge_count: number; model: string | null;
   } | null>(null);
-  const [semanticModel, setSemanticModel] = useState("nomic-embed-text");
+  const [semanticModel, setSemanticModel] = useState("nomic-embed-text:latest");
   const [runningSemantic, setRunningSemantic] = useState(false);
   const semanticPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -720,7 +720,7 @@ export function Settings() {
           </p>
         )}
 
-        {ollama?.connected && !ollama.models.includes("nomic-embed-text") && (
+        {ollama?.connected && !ollama.models.some((m) => m.startsWith("nomic-embed-text")) && (
           <div className="settings-row" style={{ marginBottom: 10, padding: "8px 10px", background: "#1a1c2a", borderRadius: 6, border: "1px solid #2a3050" }}>
             <span className="settings-dim" style={{ fontSize: 12 }}>
               Recommended: <code>nomic-embed-text</code> (137 MB, purpose-built for semantic similarity).
@@ -737,8 +737,10 @@ export function Settings() {
             value={semanticModel}
             onChange={(e) => setSemanticModel(e.target.value)}
           >
-            <option value="nomic-embed-text">nomic-embed-text (recommended)</option>
-            {ollama?.models.filter((m) => m !== "nomic-embed-text").map((m) => (
+            {ollama?.models.filter((m) => m.startsWith("nomic-embed-text")).map((m) => (
+              <option key={m} value={m}>{m} (recommended)</option>
+            ))}
+            {ollama?.models.filter((m) => !m.startsWith("nomic-embed-text")).map((m) => (
               <option key={m} value={m}>{m}</option>
             ))}
           </select>
