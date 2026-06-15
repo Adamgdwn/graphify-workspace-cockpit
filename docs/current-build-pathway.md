@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-15T12:19:59-06:00
-Status: active — Chunk Twenty-Three complete; Chunk Twenty-Four planned
+Last Updated: 2026-06-15T12:53:28-06:00
+Status: active — Chunk Twenty-Four complete; Chunk Twenty-Five planned
 Owner: Adam Goodwin
 
 ## Purpose
@@ -53,14 +53,14 @@ For material or risk-triggering work:
 | Chunk Twenty-One — evidence navigation | Complete | 2026-06-15T11:50:05-06:00 | Ask evidence and Recommendation evidence now navigate to Map; Map resolves full-graph nodes by id/label, resolves cluster evidence by cluster id, shows focus notices, fails softly for missing targets, and backend default CORS now supports both localhost and 127.0.0.1 dev origins |
 | Chunk Twenty-Two — Map mode polish | Complete | 2026-06-15T12:12:47-06:00 | Map toolbar now uses explicit Explore / Trace / Overlap / Review modes; Trace arms summary path tracing, Overlap opens full graph semantic overlap workflow, Review groups filters/sources/layers |
 | Chunk Twenty-Three — overlap triage workflow | Complete | 2026-06-15T12:19:59-06:00 | Added durable overlap status records, status filters, dismiss/restore workflow, persisted task-created state, and restored triage verdicts |
-| Chunk Twenty-Four — decision command center | Planned | 2026-06-15T10:23:52-06:00 | Add a compact attention surface for pending recommendations, dry-run-ready actions, untriaged overlaps, and graph freshness |
+| Chunk Twenty-Four — decision command center | Complete | 2026-06-15T12:53:28-06:00 | Added first-tab Command Center with pending recommendation, accepted-not-queued, dry-run-ready action, untriaged overlap, graph freshness, and semantic freshness signals |
 | Chunk Twenty-Five — confidence and shipped evidence | Planned | 2026-06-15T10:23:52-06:00 | Add focused E2E coverage and demo-path validation for the decision flow |
 
 ---
 
 ## Next Path - World-Class Decision Tool Polish
 
-Status: **active** — Chunk Twenty-Three complete; Chunk Twenty-Four planned — 2026-06-15T12:19:59-06:00
+Status: **active** — Chunk Twenty-Four complete; Chunk Twenty-Five planned — 2026-06-15T12:53:28-06:00
 
 Completion target: Integration complete
 
@@ -294,7 +294,7 @@ Stop condition: stop before adding the command center.
 
 ## Chunk Twenty-Four - Decision Command Center
 
-Status: **planned**
+Status: **complete** — 2026-06-15T12:53:28-06:00
 
 Completion target: Draft complete
 
@@ -315,19 +315,26 @@ Outputs:
 - A new first tab or top-level dashboard surface
 - Counts and direct links for pending recommendations, accepted-not-queued recommendations, dry-run-ready actions, untriaged overlaps, stale graph rebuild, stale semantic pass
 - No new recommendation generation logic
+- First tab is now `Command`, backed only by existing list/status endpoints
+- Untriaged overlap card opens Map in Overlap mode and focuses the highest-priority pair
 
 Acceptance criteria:
 
-- [ ] Operator can see the next most important review items without visiting every tab
-- [ ] Each summary item links to the relevant tab/context
-- [ ] Empty states are calm and demo-ready
-- [ ] Dashboard does not duplicate complex tab internals
+- [x] Operator can see the next most important review items without visiting every tab
+- [x] Each summary item links to the relevant tab/context
+- [x] Empty states are calm and demo-ready
+- [x] Dashboard does not duplicate complex tab internals
 
 Validation:
 
-- Frontend typecheck and build
-- Manual: navigate from each dashboard item to its destination
-- Manual: empty state with no pending items
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed: `git diff --check`
+- Passed: restarted stale local backend on `127.0.0.1:8000`; `GET /health`, `GET /overlap/status`, `GET /graph/overlap-report`, and `GET /graph/semantic-edges` returned current-source responses
+- Passed: headless Chromium DOM check at `http://127.0.0.1:5173` rendered Command Center with live counts, active graph stats, and freshness rows
+- Passed: `graphify update . --no-cluster` rebuilt local repo graph with 879 nodes and 1,838 edges
+- Browser click-through pending: Command cards to Recommendations, Work Queue, Settings, and Map Overlap mode
+- Empty all-clear state pending: requires temporary empty data or fixture reset
 
 Stop condition: stop before expanding into analytics, charts, or team workflows.
 

@@ -3,7 +3,7 @@ import type { DecisionClassification } from "./decision";
 export type ActiveCockpitContext =
   | {
       kind: "node";
-      source: "ask" | "map" | "recommendations";
+      source: "ask" | "map" | "recommendations" | "dashboard";
       nodeId: string;
       label?: string;
       nodeType?: string;
@@ -12,13 +12,13 @@ export type ActiveCockpitContext =
     }
   | {
       kind: "cluster";
-      source: "ask" | "map" | "recommendations" | "settings";
+      source: "ask" | "map" | "recommendations" | "settings" | "dashboard";
       clusterId: string;
       label?: string;
     }
   | {
       kind: "overlap-pair";
-      source: "map";
+      source: "map" | "dashboard";
       clusterA: string;
       clusterB: string;
       sourceNodeId?: string;

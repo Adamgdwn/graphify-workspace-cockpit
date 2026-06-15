@@ -846,6 +846,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   function contextSourceLabel(context: ActiveCockpitContext) {
     return context.source === "ask" ? "Ask evidence"
       : context.source === "recommendations" ? "Recommendation evidence"
+      : context.source === "dashboard" ? "Command Center"
       : context.source === "decisions" ? "Decision"
       : "Map context";
   }
@@ -1245,6 +1246,41 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     const key = contextKey(activeContext);
     if (appliedContextKeyRef.current === key) return;
 
+    if (activeContext.kind === "overlap-pair") {
+      if (viewMode !== "full") {
+        setViewMode("full");
+        return;
+      }
+
+      if (!fullGraph) {
+        fetchFullGraph();
+        return;
+      }
+
+      setMapMode("overlap");
+      setShowSemantic(true);
+      setShowOverlap(true);
+      setOverlapStatusFilter("untriaged");
+      setHighlightedPair([activeContext.clusterA, activeContext.clusterB]);
+      setSelectedFull(null);
+      setSelected(null);
+
+      const cy = cyRef.current;
+      if (cy && activeContext.sourceNodeId && activeContext.targetNodeId) {
+        const source = cy.getElementById(activeContext.sourceNodeId);
+        const target = cy.getElementById(activeContext.targetNodeId);
+        const pair = source.union(target);
+        if (!pair.empty()) cy.fit(pair, 90);
+      }
+
+      setFocusNotice({
+        tone: "info",
+        text: `${contextSourceLabel(activeContext)}: ${contextLabel(activeContext)}`,
+      });
+      appliedContextKeyRef.current = key;
+      return;
+    }
+
     if (activeContext.kind !== "node") {
       setFocusNotice({ tone: "warn", text: `${contextSourceLabel(activeContext)} target is not focusable on the Map yet.` });
       appliedContextKeyRef.current = key;
@@ -1372,7 +1408,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
         }
       });
     });
-  }, [highlightedPair, viewMode]);
+  }, [highlightedPair, viewMode, showSemantic, crossSemanticEdges.length]);
 
   // Clear highlighted pair when semantic is turned off
   useEffect(() => {

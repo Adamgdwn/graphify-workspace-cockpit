@@ -5,6 +5,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { HelpModal } from "./components/HelpModal";
 import { ToastProvider } from "./components/Toast";
 import { Ask } from "./tabs/Ask";
+import { Dashboard } from "./tabs/Dashboard";
+import type { DashboardDestination } from "./tabs/Dashboard";
 import { Decisions } from "./tabs/Decisions";
 import { Map } from "./tabs/Map";
 import { Recommendations } from "./tabs/Recommendations";
@@ -12,9 +14,10 @@ import { Settings } from "./tabs/Settings";
 import { WorkQueue } from "./tabs/WorkQueue";
 import type { ActiveCockpitContext } from "./domain/cockpitContext";
 
-type Tab = "ask" | "map" | "decisions" | "recommendations" | "work-queue" | "settings";
+type Tab = "dashboard" | "ask" | "map" | "decisions" | "recommendations" | "work-queue" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "dashboard", label: "Command" },
   { id: "ask", label: "Ask" },
   { id: "map", label: "Map" },
   { id: "decisions", label: "Decisions" },
@@ -28,7 +31,7 @@ const BANNER_KEY = "demo_banner_dismissed";
 type ConnStatus = "ok" | "degraded" | "offline";
 
 export default function App() {
-  const [active, setActive] = useState<Tab>("ask");
+  const [active, setActive] = useState<Tab>("dashboard");
   const [demoMode, setDemoMode] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(
     () => sessionStorage.getItem(BANNER_KEY) === "1"
@@ -81,6 +84,10 @@ export default function App() {
   function navigateToMapContext(context: ActiveCockpitContext) {
     setActiveContext(context);
     setActive("map");
+  }
+
+  function navigateFromDashboard(destination: DashboardDestination) {
+    setActive(destination);
   }
 
   const showBanner = demoMode && !bannerDismissed;
@@ -145,6 +152,7 @@ export default function App() {
           ))}
         </nav>
         <main className="cockpit-content">
+          {active === "dashboard" && <ErrorBoundary tabName="Command Center"><Dashboard onNavigate={navigateFromDashboard} onNavigateMapContext={navigateToMapContext} /></ErrorBoundary>}
           {active === "ask" && <ErrorBoundary tabName="Ask"><Ask focusTrigger={focusTrigger} askRef={askRef} onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
           {active === "map" && <ErrorBoundary tabName="Map"><Map activeContext={activeContext} onNavigateSettings={() => setActive("settings")} onActiveContextChange={setActiveContext} /></ErrorBoundary>}
           {active === "decisions" && <ErrorBoundary tabName="Decisions"><Decisions onActiveContextChange={setActiveContext} /></ErrorBoundary>}
