@@ -600,11 +600,7 @@ const FULL_CY_STYLE: object[] = [
   },
   {
     selector: "edge.semantic-edge.faded",
-    style: { opacity: 0.03 },
-  },
-  {
-    selector: "edge.semantic-edge.sem-browse",
-    style: { opacity: 0.22, "line-style": "dashed" },
+    style: { opacity: 0 },
   },
   {
     selector: "edge.struct-hidden",
@@ -1128,29 +1124,13 @@ export function Map({ onNavigateSettings }: MapProps) {
         const tc = clusterMap[tgt];
         const inPair = (sc === ca && tc === cb) || (sc === cb && tc === ca);
         if (inPair) {
-          e.removeClass("faded").removeClass("sem-browse").addClass("highlighted");
+          e.removeClass("faded").addClass("highlighted");
         } else {
-          e.addClass("faded").removeClass("highlighted").removeClass("sem-browse");
+          e.addClass("faded").removeClass("highlighted");
         }
       });
     });
   }, [highlightedPair, viewMode]);
-
-  // Browse mode: dim all semantic edges when overlap panel is open but no pair is selected.
-  // This prevents the "all 1988 edges explode back" sensation when clearing a highlight.
-  useEffect(() => {
-    const cy = cyRef.current;
-    if (!cy || viewMode !== "full") return;
-    if (showOverlap && !highlightedPair) {
-      cy.batch(() => {
-        cy.edges(".semantic-edge")
-          .removeClass("faded").removeClass("highlighted")
-          .addClass("sem-browse");
-      });
-    } else {
-      cy.edges(".semantic-edge").removeClass("sem-browse");
-    }
-  }, [showOverlap, highlightedPair, viewMode, showSemantic]);
 
   // Clear highlighted pair when semantic is turned off
   useEffect(() => {
@@ -1642,8 +1622,13 @@ export function Map({ onNavigateSettings }: MapProps) {
                           <button
                             className={`map-overlap-btn${isActive ? " map-overlap-btn-lit" : ""}`}
                             onClick={() => {
-                              if (!showSemantic) setShowSemantic(true);
-                              setHighlightedPair(isActive ? null : [g.clusterA, g.clusterB]);
+                              if (isActive) {
+                                setHighlightedPair(null);
+                                setShowSemantic(false);
+                              } else {
+                                if (!showSemantic) setShowSemantic(true);
+                                setHighlightedPair([g.clusterA, g.clusterB]);
+                              }
                             }}
                           >
                             {isActive ? "Clear" : "Highlight"}
