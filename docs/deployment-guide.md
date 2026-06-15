@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Last Updated: 2026-06-14
+Last Updated: 2026-06-15
 
 This guide covers running the Graphify Workspace Cockpit beyond the default
 local dev setup — on a Windows machine via Docker Desktop, on a Linux server,
@@ -213,7 +213,13 @@ curl http://localhost:8000/settings         # -> active graph name + node count
 curl http://localhost:8000/status/ollama    # -> {"connected":true/false,...}
 ```
 
-Open `http://localhost:5173` → confirm all six tabs render → confirm the AI assistant button appears in the bottom-right corner → confirm Settings tab shows active graph and Ollama status → confirm Map shows the Overlap Analysis panel when semantic edges are available.
+If Node is available through nvm, run the live demo smoke gate:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
+```
+
+Open `http://localhost:5173` → confirm all seven tabs render (`Command`, `Ask`, `Map`, `Decisions`, `Recommendations`, `Work Queue`, `Settings`) → confirm the AI assistant button appears in the bottom-right corner → confirm Settings tab shows active graph and Ollama status → confirm Map shows Explore / Trace / Overlap / Review modes and the Overlap Analysis panel when semantic edges are available.
 
 ---
 

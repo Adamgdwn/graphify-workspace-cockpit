@@ -122,7 +122,7 @@ The cockpit does not:
 
 - execute autonomous commits, pushes, or destructive actions
 - make decisions on Adam's behalf
-- consume external services (GitHub, Microsoft 365, Stripe, email) directly
+- consume unconfigured external services or write to external systems directly
 - serve as the execution engine for UAOS missions
 - replace Codex or Claude as a coding assistant
 - grant other users access without a separate governance decision
@@ -136,10 +136,13 @@ Chunks 1–8  — feature complete local tool
 Chunk 9     — portable: installable anywhere, env-var configured, Dockerized
 Chunk 10    — network-ready: any device can reach it, auth-gated, HTTPS
 Chunk 11    — shared truth: decisions sync across devices, UAOS handoff live
+Chunks 12–19 — real graph, UX polish, cloud connectors, assistant, overlap triage
+Chunks 20–26 — Command-first decision workflow, evidence navigation, demo readiness
 ```
 
-The cockpit becomes company-wide infrastructure at Chunk Eleven. Everything
-before that is preparation and progressive hardening.
+The cockpit became company-wide-capable infrastructure at Chunk Eleven. Later
+chunks turned it into a more coherent decision workflow and added demo evidence,
+while keeping release and project-completion decisions with Adam.
 
 ## Related Documents
 

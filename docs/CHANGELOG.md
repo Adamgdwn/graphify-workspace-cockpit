@@ -6,6 +6,69 @@ changed, or fixed in that chunk.
 
 ---
 
+## Chunk Twenty-Six — Final Owner UI Readiness Sweep (2026-06-15)
+
+### Added
+- Final live browser walkthrough evidence across all seven tabs: Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings
+- Browser check for real Ask submission returning `Evidence nodes`
+
+### Changed
+- Closed the decision-flow polish path as integration complete without adding speculative product-code changes
+- Updated `START_HERE.md` and `docs/current-build-pathway.md` to reflect the close-out state
+
+## Chunk Twenty-Five — Confidence and Shipped Evidence (2026-06-15)
+
+### Added
+- `scripts/demo-path-smoke.mjs` — dependency-free live smoke check for backend health, graph summary, Ask evidence, decision/recommendation/action queues, overlap report, and rendered Command shell labels
+- `docs/demo-path-checklist.md` — manual demo path for Command → Ask → Evidence → Map → Decision → Recommendation → Work Queue
+- Demo readiness instructions in `docs/runbook.md`
+
+### Changed
+- Updated `docs/video-script-prompt.md` for the seven-tab workflow, Command-first demo path, overlap review workflow, current graph facts, and smoke evidence command
+
+## Chunk Twenty-Four — Decision Command Center (2026-06-15)
+
+### Added
+- `Command` tab as the first cockpit tab
+- Attention cards for pending recommendations, accepted-not-queued recommendations, dry-run-ready actions, untriaged overlaps, graph freshness, and semantic freshness
+- Direct navigation from Command cards into the relevant tab or Map context
+
+## Chunk Twenty-Three — Overlap Triage Workflow (2026-06-15)
+
+### Added
+- Durable overlap workflow records with statuses: untriaged, triaged, task-created, dismissed
+- Status filters plus dismiss/restore workflow in the Map overlap panel
+- Persisted task-created state after creating a recommendation from an overlap pair
+- Restored triage verdicts from durable overlap records when Map loads
+
+## Chunk Twenty-Two — Map Mode Polish (2026-06-15)
+
+### Added
+- Explicit Map modes: Explore, Trace, Overlap, Review
+- Trace mode arms summary path tracing
+- Overlap mode opens the semantic overlap workflow
+- Review mode groups graph view, type, source, and edge-layer controls
+
+## Chunk Twenty-One — Evidence Navigation (2026-06-15)
+
+### Added
+- Clickable Ask evidence nodes that navigate into focused Map context
+- Clickable Recommendation evidence chips that navigate into focused Map context
+- Map focus notices and soft warnings for missing evidence targets
+
+### Changed
+- Backend default CORS now supports both `localhost` and `127.0.0.1` dev origins
+
+## Chunk Twenty — Decision-Flow Foundation (2026-06-15)
+
+### Added
+- Shared frontend decision metadata in `frontend/src/domain/decision.ts`
+- App-level active cockpit context in `frontend/src/domain/cockpitContext.ts`
+
+### Changed
+- Decision vocabulary aligned across docs, UI, and backend expectations
+- Legacy or unknown saved classifications render safely and normalize to `monitor` when edited
+
 ## Chunk Nineteen — Signal/Noise Filtering + LLM Triage (2026-06-15)
 
 ### Added

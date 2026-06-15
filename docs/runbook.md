@@ -1,7 +1,7 @@
 # Runbook
 
 Status: current
-Last Updated: 2026-06-14
+Last Updated: 2026-06-15
 Owner: Adam Goodwin
 
 ## What This System Does In Operation
@@ -36,6 +36,23 @@ curl http://localhost:8000/health
 ```
 
 Response includes `status`, `graph_loaded`, `demo_mode`, and `ollama_connected`. If `graph_loaded` is false, check `GRAPH_PATH` in `backend/.env`.
+
+## Demo Readiness Check
+
+With both processes running, use the lightweight smoke gate before recording or
+handoff:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
+```
+
+If the app is bound to `localhost` instead of `127.0.0.1`, override the URLs:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs
+```
+
+Then walk the manual demo path in `docs/demo-path-checklist.md`.
 
 ## Alerts and Failures
 
@@ -89,4 +106,4 @@ This is a single-developer local tool. There is no on-call rotation. If somethin
 1. Check `launcher/backend.log` and `launcher/frontend.log`.
 2. Run `curl http://localhost:8000/health` and read the full response.
 3. Grep `backend/main.py` for the failing endpoint.
-4. Open a new Claude Code session in the repo — the docs and code are the source of truth.
+4. Open a new Codex or Claude Code session in the repo — the docs and code are the source of truth.

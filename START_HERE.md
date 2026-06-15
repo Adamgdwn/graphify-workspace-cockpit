@@ -1,12 +1,12 @@
 # Start Here
 
-Last Updated: 2026-06-15T12:53:28-06:00
-Status: active — Chunk Twenty-Four complete; Chunk Twenty-Five planned
+Last Updated: 2026-06-15T14:17:38-06:00
+Status: integration complete — documentation sweep complete; awaiting owner UI testing
 Owner: Adam Goodwin
 
 ## State at Pause
 
-The first 24 build chunks are complete. The cockpit is a working local-first decision
+The first 26 build chunks are complete. The cockpit is a working local-first decision
 surface: seven tabs (Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings)
 plus a floating AI assistant overlay. Desktop launcher is at
 `~/Desktop/graphify-cockpit.desktop`.
@@ -21,7 +21,14 @@ untriaged, triaged, task-created, and dismissed workflow states. Chunk
 Twenty-Four added the Command Center as the first tab, with attention counts for
 pending recommendations, accepted-not-queued items, dry-run-ready actions,
 untriaged overlaps, graph freshness, and semantic freshness. Chunk Twenty-Five
-is next: confidence and shipped evidence.
+added the demo smoke check, demo-path checklist, runbook note, and updated video
+prompt. Chunk Twenty-Six closed the decision-flow polish path with a final live
+browser sweep across all seven tabs and an Ask evidence submission. No new
+owner-reported UI blocker was supplied in Chunk Twenty-Six, so no speculative
+product-code change was made. A post-close-out documentation sweep aligned the
+README, manual, architecture, deployment guide, roadmap, handover, changelog,
+runbook, risk register, integration guide, tool permission matrix, vision, and
+video prompts with the current seven-tab/demo-ready state.
 
 **Chunks 18–19 highlights:**
 - Map → Overlap Analysis panel: 14 cross-cluster pairs, 1,988 semantic edges
@@ -47,16 +54,16 @@ loading, and `79ccf42` Fix overlap semantic highlight clearing.
 
 ## To Resume
 
-1. `git status --short` — confirm clean tree.
-2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Twenty-Five - Confidence And Shipped Evidence" sections in `docs/current-build-pathway.md`.
-3. Load only the context listed for Chunk Twenty-Five.
+1. `git status --short` — confirm whether the Chunk Twenty-Five/Twenty-Six close-out and documentation-sweep packet has been committed.
+2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Twenty-Six - Final Owner UI Readiness Sweep" sections in `docs/current-build-pathway.md`.
+3. If Adam reports a specific UI issue, load only the affected tab/component and the related backend endpoint if needed.
 4. Use `docs/context-map.md` if routing is still unclear.
 
 ## Work Patterns
 
 **Ordinary scoped work:**
 1. `git status --short`
-2. Read repo-local agent instructions (`CLAUDE.md`, `AI_BOOTSTRAP.md`)
+2. Read repo-local agent instructions (`AGENTS.md`)
 3. Use `docs/context-map.md` when context routing is unclear
 4. Inspect only the specific files or errors needed
 5. Run targeted validation after the change

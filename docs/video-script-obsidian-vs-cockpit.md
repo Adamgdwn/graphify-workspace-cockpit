@@ -5,8 +5,8 @@ Reference video: https://www.youtube.com/watch?v=mWLDn49_8HA
 
 Context: That video shows Graphify → Obsidian → Claude Code as a cross-repo
 knowledge workflow. This script demos the cockpit as the simpler alternative:
-one unified graph, one UI, no Obsidian install required. Cloud connectors
-(Chunk 14) will extend this to OneDrive/SharePoint/OneNote.
+one unified graph, one UI, no Obsidian install required. Cloud connectors for
+SharePoint and OneNote are now built as opt-in sources.
 
 ---
 
@@ -16,9 +16,9 @@ one unified graph, one UI, no Obsidian install required. Cloud connectors
 > Obsidian as the middle layer, that's actually solvable with Graphify alone. Run
 > `graphify update` against your workspace root (not just a single repo) and you
 > get one unified graph spanning everything. I built a cockpit UI on top of that —
-> browser-based, no Obsidian install needed — with Ask, Map, Decisions,
-> Recommendations, and a Work Queue all querying the same live graph. Cloud sources
-> (OneDrive, SharePoint, OneNote) are next. Happy to share more when it's ready to show.
+> browser-based, no Obsidian install needed — with Command, Ask, Map, Decisions,
+> Recommendations, and a Work Queue all querying the same live graph. SharePoint
+> and OneNote can fold in as opt-in cloud sources. Happy to share more when it's ready to show.
 
 ---
 
@@ -87,9 +87,9 @@ and a UI that queries it. That's this.
 
 ### What's Coming (4:15–4:45)
 
-The next step is cloud connectors. OneDrive, SharePoint, OneNote — same
-interface, same Ask tab, but your questions now span your code and your
-documents. No new software. It folds into the same graph.
+The next step is deciding which sources to connect. SharePoint and OneNote use
+the same interface and the same Ask tab, so your questions can span code and
+documents without adding a second knowledge app.
 
 That's the thing Obsidian can't easily do — pull live cloud content into the
 same queryable structure as your codebase.
@@ -105,11 +105,11 @@ description. If you already use Graphify, you're one command away from this.
 
 ## Recording Notes
 
-- The workspace graph needs its edge rebuild before the Map tab can show true
-  cross-repo edges (currently the cockpit's own graph has 645 edges; the broader
-  workspace graph has 0).
+- The current local repo graph refresh reports 923 nodes and 7,879 links in
+  `graphify-out/graph.json`; the live semantic edge cache used by overlap review
+  still reports 14,501 semantic edges when available.
 - Cloud connectors are now built and opt-in. Only include them in the recording
   if the demo environment has SharePoint or OneNote configured.
-- The rest of the cockpit (Ask, Map, Decisions, Recommendations, Work Queue,
-  Settings, AI assistant, demo-mode banner) is demo-ready now against the real
-  graph.
+- The rest of the cockpit (Command, Ask, Map, Decisions, Recommendations, Work
+  Queue, Settings, AI assistant, demo-mode banner) is demo-ready now against the
+  real graph.

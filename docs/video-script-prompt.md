@@ -24,11 +24,18 @@ clusters (thematic groupings detected automatically).
 
 The cockpit is a local web app (FastAPI backend + React/Vite frontend). No
 account, no cloud, no data leaving the machine. It runs at
-`http://localhost:5173`.
+`http://localhost:5173` or `http://127.0.0.1:5173`.
 
 ---
 
 ### What It Does — Tab by Tab
+
+**Command tab**
+The first screen. A decision command center that shows what needs operator
+attention before you dive into any single tab: pending recommendations,
+accepted-but-not-queued work, dry-run-ready actions, untriaged overlaps, graph
+freshness, semantic freshness, active graph, semantic edge count, and estimated
+token savings. Cards link into the relevant tab or Map context.
 
 **Ask tab**
 Graph-backed Q&A. You type a natural language question. The backend runs
@@ -43,6 +50,9 @@ Interactive Cytoscape.js graph at the project or cluster level. Click any
 node to inspect it. Filter by type, theme, or decision status. "Why connected?"
 traces the shortest path between any two nodes. God nodes (top-5 by edge
 weight) are highlighted with a gold ring. Drill down to file level on demand.
+The toolbar has explicit modes: Explore, Trace, Overlap, and Review. Overlap
+mode opens a durable semantic overlap review queue with untriaged, triaged,
+task-created, and dismissed states.
 
 **Decisions tab**
 A durable human decision ledger. You classify workspace areas: invest,
@@ -78,8 +88,9 @@ anything.
 
 ### Key Technical Facts
 
-- **Graph:** `graph.json` produced by Graphify CLI. 533 nodes, 645 edges in the
-  real workspace graph. A bundled demo graph ships with the repo for first-run.
+- **Graph:** `graph.json` produced by Graphify CLI. The current real graph is
+  900+ nodes with thousands of links; the live semantic edge cache shows 14,501
+  semantic edges. A bundled demo graph ships with the repo for first-run.
 - **Inference:** Ollama (local). No external model API required. Degrades
   gracefully if Ollama is unavailable.
 - **State:** All persistence is in `workspace/state/` — flat JSON files.
@@ -91,6 +102,10 @@ anything.
 - **Safety model:** All agents are A1 (read-only) except the Action Executor
   (A2 — dry-run + explicit human approval required before each execution).
 - **Rate limiting:** 60 req/min per IP via slowapi. `/health` exempt.
+- **Demo evidence:** `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs`
+  checks backend health, graph summary, Ask evidence,
+  decision/recommendation/action endpoints, overlap report, and the rendered
+  Command shell.
 
 ---
 
@@ -116,6 +131,17 @@ Layer 3 — Mission Execution
 ```
 
 ---
+
+### Suggested Demo Path
+
+1. Start on `Command` and show the attention cards.
+2. Open `Ask`, ask a workspace question, and show evidence nodes.
+3. Click evidence into `Map`, then show Explore / Trace / Overlap / Review.
+4. Create or edit a human decision in `Decisions`.
+5. Review evidence-backed cards in `Recommendations`.
+6. Accept and queue one safe recommendation.
+7. Open `Work Queue`, run `Dry Run`, and stop at the human approval gate unless
+   execution is explicitly part of the demo.
 
 ### Script Format
 
@@ -185,9 +211,10 @@ Write a full script for this topic:
    Graphify extracts the graph, the cockpit records the decisions, UAOS consumes
    the handoff. What the export looks like and why the format matters.
 
-7. **Zero to one in one session** — The build story. 19 chunks, one Claude Code
-   session, one context ceiling hit. What the governance baseline in Chunk 1
-   made possible in Chunks 14–19.
+7. **Zero to one in one session** — The build story. 26 chunks, Claude Code and
+   Codex handoffs, and a production-readiness polish pass. What the governance
+   baseline in Chunk 1 made possible once the cockpit became a real decision
+   workflow.
 
 8. **Ask vs. Chat** — When to use the Ask tab (structured Q&A with evidence
    nodes) vs. the AI assistant (conversational follow-up). How they share cluster

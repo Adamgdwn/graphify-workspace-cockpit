@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-15T12:53:28-06:00
-Status: active — Chunk Twenty-Four complete; Chunk Twenty-Five planned
+Last Updated: 2026-06-15T14:17:38-06:00
+Status: integration complete — documentation sweep complete; awaiting owner UI testing
 Owner: Adam Goodwin
 
 ## Purpose
@@ -54,19 +54,20 @@ For material or risk-triggering work:
 | Chunk Twenty-Two — Map mode polish | Complete | 2026-06-15T12:12:47-06:00 | Map toolbar now uses explicit Explore / Trace / Overlap / Review modes; Trace arms summary path tracing, Overlap opens full graph semantic overlap workflow, Review groups filters/sources/layers |
 | Chunk Twenty-Three — overlap triage workflow | Complete | 2026-06-15T12:19:59-06:00 | Added durable overlap status records, status filters, dismiss/restore workflow, persisted task-created state, and restored triage verdicts |
 | Chunk Twenty-Four — decision command center | Complete | 2026-06-15T12:53:28-06:00 | Added first-tab Command Center with pending recommendation, accepted-not-queued, dry-run-ready action, untriaged overlap, graph freshness, and semantic freshness signals |
-| Chunk Twenty-Five — confidence and shipped evidence | Planned | 2026-06-15T10:23:52-06:00 | Add focused E2E coverage and demo-path validation for the decision flow |
+| Chunk Twenty-Five — confidence and shipped evidence | Complete | 2026-06-15T13:16:02-06:00 | Added live demo smoke check, demo checklist, updated recording prompt, and runbook evidence gate |
+| Chunk Twenty-Six — final owner UI readiness sweep | Complete | 2026-06-15T14:00:05-06:00 | No new owner-reported UI blocker supplied; completed final live validation, fixed stale handoff wording, and closed the decision-flow polish path |
 
 ---
 
 ## Next Path - World-Class Decision Tool Polish
 
-Status: **active** — Chunk Twenty-Four complete; Chunk Twenty-Five planned — 2026-06-15T12:53:28-06:00
+Status: **integration complete** — Chunk Twenty-Six complete; decision-flow polish closed — 2026-06-15T14:00:05-06:00
 
 Completion target: Integration complete
 
 Budget class: Medium overall, split into Small chunks
 
-Objective: Turn the existing six surfaces into one continuous decision workflow. The app already has the functional bones; this path should reduce context switching, make evidence navigable, and help the operator answer: what am I looking at, why does it matter, what did I decide, and what should happen next?
+Objective: Turn the existing seven surfaces into one continuous decision workflow. The app already has the functional bones; this path should reduce context switching, make evidence navigable, and help the operator answer: what am I looking at, why does it matter, what did I decide, and what should happen next?
 
 Non-goals:
 
@@ -342,7 +343,7 @@ Stop condition: stop before expanding into analytics, charts, or team workflows.
 
 ## Chunk Twenty-Five - Confidence And Shipped Evidence
 
-Status: **planned**
+Status: **complete** — 2026-06-15T13:16:02-06:00
 
 Completion target: Integration complete
 
@@ -359,24 +360,162 @@ Context to load:
 
 Outputs:
 
-- Focused E2E or component-level coverage for the core decision path
-- Demo checklist for Ask → Evidence → Map → Decision → Recommendation → Work Queue
-- Updated docs for any changed user workflow
+- Added `scripts/demo-path-smoke.mjs`, a dependency-free live smoke check for backend health, graph summary, Ask evidence, readable decision/recommendation/action queues, overlap report, and rendered Command shell labels
+- Added `docs/demo-path-checklist.md` for the Ask -> Evidence -> Map -> Decision -> Recommendation -> Work Queue manual walkthrough
+- Updated `docs/video-script-prompt.md` for the current seven-tab workflow, Command-first demo path, overlap review workflow, regenerated graph stats, and smoke evidence command
+- Updated `docs/runbook.md` with the demo readiness check
 
 Acceptance criteria:
 
-- [ ] Automated coverage protects the main demo path or documents why manual coverage is the correct temporary gate
-- [ ] Demo checklist matches actual UI labels and behavior
-- [ ] `docs/video-script-prompt.md` remains accurate after UX changes
-- [ ] Final validation commands are recorded in the handoff or pathway
+- [x] Automated coverage protects the live backend/frontend contract for the main demo path and documents why full click coverage remains a manual temporary gate
+- [x] Demo checklist matches actual UI labels and behavior
+- [x] `docs/video-script-prompt.md` remains accurate after UX changes
+- [x] Final validation commands are recorded in the handoff or pathway
 
 Validation:
 
-- Frontend typecheck and build
-- New tests, if added
-- Manual full-path demo run
+- Passed: `bash scripts/governance-preflight.sh`
+- Passed: `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs`
+  - `demo_mode=false`
+  - graph summary: 903 nodes
+  - Ask evidence: 32 evidence nodes for `What projects are in this workspace?`
+  - recommendation queue: 5 readable records
+  - work queue actions: 2 readable records
+  - decision ledger: 1 readable record
+  - overlap report: 14 readable groups
+  - frontend Command shell: 11 required labels rendered
+- Passed: restarted local backend on `127.0.0.1:8000` after graph update so live validation uses the regenerated graph
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+  - Existing Vite warning remains: main bundle is larger than 500 kB after minification
+- Passed: `git diff --check`
+- Passed: `graphify update . --no-cluster` rebuilt local repo graph with 903 nodes and 4,284 links
+- Manual full click-through gate: documented in `docs/demo-path-checklist.md`; not automated because the frontend has no browser test framework installed
 
 Stop condition: stop when the decision-flow path is validated and documented. Further polish becomes a new planned path.
+
+## Chunk Twenty-Six - Final Owner UI Readiness Sweep
+
+Status: **complete** — 2026-06-15T14:00:05-06:00
+
+Completion target: Integration complete
+
+Budget class: Small
+
+Objective: Close the decision-flow polish path without drifting into new scope: triage any owner-reported UI blockers if present, run a careful live readiness sweep, and leave the pathway/handoff state accurate.
+
+Context to load:
+
+- The specific tab or component where Adam identifies a bug, if one is reported
+- `docs/demo-path-checklist.md` if the bug affects the demo path
+- Related backend endpoint only if the issue crosses the API boundary
+
+Outputs:
+
+- No product-code change: Adam did not report a new concrete UI blocker with this close-out request
+- Final live browser sweep across Command, Ask, Map, Decisions, Recommendations, Work Queue, and Settings
+- Real Ask submission checked in the browser and verified `Evidence nodes` render
+- Stale close-out wording corrected in `START_HERE.md` and this pathway
+
+Acceptance criteria:
+
+- [x] Each issue is reproducible or has a clear observed symptom; no new UI issue was supplied in this chunk, so no speculative fix was made
+- [x] Fix stays limited to the affected workflow; documentation-only close-out fixes were limited to stale handoff/pathway wording
+- [x] Demo path remains protected by smoke check, typecheck, build, and live browser walkthrough
+
+Validation:
+
+- Passed: `bash scripts/governance-preflight.sh`
+- Passed: `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs`
+  - `demo_mode=false`
+  - graph summary: 903 nodes
+  - Ask evidence: 32 evidence nodes
+  - recommendation queue: 5 readable records
+  - work queue actions: 2 readable records
+  - decision ledger: 1 readable record
+  - overlap report: 14 readable groups
+  - frontend Command shell: 11 labels rendered
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+  - Existing Vite warning remains: main bundle is larger than 500 kB after minification
+- Passed: live Chromium browser-protocol walkthrough at `http://127.0.0.1:5173`
+  - Command -> `Command Center`
+  - Ask -> `Query the workspace graph.`
+  - Map -> `Explore`
+  - Decisions -> `Decision History`
+  - Recommendations -> `Generate:`
+  - Work Queue -> `Action Queue`
+  - Settings -> `Knowledge Sources`
+  - Ask submit `What projects are in this workspace?` -> `Evidence nodes`
+- Passed: final `graphify update . --no-cluster` rebuilt local repo graph with 903 nodes and 6,727 links
+- Passed: restarted local backend on `127.0.0.1:8000` after the final graph update
+- Passed: final `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs` against the restarted backend
+  - `demo_mode=false`
+  - graph summary: 903 nodes
+  - Ask evidence: 32 evidence nodes
+  - recommendation queue: 5 readable records
+  - work queue actions: 2 readable records
+  - decision ledger: 1 readable record
+  - overlap report: 14 readable groups
+  - frontend Command shell: 11 labels rendered
+
+Stop condition: stop with a commit-ready validation packet. Further UI bugs or world-class polish become a new planned path or a specific owner-reported issue.
+
+## Documentation Sweep - Current Docs Alignment
+
+Status: **complete** — 2026-06-15T14:17:38-06:00
+
+Completion target: Integration complete
+
+Budget class: Small
+
+Objective: Align current operator, handoff, architecture, roadmap, recording, and governance-adjacent docs with the seven-tab decision workflow and Chunk Twenty-Six close-out state.
+
+Files reviewed or updated:
+
+- `README.md`
+- `START_HERE.md`
+- `docs/manual.md`
+- `docs/architecture.md`
+- `docs/deployment-guide.md`
+- `docs/runbook.md`
+- `docs/roadmap.md`
+- `docs/handover.md`
+- `docs/CHANGELOG.md`
+- `docs/video-script-prompt.md`
+- `docs/video-script-obsidian-vs-cockpit.md`
+- `docs/risks/risk-register.md`
+- `docs/integration-guide.md`
+- `docs/tool-permission-matrix.md`
+- `docs/vision.md`
+
+Outputs:
+
+- Current-facing docs now describe the seven-tab cockpit: Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings
+- README and manual include the Command tab, current decision classifications, local URL variants, and demo smoke/checklist guidance
+- Architecture and deployment guide reflect the Command Center, overlap status state, Map modes, and seven-tab validation path
+- Roadmap, handover, and changelog now include chunks Twenty through Twenty-Six and no longer imply the active path ended at Chunk Nineteen
+- Recording prompts no longer describe cloud connectors as future-only or cite the old 645-edge graph as current
+- Risk, integration, tool-permission, and vision docs now reflect opt-in Supabase/cloud integrations and the current dry-run action gate
+
+Validation:
+
+- Passed: `bash scripts/governance-preflight.sh`
+- Passed: stale-text scan for current-state mismatches; remaining matches are historical chunk records or unchanged registries
+- Passed: `git diff --check`
+- Passed: `graphify update . --no-cluster` rebuilt local repo graph with 923 nodes and 7,879 links
+- Passed: restarted local backend on `127.0.0.1:8000` after the graph refresh
+- Passed: `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs`
+  - `demo_mode=false`
+  - graph summary: 923 nodes
+  - Ask evidence: 33 evidence nodes
+  - recommendation queue: 5 readable records
+  - work queue actions: 2 readable records
+  - decision ledger: 1 readable record
+  - overlap report: 14 readable groups
+  - frontend Command shell: 11 labels rendered
+
+Stop condition: stop with docs aligned and validation recorded; do not add product behavior before Adam's hands-on UI testing.
 
 ---
 

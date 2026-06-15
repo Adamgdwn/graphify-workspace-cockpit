@@ -24,7 +24,8 @@ the technical component map.
 bash scripts/start.sh
 ```
 
-Opens the frontend at `http://localhost:5173`. Backend runs at `http://localhost:8000`.
+Opens the frontend at `http://localhost:5173` or `http://127.0.0.1:5173`.
+Backend runs at `http://localhost:8000` or `http://127.0.0.1:8000`.
 
 **Docker:**
 
@@ -38,8 +39,9 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and HTTPS
 
 | Tab | Purpose |
 |-----|---------|
+| **Command** | First-screen decision command center. Shows pending recommendations, accepted-but-not-queued recommendations, dry-run-ready actions, untriaged overlaps, graph freshness, and semantic freshness. |
 | **Ask** | Ask natural language questions about your workspace graph. Answers are backed by `graphify query/path/explain` with optional Ollama synthesis. Evidence nodes link directly to map view. |
-| **Map** | Interactive Cytoscape.js graph at project/cluster level. Click any node to inspect. Filter by type, theme, or decision status. Use "Why connected?" to trace paths between nodes. |
+| **Map** | Interactive Cytoscape.js graph at project/cluster level. Click any node to inspect. Filter by type, theme, or decision status. Use Explore / Trace / Overlap / Review modes to move between browsing, path tracing, semantic overlap review, and evidence review. |
 | **Decisions** | Record durable human decisions about workspace areas. Classifications: invest, client-ready, monitor, archive, paused. Decision badges appear on Map nodes. |
 | **Recommendations** | Review model-backed cards with evidence, confidence, risk, and a proposed action. Accept, reject, or defer. Accepted recommendations flow into the Work Queue. |
 | **Work Queue** | Review queued actions from accepted recommendations. Every action requires a dry-run preview before execution. Executed actions include a rollback note. |
@@ -73,7 +75,7 @@ when sources are filtered.
 For ordinary scoped work:
 
 1. Check `git status --short`.
-2. Read repo-local agent instructions (`CLAUDE.md`, `AI_BOOTSTRAP.md`).
+2. Read repo-local agent instructions (`AGENTS.md`).
 3. Use `docs/context-map.md` to choose only the docs and source areas needed.
 4. Inspect specific files or errors relevant to the task.
 5. Run targeted validation after the change.
@@ -88,6 +90,16 @@ For material or risk-triggering changes:
 6. Capture a timestamp with `date -Iseconds`.
 7. Confirm roadmap and runbook still match reality.
 8. Update docs when behavior or operating expectations change.
+
+## Demo Readiness
+
+Before recording or handoff, run the lightweight live smoke gate:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
+```
+
+Then walk the manual path in `docs/demo-path-checklist.md`.
 
 ## Common Gotchas
 

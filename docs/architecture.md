@@ -2,21 +2,22 @@
 
 Document ID: ARCH-001
 Status: current
-Last Updated: 2026-06-14
+Last Updated: 2026-06-15
 
 ## Summary
 
-Graphify Workspace Cockpit is a local web application that turns a Graphify `graph.json` into a decision-making surface. The backend exposes graph query, recommendation, decision, action, and AI chat endpoints. The frontend renders a six-tab cockpit shell (Ask, Map, Decisions, Recommendations, Work Queue, Settings) plus a floating AI assistant overlay that is available in every tab.
+Graphify Workspace Cockpit is a local web application that turns a Graphify `graph.json` into a decision-making surface. The backend exposes graph query, recommendation, decision, action, overlap-review, and AI chat endpoints. The frontend renders a seven-tab cockpit shell (Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings) plus a floating AI assistant overlay that is available in every tab.
 
 ## Components
 
 | Component | Technology | Responsibility |
 |-----------|------------|----------------|
-| Backend API | Python FastAPI | Graph query, recommendation, decision, action, chat, and config endpoints |
+| Backend API | Python FastAPI | Graph query, recommendation, decision, action, overlap-review, chat, and config endpoints |
 | Rate Limiter | slowapi | 60 req/min per IP on all endpoints; `/health` exempt |
 | Graphify Adapter | Graphify CLI subprocess | Run `graphify query/path/explain` against user-selected `graph.json` |
 | Ollama Adapter | Ollama HTTP API | Local model synthesis for Ask, Recommendations, and Chat endpoints (optional — degrades gracefully) |
-| Frontend Shell | React/Vite TypeScript | Six-tab cockpit: Ask, Map, Decisions, Recommendations, Work Queue, Settings |
+| Frontend Shell | React/Vite TypeScript | Seven-tab cockpit: Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings |
+| Command Center | React tab (`Dashboard.tsx`) | First-screen attention surface for pending recommendations, accepted-not-queued work, dry-run-ready actions, untriaged overlaps, graph freshness, and semantic freshness |
 | AICopilot | React component (`AICopilot.tsx`) | Floating draggable/resizable overlay panel; SSE streaming chat; visible in every tab |
 | Graph View | Cytoscape.js | Interactive project-level graph, click-to-inspect side panel, on-demand drill-down |
 | Cluster Selector | Settings → Knowledge Sources | Source + cluster toggles; filters graph context for Ask, Chat, and Recommendations |
@@ -25,7 +26,7 @@ Graphify Workspace Cockpit is a local web application that turns a Graphify `gra
 
 ## Data Flow
 
-1. User loads cockpit → frontend fetches project-level graph from backend
+1. User loads cockpit → Command Center fetches current recommendations, actions, overlap status, and graph health signals
 2. User asks a question (Ask tab) → backend selects graphify tool path, runs CLI with cluster-filtered context, optionally synthesizes with Ollama, returns answer + evidence nodes
 3. User inspects map → frontend renders Cytoscape.js at project/cluster level; click expands to file level on demand; source chip shows active source count
 4. Model generates recommendation → backend runs Ollama prompt against cluster-filtered graph context, writes structured card to `workspace/state/recommendations/`
@@ -54,6 +55,7 @@ workspace/state/
   chat-sessions/            (AI chat session records — pruned to 50)
   chat-config.json          (system prompt + model for AI assistant)
   cluster-selection.json    (active source + cluster toggles from Chunk 16)
+  overlap-status.json       (durable overlap triage/workflow states)
   settings.json
   graph-rebuild-status.json (background rebuild job state)
 ```
@@ -69,6 +71,8 @@ workspace/state/
 **Chat config:** system_prompt, model
 
 **Cluster selection:** sources (array of {id, name, enabled}), clusters (array of {id, name, enabled})
+
+**Overlap status record:** pair_key, status (untriaged / triaged / task-created / dismissed), triage verdict, triage confidence, triage action, timestamps
 
 ## Dependencies
 
@@ -91,7 +95,7 @@ All hardcoded paths and service URLs are configurable via environment variables.
 |----------|-------|---------|---------|
 | `GRAPH_PATH` | backend | `workspace/demo/graph.json` | Path to graph.json |
 | `STATE_DIR` | backend | `workspace/state` | Persistent state root |
-| `CORS_ORIGINS` | backend | `http://localhost:5173` | Allowed frontend origins |
+| `CORS_ORIGINS` | backend | `http://localhost:5173` | Allowed frontend origins; include each exact localhost or LAN origin used by browsers |
 | `OLLAMA_URL` | backend | `http://localhost:11434` | Ollama server base URL |
 | `API_KEY` | backend | (unset) | Bearer token for network-facing deployments |
 | `VITE_API_URL` | frontend | `http://localhost:8000` | Backend URL for browser requests |
@@ -108,3 +112,4 @@ Set `API_KEY` in the backend environment to require `Authorization: Bearer <key>
 - ADR-004: JSON files over SQLite for MVP state (minimal setup, inspectable, Git-friendly; Supabase backend added in Chunk Eleven)
 - ADR-005: Env-var configuration over config files (Docker-friendly, no private paths in committed files)
 - ADR-006 (Chunk 17): AI assistant as floating overlay panel, not a tab — available in every tab without navigation, draggable and resizable by the user
+- ADR-007 (Chunks 20–26): Decision-flow polish stays inside the existing surfaces; Command Center is an attention layer, not a replacement for detailed tabs

@@ -1,6 +1,6 @@
 # Integration Guide
 
-Last Updated: 2026-06-14
+Last Updated: 2026-06-15
 
 This guide covers how external systems — particularly the User AI Operating
 System (UAOS) — consume the Graphify Workspace Cockpit API, the shape of the
@@ -82,7 +82,7 @@ validate all of the following. Fail any check → log reason and stop.
 
 The validator at `uaos_agent_spine/graphify_handoff.py` (REQ-0050) implements
 these checks against locally supplied records. Wire it to the live endpoint
-after Chunk 11 ships.
+when UAOS begins consuming cockpit actions directly.
 
 ---
 

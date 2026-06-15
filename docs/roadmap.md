@@ -1,12 +1,12 @@
 # Roadmap
 
-Last Updated: 2026-06-15T10:23:52-06:00
+Last Updated: 2026-06-15T14:12:27-06:00
 Owner: Adam Goodwin
 
-## Done — Chunks 1–19 (all complete as of 2026-06-15)
+## Done — Chunks 1–26 (integration complete as of 2026-06-15)
 
 - **Chunk One** — Governance baseline: docs, risk register, agent inventory, prompt register, tool permission matrix
-- **Chunk Two** — App shell: FastAPI backend, React/Vite frontend, six-tab cockpit, `start.sh` launcher
+- **Chunk Two** — App shell: FastAPI backend, React/Vite frontend, initial cockpit shell, `start.sh` launcher
 - **Chunk Three** — Ask interface: graph-backed Q&A via `graphify query/path/explain`, Ollama synthesis, session transcripts
 - **Chunk Four** — Readable map: clustered Cytoscape.js view, drill-down, click-to-inspect panel, type/theme/decision filters
 - **Chunk Five** — Decision ledger: persistent classifications, map badges, accept/edit/retire
@@ -16,7 +16,7 @@ Owner: Adam Goodwin
 - **Chunk Nine** — GitHub packaging: env-var layer, Dockerfile, docker-compose, demo graph, clean README, CI
 - **Chunk Ten** — Network-ready deployment: API key auth, Caddy HTTPS proxy, graph upload API, responsive layout, Windows Docker guide
 - **Chunk Eleven** — Shared state: Supabase storage backend, cross-device sync, `created_by` identity, named graphs, org settings
-- **Chunk Twelve** — Real graph foundation: live `graph.json` (533 nodes, 645 edges), `demo_mode` flag, dismissible banner, full tab validation
+- **Chunk Twelve** — Real graph foundation: first live `graph.json`, `demo_mode` flag, dismissible banner, full tab validation
 - **Chunk Thirteen** — Demo polish and UX quality: empty states, export buttons, responsive audit, graph stats in Settings, `Ctrl+K` shortcut, god node gold ring, keyboard and mobile UX
 - **Chunk Fourteen** — Cloud knowledge base connectors: SharePoint + OneNote OAuth, sync engine, background sync, cloud node visual distinction
 - **Chunk Fifteen** — Hardening, polish, and help: rate limiting (slowapi, 60/min), session pruning (50 max), `POST /graph/rebuild`, `ErrorBoundary` per tab, `HelpModal`, graph rebuild in Settings
@@ -24,31 +24,31 @@ Owner: Adam Goodwin
 - **Chunk Seventeen** — In-cockpit AI assistant: floating draggable/resizable overlay panel, `POST /chat` SSE streaming, cluster-aware graph context, "X nodes used" chip, localStorage persistence, Settings → AI Assistant section
 - **Chunk Eighteen** — Overlap analysis: cross-cluster semantic edge panel, pair highlighting on the Map, task creation from overlap evidence
 - **Chunk Nineteen** — Signal/noise filtering and LLM triage: same-name detection, similarity chips, `POST /overlap/triage`, verdict badges, and triage-aware task creation
+- **Chunk Twenty** — Decision-flow foundation: aligned decision vocabulary and App-level active cockpit context
+- **Chunk Twenty-One** — Evidence navigation: Ask and Recommendation evidence navigate into focused Map context
+- **Chunk Twenty-Two** — Map mode polish: Explore / Trace / Overlap / Review modes
+- **Chunk Twenty-Three** — Overlap triage workflow: durable untriaged, triaged, task-created, and dismissed states
+- **Chunk Twenty-Four** — Decision Command Center: first-tab attention view for recommendations, actions, overlaps, and graph freshness
+- **Chunk Twenty-Five** — Confidence and shipped evidence: live smoke check, demo checklist, runbook gate, and current video prompt
+- **Chunk Twenty-Six** — Final owner UI readiness sweep: browser walkthrough across all seven tabs and Ask evidence submission; no speculative product-code changes
 
 ## Now
 
-The 19-chunk build pathway is complete. The next planned path is decision-flow
-polish: making the existing surfaces feel like one continuous decision tool
-rather than six adjacent tabs.
+The 26-chunk build pathway is integration complete for the current
+decision-flow polish path. The next work should come from Adam's hands-on UI
+testing: capture one concrete issue at a time, fix it in a bounded slice, and
+rerun the smoke gate plus targeted browser/API validation.
 
 The cockpit is a working local-first decision surface with:
 
-- Graph-backed Q&A, interactive map, decision ledger, recommendation queue, and action log
+- Command Center, graph-backed Q&A, interactive map, decision ledger, recommendation queue, and action log
 - Floating AI assistant available in every tab
 - Knowledge base cluster selector for focused graph context
-- Overlap analysis with duplicate/reference/related triage
+- Overlap analysis with duplicate/reference/related triage and durable workflow status
 - Cloud connector sync (SharePoint + OneNote)
 - Cross-device shared state via Supabase
 - API key auth, Caddy HTTPS, Docker deployment, rate limiting, and session pruning
-
-Planned decision-flow chunks:
-
-- **Chunk Twenty** — Decision-flow foundation: align decision vocabulary and introduce active cockpit context
-- **Chunk Twenty-One** — Evidence navigation: click Ask and Recommendation evidence into focused Map context
-- **Chunk Twenty-Two** — Map mode polish: group dense Map controls into Explore / Trace / Overlap / Review modes
-- **Chunk Twenty-Three** — Overlap triage workflow: persist untriaged, triaged, task-created, and dismissed states
-- **Chunk Twenty-Four** — Decision command center: surface pending recommendations, dry-run actions, untriaged overlaps, and graph freshness
-- **Chunk Twenty-Five** — Confidence and shipped evidence: focused tests and demo-path validation
+- Demo readiness evidence through `scripts/demo-path-smoke.mjs` and `docs/demo-path-checklist.md`
 
 Additional candidates for follow-on work:
 

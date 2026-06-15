@@ -23,9 +23,10 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 
 | Surface | What it does |
 |---------|--------------|
+| **Command** | First-screen attention view for pending recommendations, accepted-but-not-queued work, dry-run-ready actions, untriaged overlaps, and graph freshness |
 | **Ask** | Natural language questions answered from your graph (`graphify query/path/explain`) with optional local Ollama synthesis |
 | **Map** | Interactive project-level relationship map — click to inspect, filter by type/theme/decision, drill down on demand |
-| **Decisions** | Durable ledger of human decisions about workspace areas: invest, finish, merge, archive, extract, or ignore |
+| **Decisions** | Durable ledger of human decisions about workspace areas: invest, client-ready, monitor, archive, or paused |
 | **Recommendations** | Model-backed cards with evidence, confidence, risk, and accept/reject/defer controls |
 | **Work Queue** | Approval-gated action queue with dry-run previews, rollback notes, and execution reports |
 | **Settings** | Graph upload, Ollama status, source + cluster toggles, AI assistant configuration, and graph rebuild |
@@ -102,7 +103,8 @@ cd ..
 bash scripts/start.sh
 ```
 
-The app opens at `http://localhost:5173`. Backend runs at `http://localhost:8000`.
+The app opens at `http://localhost:5173` or `http://127.0.0.1:5173`.
+Backend runs at `http://localhost:8000` or `http://127.0.0.1:8000`.
 
 ---
 
@@ -141,7 +143,7 @@ State (decisions, recommendations, actions) is persisted in `workspace/state/` o
 |----------|---------|-------|
 | `GRAPH_PATH` | `workspace/demo/graph.json` | Path to your graph.json inside the container |
 | `STATE_DIR` | `workspace/state` | Persistent state directory |
-| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed frontend origins |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed frontend origins; include the exact `localhost` or `127.0.0.1` URL you use |
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama server URL — `host.docker.internal` reaches the host machine |
 | `VITE_API_URL` | `http://localhost:8000` | Backend URL the browser sends requests to (build-time) |
 
@@ -156,6 +158,14 @@ To use your own graph with Docker, either:
 ## Demo
 
 A synthetic demo graph (`workspace/demo/graph.json`) ships with the cockpit. It contains three fictional projects — `cockpit`, `knowledge-hub`, and `automation` — with enough nodes and links to demonstrate all tabs and the AI assistant. No private workspace data is included.
+
+For the current demo-readiness gate, run:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
+```
+
+Then follow `docs/demo-path-checklist.md` for the manual click path.
 
 ---
 
@@ -196,7 +206,11 @@ VITE_API_URL    Backend API URL (default: http://localhost:8000)
 
 - [docs/architecture.md](docs/architecture.md) — component map, data flow, state layout
 - [docs/current-build-pathway.md](docs/current-build-pathway.md) — live build route and chunk status
+- [docs/manual.md](docs/manual.md) — operator and developer manual
+- [docs/runbook.md](docs/runbook.md) — operational startup, failure, and recovery notes
+- [docs/demo-path-checklist.md](docs/demo-path-checklist.md) — demo-readiness smoke and manual walkthrough
 - [docs/roadmap.md](docs/roadmap.md) — what's next
+- [docs/CHANGELOG.md](docs/CHANGELOG.md) — chunk-by-chunk change history
 - [docs/agent-inventory.md](docs/agent-inventory.md) — agent definitions and autonomy levels
 - [docs/tool-permission-matrix.md](docs/tool-permission-matrix.md) — what the cockpit can and cannot do
 - [docs/risks/risk-register.md](docs/risks/risk-register.md) — known risks and controls
