@@ -39,6 +39,7 @@ CLUSTER_SELECTION_FILE = WORKSPACE_STATE / "cluster-selection.json"
 CHAT_CONFIG_FILE      = WORKSPACE_STATE / "chat-config.json"
 CHAT_SESSIONS_DIR     = WORKSPACE_STATE / "chat-sessions"
 SCAN_DIRS_FILE        = WORKSPACE_STATE / "scan-dirs.json"
+SEMANTIC_EDGES_FILE   = WORKSPACE_STATE / "semantic-edges.json"
 _CHAT_DEFAULT_SYSTEM_PROMPT = (
     "You are an assistant with access to the user's knowledge graph. "
     "Answer based on the provided graph context. "
@@ -132,6 +133,17 @@ def _load_chat_config() -> dict:
 
 # Rebuild graph state
 _REBUILD_STATUS: dict = {"status": "idle", "last_run": None}
+
+# Semantic similarity pass state
+_SEMANTIC_STATUS: dict = {
+    "status": "idle",   # idle | running | complete | error
+    "progress": 0,
+    "total": 0,
+    "last_run": None,
+    "error": None,
+    "edge_count": 0,
+    "model": None,
+}
 
 
 @app.on_event("startup")
@@ -1708,6 +1720,148 @@ def remove_scan_dir(body: ScanDirBody) -> dict:
     dirs = [d for d in _load_scan_dirs() if str(Path(d).resolve()) != p]
     _save_scan_dirs(dirs)
     return {"dirs": dirs}
+
+
+# ---------------------------------------------------------------------------
+# Semantic similarity pass
+# ---------------------------------------------------------------------------
+
+def _read_source_window(source_file: str, n_lines: int = 35) -> str:
+    """Read up to n_lines from a node's source file, checking all known repo roots."""
+    if not source_file:
+        return ""
+    roots = [Path(__file__).parent.parent] + [Path(d) for d in _load_scan_dirs()]
+    for root in roots:
+        p = root / source_file
+        if p.exists():
+            try:
+                return "\n".join(p.read_text(errors="replace").splitlines()[:n_lines])
+            except Exception:
+                pass
+    return ""
+
+
+def _cosine_sim(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    mag = (sum(x * x for x in a) ** 0.5) * (sum(x * x for x in b) ** 0.5)
+    return dot / mag if mag else 0.0
+
+
+def _run_semantic_pass(model: str, threshold: float) -> None:
+    import urllib.request as _ureq
+    global _SEMANTIC_STATUS
+    _SEMANTIC_STATUS.update({
+        "status": "running", "progress": 0, "total": 0,
+        "error": None, "edge_count": 0, "model": model,
+    })
+    try:
+        g = _load_graph()
+        nodes = g.get("nodes", [])
+        _SEMANTIC_STATUS["total"] = len(nodes)
+
+        _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+        embed_url = f"{_ollama_base}/api/embeddings"
+
+        embeddings: list[tuple[str, list[float]]] = []
+
+        for i, node in enumerate(nodes):
+            nid = node["id"]
+            label = node.get("label", nid)
+            ftype = node.get("file_type", "code")
+            window = _read_source_window(node.get("source_file", ""))
+            text = f"{ftype}: {label}\n{window}".strip()[:2000]
+
+            try:
+                payload = json.dumps({"model": model, "prompt": text}).encode()
+                req = _ureq.Request(embed_url, data=payload,
+                                    headers={"Content-Type": "application/json"}, method="POST")
+                with _ureq.urlopen(req, timeout=90) as resp:
+                    vec = json.loads(resp.read()).get("embedding", [])
+                if vec:
+                    embeddings.append((nid, vec))
+            except Exception:
+                pass
+            _SEMANTIC_STATUS["progress"] = i + 1
+
+        semantic_edges: list[dict] = []
+        m = len(embeddings)
+
+        try:
+            import numpy as np  # type: ignore
+            mat = np.array([v for _, v in embeddings], dtype=np.float32)
+            norms = np.linalg.norm(mat, axis=1, keepdims=True)
+            mat /= np.maximum(norms, 1e-9)
+            sim_mat = mat @ mat.T
+            rows, cols = np.where(np.triu(sim_mat > threshold, k=1))
+            for r, c in zip(rows.tolist(), cols.tolist()):
+                semantic_edges.append({
+                    "source": embeddings[r][0],
+                    "target": embeddings[c][0],
+                    "similarity": round(float(sim_mat[r, c]), 4),
+                    "relation": "semantic_similar",
+                })
+        except ImportError:
+            for ai in range(m):
+                for bi in range(ai + 1, m):
+                    s = _cosine_sim(embeddings[ai][1], embeddings[bi][1])
+                    if s > threshold:
+                        semantic_edges.append({
+                            "source": embeddings[ai][0],
+                            "target": embeddings[bi][0],
+                            "similarity": round(s, 4),
+                            "relation": "semantic_similar",
+                        })
+
+        WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
+        ts = datetime.now(tz=timezone.utc).isoformat()
+        SEMANTIC_EDGES_FILE.write_text(json.dumps({
+            "edges": semantic_edges,
+            "model": model,
+            "threshold": threshold,
+            "created_at": ts,
+        }, indent=2))
+
+        _SEMANTIC_STATUS.update({
+            "status": "complete",
+            "last_run": ts,
+            "edge_count": len(semantic_edges),
+            "error": None,
+        })
+
+    except Exception as exc:
+        ts = datetime.now(tz=timezone.utc).isoformat()
+        _SEMANTIC_STATUS.update({"status": "error", "last_run": ts, "error": str(exc)})
+
+
+class SemanticPassBody(BaseModel):
+    model: str = "nomic-embed-text"
+    threshold: float = 0.78
+
+
+@app.post("/graph/semantic-pass", status_code=202)
+def trigger_semantic_pass(body: SemanticPassBody) -> dict:
+    """Start a background semantic similarity pass using Ollama embeddings."""
+    if _SEMANTIC_STATUS.get("status") == "running":
+        raise HTTPException(status_code=409, detail="Semantic pass already in progress.")
+    import threading as _sem_t
+    _sem_t.Thread(target=_run_semantic_pass, args=(body.model, body.threshold), daemon=True).start()
+    return {"status": "running", "model": body.model, "threshold": body.threshold}
+
+
+@app.get("/graph/semantic-pass/status")
+def semantic_pass_status() -> dict:
+    return dict(_SEMANTIC_STATUS)
+
+
+@app.get("/graph/semantic-edges")
+def get_semantic_edges() -> dict:
+    """Return stored semantic similarity edges."""
+    if not SEMANTIC_EDGES_FILE.exists():
+        return {"edges": [], "model": None, "threshold": None, "created_at": None}
+    try:
+        return json.loads(SEMANTIC_EDGES_FILE.read_text())
+    except Exception:
+        return {"edges": [], "model": None, "threshold": None, "created_at": None}
 
 
 # ---------------------------------------------------------------------------

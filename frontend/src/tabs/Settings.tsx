@@ -131,6 +131,15 @@ export function Settings() {
   const [scanDirInput, setScanDirInput] = useState("");
   const [addingDir, setAddingDir] = useState(false);
 
+  // Semantic similarity pass
+  const [semanticStatus, setSemanticStatus] = useState<{
+    status: string; progress: number; total: number;
+    last_run: string | null; error: string | null; edge_count: number; model: string | null;
+  } | null>(null);
+  const [semanticModel, setSemanticModel] = useState("nomic-embed-text");
+  const [runningSemantic, setRunningSemantic] = useState(false);
+  const semanticPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   const loadConnectors = useCallback(() => {
     fetch(`${API}/connectors`)
       .then((r) => r.json())
@@ -170,6 +179,10 @@ export function Settings() {
     fetch(`${API}/graph/scan-dirs`)
       .then((r) => r.json())
       .then((d: { dirs: string[] }) => setScanDirs(d.dirs))
+      .catch(() => {});
+    fetch(`${API}/graph/semantic-pass/status`)
+      .then((r) => r.json())
+      .then(setSemanticStatus)
       .catch(() => {});
     loadConnectors();
   }
@@ -303,6 +316,44 @@ export function Settings() {
       }
     } catch {
       addToast("Failed to remove directory", "error");
+    }
+  }
+
+  async function handleRunSemanticPass() {
+    setRunningSemantic(true);
+    try {
+      const r = await fetch(`${API}/graph/semantic-pass`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model: semanticModel, threshold: 0.78 }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({})) as { detail?: string };
+        throw new Error(d.detail ?? `HTTP ${r.status}`);
+      }
+      addToast("Semantic analysis started", "info");
+      if (semanticPollRef.current) clearInterval(semanticPollRef.current);
+      semanticPollRef.current = setInterval(async () => {
+        try {
+          const sr = await fetch(`${API}/graph/semantic-pass/status`);
+          const sd = await sr.json();
+          setSemanticStatus(sd);
+          if (sd.status === "complete") {
+            clearInterval(semanticPollRef.current!);
+            semanticPollRef.current = null;
+            setRunningSemantic(false);
+            addToast(`Semantic analysis complete — ${sd.edge_count} similarity edges found`, "success");
+          } else if (sd.status === "error") {
+            clearInterval(semanticPollRef.current!);
+            semanticPollRef.current = null;
+            setRunningSemantic(false);
+            addToast(`Semantic analysis failed: ${sd.error}`, "error");
+          }
+        } catch { /* ignore poll errors */ }
+      }, 3000);
+    } catch (err) {
+      addToast(`Failed to start semantic analysis: ${(err as Error).message}`, "error");
+      setRunningSemantic(false);
     }
   }
 
@@ -652,6 +703,92 @@ export function Settings() {
             {addingDir ? "Adding…" : "Add Directory"}
           </button>
         </form>
+      </section>
+
+      {/* Semantic Analysis */}
+      <section className="settings-section">
+        <div className="settings-section-title">Semantic Analysis</div>
+        <p className="settings-dim" style={{ marginBottom: 10 }}>
+          Runs an overnight embedding pass on every node using your local LLM, then draws purple dashed edges
+          between nodes with similar meaning — across files and across repos. Reveals overlaps (same
+          capability built twice) and gaps. Results appear in the Map via the <strong>Semantic</strong> toggle.
+        </p>
+
+        {!ollama?.connected && (
+          <p className="settings-dim" style={{ color: "#f97316", marginBottom: 10 }}>
+            Ollama not connected — make sure it is running before starting the analysis.
+          </p>
+        )}
+
+        {ollama?.connected && !ollama.models.includes("nomic-embed-text") && (
+          <div className="settings-row" style={{ marginBottom: 10, padding: "8px 10px", background: "#1a1c2a", borderRadius: 6, border: "1px solid #2a3050" }}>
+            <span className="settings-dim" style={{ fontSize: 12 }}>
+              Recommended: <code>nomic-embed-text</code> (137 MB, purpose-built for semantic similarity).
+              Run <code>ollama pull nomic-embed-text</code> in a terminal then reload this page, or pick an existing model below.
+            </span>
+          </div>
+        )}
+
+        <div className="settings-row" style={{ marginBottom: 10 }}>
+          <span className="settings-label">Embedding model</span>
+          <select
+            className="settings-mono-input"
+            style={{ flex: 1, maxWidth: 260 }}
+            value={semanticModel}
+            onChange={(e) => setSemanticModel(e.target.value)}
+          >
+            <option value="nomic-embed-text">nomic-embed-text (recommended)</option>
+            {ollama?.models.filter((m) => m !== "nomic-embed-text").map((m) => (
+              <option key={m} value={m}>{m}</option>
+            ))}
+          </select>
+        </div>
+
+        {semanticStatus && semanticStatus.status !== "idle" && (
+          <div style={{ marginBottom: 10 }}>
+            {semanticStatus.status === "running" && (
+              <>
+                <div className="settings-dim" style={{ marginBottom: 4 }}>
+                  Embedding nodes… {semanticStatus.progress} / {semanticStatus.total}
+                </div>
+                <div style={{ background: "#1a1c2a", borderRadius: 4, height: 6, overflow: "hidden" }}>
+                  <div style={{
+                    background: "#a855f7",
+                    height: "100%",
+                    width: semanticStatus.total > 0
+                      ? `${Math.round((semanticStatus.progress / semanticStatus.total) * 100)}%`
+                      : "0%",
+                    transition: "width 1s linear",
+                  }} />
+                </div>
+              </>
+            )}
+            {semanticStatus.status === "complete" && (
+              <p className="settings-dim" style={{ color: "#4ade80" }}>
+                Complete — {semanticStatus.edge_count} semantic edges found
+                {semanticStatus.last_run ? ` (${new Date(semanticStatus.last_run).toLocaleString()})` : ""}.
+                Toggle <strong>Semantic</strong> on the Map to view them.
+              </p>
+            )}
+            {semanticStatus.status === "error" && (
+              <p className="settings-dim" style={{ color: "#f97316" }}>
+                Error: {semanticStatus.error}
+              </p>
+            )}
+          </div>
+        )}
+
+        <button
+          className="settings-upload-btn"
+          onClick={handleRunSemanticPass}
+          disabled={runningSemantic || !ollama?.connected || semanticStatus?.status === "running"}
+        >
+          {runningSemantic || semanticStatus?.status === "running"
+            ? `Analysing… ${semanticStatus?.progress ?? 0}/${semanticStatus?.total ?? 0}`
+            : semanticStatus?.status === "complete"
+            ? "Re-run Semantic Analysis"
+            : "Run Semantic Analysis"}
+        </button>
       </section>
 
       {/* Knowledge Sources */}

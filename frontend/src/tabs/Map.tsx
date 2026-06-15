@@ -546,6 +546,17 @@ const FULL_CY_STYLE: object[] = [
     selector: "edge.faded",
     style: { opacity: 0.03 },
   },
+  {
+    selector: "edge.semantic-edge",
+    style: {
+      "curve-style": "haystack",
+      "line-color": "#a855f7",
+      "line-style": "dashed",
+      "line-dash-pattern": [5, 4],
+      width: 1.2,
+      opacity: 0.5,
+    },
+  },
 ];
 
 // ── Component ─────────────────────────────────────────────────────────────
@@ -584,11 +595,20 @@ export function Map({ onNavigateSettings }: MapProps) {
   const [godNodeEdgeCounts, setGodNodeEdgeCounts] = useState<Record<string, number>>({});
   // active vs total sources chip (from cluster selection)
   const [sourceChip, setSourceChip] = useState<{ active: number; total: number } | null>(null);
+  // semantic similarity overlay
+  const [showSemantic, setShowSemantic] = useState(false);
+  const [semanticEdges, setSemanticEdges] = useState<Array<{ source: string; target: string; similarity: number }>>([]);
+  const [semanticMeta, setSemanticMeta] = useState<{ edge_count: number; created_at: string | null } | null>(null);
+
+  const showSemanticRef = useRef(false);
+  const semanticEdgesRef = useRef<Array<{ source: string; target: string; similarity: number }>>([]);
 
   // Keep refs current
   useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
   useEffect(() => { pathSourceRef.current = pathSource; }, [pathSource]);
   useEffect(() => { summaryRef.current = summary; }, [summary]);
+  useEffect(() => { showSemanticRef.current = showSemantic; }, [showSemantic]);
+  useEffect(() => { semanticEdgesRef.current = semanticEdges; }, [semanticEdges]);
 
   // Fetch decisions (non-critical — silently ignored if backend down)
   useEffect(() => {
@@ -618,6 +638,46 @@ export function Map({ onNavigateSettings }: MapProps) {
       })
       .catch(() => {});
   }, []);
+
+  // Load semantic edges on mount
+  useEffect(() => {
+    fetch(`${API}/graph/semantic-edges`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d) return;
+        setSemanticEdges(d.edges ?? []);
+        setSemanticMeta({ edge_count: (d.edges ?? []).length, created_at: d.created_at ?? null });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Add/remove semantic edges on the live Cytoscape instance when toggle changes
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || viewMode !== "full") return;
+    if (!showSemantic) {
+      cy.elements('[?semantic]').remove();
+      return;
+    }
+    if (!semanticEdges.length) return;
+    const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
+    const toAdd = semanticEdges
+      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+      .filter((e) => cy.$id(`sem__${e.source}__${e.target}`).length === 0)
+      .map((e) => ({
+        group: "edges" as const,
+        data: {
+          id: `sem__${e.source}__${e.target}`,
+          source: e.source,
+          target: e.target,
+          similarity: e.similarity,
+          edgeWidth: 1.2,
+          semantic: true,
+        },
+        classes: "semantic-edge",
+      }));
+    if (toAdd.length) cy.add(toAdd);
+  }, [showSemantic, semanticEdges, viewMode]);
 
   // Recompute god nodes whenever summary changes
   useEffect(() => {
@@ -817,6 +877,22 @@ export function Map({ onNavigateSettings }: MapProps) {
     });
 
     cyRef.current = cy;
+
+    // Restore semantic edges if overlay is active (use refs — no layout restart)
+    cy.one("layoutstop", () => {
+      if (showSemanticRef.current && semanticEdgesRef.current.length > 0) {
+        const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
+        const toAdd = semanticEdgesRef.current
+          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+          .map((e) => ({
+            group: "edges" as const,
+            data: { id: `sem__${e.source}__${e.target}`, source: e.source, target: e.target, similarity: e.similarity, edgeWidth: 1.2, semantic: true },
+            classes: "semantic-edge",
+          }));
+        if (toAdd.length) cy.add(toAdd);
+      }
+    });
+
     return () => { cy.destroy(); cyRef.current = null; };
   }, [viewMode, fullGraph, filter]);
 
@@ -934,6 +1010,21 @@ export function Map({ onNavigateSettings }: MapProps) {
           >
             {fullLoading ? "Loading…" : viewMode === "full" ? "Summary" : "Full Graph"}
           </button>
+
+          {viewMode === "full" && (
+            <button
+              className={`map-path-btn${showSemantic ? " map-path-active" : ""}`}
+              onClick={() => setShowSemantic((s) => !s)}
+              title={
+                semanticMeta?.edge_count
+                  ? `${showSemantic ? "Hide" : "Show"} ${semanticMeta.edge_count} semantic similarity edges`
+                  : "No semantic edges yet — run Semantic Analysis in Settings"
+              }
+              style={showSemantic ? { borderColor: "#a855f7", color: "#a855f7" } : {}}
+            >
+              Semantic{semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
+            </button>
+          )}
 
           {viewMode === "summary" && (
             <button
