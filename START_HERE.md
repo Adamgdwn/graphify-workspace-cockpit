@@ -1,17 +1,25 @@
 # Start Here
 
-Last Updated: 2026-06-14
+Last Updated: 2026-06-15
 Status: paused — build complete
 Owner: Adam Goodwin
 
 ## State at Pause
 
-All 17 chunks complete. The cockpit is a working local-first decision surface:
+All 19 chunks complete. The cockpit is a working local-first decision surface:
 six tabs (Ask, Map, Decisions, Recommendations, Work Queue, Settings) plus a
 floating AI assistant overlay. Desktop launcher is at
 `~/Desktop/graphify-cockpit.desktop`.
 
-Last commit: `15e2a83` — Chunks 15–17 + full documentation handover pass.
+**Chunks 18–19 highlights:**
+- Map → Overlap Analysis panel: 14 cross-cluster pairs, 1,988 semantic edges
+- Per-pair LLM triage (phi4): classifies duplicate / reference / related with same-name detection
+- Highlight on map, filter chips (70–90%), Task button creates verdict-specific recommendation
+- Highlight/fade CSS specificity bug fixed; browse mode dims edges when panel open
+
+Last documented commit before this cleanup: `15e2a83` — Chunks 15–17 + first
+documentation handover pass. Chunks 18–19 and demo-readiness cleanup are local
+changes — run `git status --short` to confirm.
 
 ## Where Things Live
 

@@ -108,7 +108,8 @@ description. If you already use Graphify, you're one command away from this.
 - The workspace graph needs its edge rebuild before the Map tab can show true
   cross-repo edges (currently the cockpit's own graph has 645 edges; the broader
   workspace graph has 0).
-- Chunk 14 (cloud connectors) is planned but not yet built — either record after
-  it ships or position it as "coming next" in the close.
-- The rest of the cockpit (Ask, Decisions, Recommendations, Work Queue, demo-mode
-  banner) is demo-ready now against the real graph.
+- Cloud connectors are now built and opt-in. Only include them in the recording
+  if the demo environment has SharePoint or OneNote configured.
+- The rest of the cockpit (Ask, Map, Decisions, Recommendations, Work Queue,
+  Settings, AI assistant, demo-mode banner) is demo-ready now against the real
+  graph.

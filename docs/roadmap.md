@@ -1,12 +1,12 @@
 # Roadmap
 
-Last Updated: 2026-06-14
+Last Updated: 2026-06-15
 Owner: Adam Goodwin
 
-## Done — Chunks 1–17 (all complete as of 2026-06-14)
+## Done — Chunks 1–19 (all complete as of 2026-06-15)
 
 - **Chunk One** — Governance baseline: docs, risk register, agent inventory, prompt register, tool permission matrix
-- **Chunk Two** — App shell: FastAPI backend, React/Vite frontend, five-tab cockpit, `start.sh` launcher
+- **Chunk Two** — App shell: FastAPI backend, React/Vite frontend, six-tab cockpit, `start.sh` launcher
 - **Chunk Three** — Ask interface: graph-backed Q&A via `graphify query/path/explain`, Ollama synthesis, session transcripts
 - **Chunk Four** — Readable map: clustered Cytoscape.js view, drill-down, click-to-inspect panel, type/theme/decision filters
 - **Chunk Five** — Decision ledger: persistent classifications, map badges, accept/edit/retire
@@ -22,19 +22,22 @@ Owner: Adam Goodwin
 - **Chunk Fifteen** — Hardening, polish, and help: rate limiting (slowapi, 60/min), session pruning (50 max), `POST /graph/rebuild`, `ErrorBoundary` per tab, `HelpModal`, graph rebuild in Settings
 - **Chunk Sixteen** — Knowledge base cluster selector: `GET/PUT /cluster-selection`, source + cluster toggles in Settings, cluster-filtered graph context for Ask and Recommendations, Map source chip
 - **Chunk Seventeen** — In-cockpit AI assistant: floating draggable/resizable overlay panel, `POST /chat` SSE streaming, cluster-aware graph context, "X nodes used" chip, localStorage persistence, Settings → AI Assistant section
+- **Chunk Eighteen** — Overlap analysis: cross-cluster semantic edge panel, pair highlighting on the Map, task creation from overlap evidence
+- **Chunk Nineteen** — Signal/noise filtering and LLM triage: same-name detection, similarity chips, `POST /overlap/triage`, verdict badges, and triage-aware task creation
 
 ## Now
 
-The 17-chunk build pathway is complete. The cockpit is a working local-first decision surface with:
+The 19-chunk build pathway is complete. The cockpit is a working local-first decision surface with:
 
 - Graph-backed Q&A, interactive map, decision ledger, recommendation queue, and action log
 - Floating AI assistant available in every tab
 - Knowledge base cluster selector for focused graph context
+- Overlap analysis with duplicate/reference/related triage
 - Cloud connector sync (SharePoint + OneNote)
 - Cross-device shared state via Supabase
 - API key auth, Caddy HTTPS, Docker deployment, rate limiting, and session pruning
 
-Immediate candidates for follow-on work (not committed):
+Immediate candidates for follow-on work:
 
 - End-to-end test suite (Playwright or Vitest + MSW)
 - Graph rebuild UI polish (progress streaming, error reporting)

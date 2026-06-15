@@ -865,6 +865,408 @@ body {
   vertical-align: middle;
 }
 
+/* ── Overlap Analysis Panel ─────────────────────────────────────────────── */
+
+.map-overlap-panel {
+  width: 290px;
+  flex-shrink: 0;
+}
+
+.map-overlap-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 15px 4px;
+  font-size: 0.72rem;
+  color: #7a8399;
+  letter-spacing: 0.02em;
+}
+
+.map-overlap-dot {
+  color: #3a4060;
+}
+
+.map-overlap-hint {
+  padding: 0 15px 10px;
+  font-size: 0.72rem;
+  color: #4a5272;
+  line-height: 1.45;
+  border-bottom: 1px solid #141828;
+}
+
+.map-overlap-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.map-overlap-group {
+  padding: 10px 14px 11px;
+  border-bottom: 1px solid #141828;
+  transition: background 0.1s;
+}
+
+.map-overlap-group:hover {
+  background: #0d1020;
+}
+
+.map-overlap-group-active {
+  background: rgba(245, 158, 11, 0.04);
+  border-left: 2px solid #f59e0b;
+  padding-left: 12px;
+}
+
+.map-overlap-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 7px;
+}
+
+.map-overlap-pair-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.map-overlap-cluster {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+}
+
+.map-overlap-arr {
+  color: #3a4060;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.map-overlap-counts {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.map-overlap-edge-count {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #f59e0b;
+  font-family: ui-monospace, monospace;
+}
+
+.map-overlap-sim-pct {
+  font-size: 0.68rem;
+  color: #4a5272;
+  font-family: ui-monospace, monospace;
+}
+
+.map-overlap-pairs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 9px;
+}
+
+.map-overlap-pair-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: #4a5272;
+  min-width: 0;
+}
+
+.map-overlap-pair-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #5a6a8a;
+  min-width: 0;
+}
+
+.map-overlap-pair-sep {
+  color: #2a3050;
+  flex-shrink: 0;
+}
+
+.map-overlap-pair-sim {
+  flex-shrink: 0;
+  color: #3a6a3a;
+  font-family: ui-monospace, monospace;
+  font-weight: 600;
+  font-size: 0.67rem;
+}
+
+.map-overlap-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.map-overlap-btn {
+  flex: 1;
+  padding: 5px 9px;
+  border: 1px solid #253050;
+  border-radius: 4px;
+  background: transparent;
+  color: #5a6a8a;
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+}
+
+.map-overlap-btn:hover:not(:disabled) {
+  border-color: #354070;
+  color: #8090b8;
+  background: #0d1020;
+}
+
+.map-overlap-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.map-overlap-btn-lit {
+  border-color: #7a6020;
+  color: #c09030;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.map-overlap-btn-lit:hover:not(:disabled) {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+.map-overlap-btn-primary {
+  border-color: #253850;
+  color: #5a88a8;
+  background: rgba(74, 120, 180, 0.06);
+}
+
+.map-overlap-btn-primary:hover:not(:disabled) {
+  border-color: #4a7abf;
+  color: #8ab8e8;
+  background: rgba(74, 120, 180, 0.12);
+}
+
+.map-overlap-btn-done {
+  border-color: #204030;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.06);
+}
+
+.map-overlap-empty {
+  padding: 20px 15px;
+  font-size: 0.78rem;
+  color: #3a4060;
+  line-height: 1.55;
+}
+
+/* Same-name badges */
+.map-overlap-samename-summary {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.map-overlap-samename-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.map-overlap-group-flagged {
+  border-left: 2px solid rgba(245, 158, 11, 0.5);
+  padding-left: 12px;
+}
+
+.map-overlap-pair-row-samename {
+  background: rgba(245, 158, 11, 0.04);
+  border-radius: 3px;
+}
+
+.map-overlap-pair-samename {
+  font-size: 0.78rem;
+  color: #f59e0b;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin: 0 1px;
+}
+
+/* Filter chips */
+.map-overlap-filters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px 6px;
+  border-bottom: 1px solid #141828;
+  flex-wrap: wrap;
+}
+
+.map-overlap-filter-label {
+  font-size: 0.66rem;
+  color: #4a5272;
+  letter-spacing: 0.03em;
+  margin-right: 2px;
+}
+
+.map-overlap-filter-chip {
+  font-size: 0.68rem;
+  font-family: inherit;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid #283050;
+  background: transparent;
+  color: #5a6a8a;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.map-overlap-filter-chip:hover {
+  border-color: #3a4a70;
+  color: #8aa0c8;
+}
+
+.map-overlap-filter-chip-on {
+  border-color: #6b8cff;
+  color: #6b8cff;
+  background: rgba(107, 140, 255, 0.08);
+}
+
+.map-overlap-filter-chip-warn {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+/* Triage bar */
+.map-overlap-triage-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px 7px;
+  border-bottom: 1px solid #141828;
+  gap: 8px;
+}
+
+.map-overlap-hint-inline {
+  font-size: 0.68rem;
+  color: #3a4060;
+  line-height: 1.35;
+}
+
+.map-overlap-btn-triage {
+  border-color: #3a3060;
+  color: #8070c0;
+}
+
+.map-overlap-btn-triage:hover:not(:disabled) {
+  border-color: #6050a0;
+  color: #a090e0;
+  background: rgba(120, 100, 200, 0.08);
+}
+
+/* Verdict display */
+.map-overlap-verdict {
+  margin: 4px 0 6px;
+  padding: 6px 9px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  border: 1px solid transparent;
+}
+
+.map-overlap-verdict-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.map-overlap-verdict-label {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.map-overlap-verdict-conf {
+  font-size: 0.66rem;
+  opacity: 0.7;
+}
+
+.map-overlap-verdict-reason {
+  margin: 3px 0 0;
+  color: inherit;
+  opacity: 0.8;
+  line-height: 1.4;
+  font-size: 0.70rem;
+}
+
+.map-overlap-verdict-action {
+  margin: 5px 0 0;
+  font-size: 0.70rem;
+  line-height: 1.4;
+  padding: 4px 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 3px;
+  border-left: 2px solid currentColor;
+  opacity: 0.9;
+}
+
+.map-overlap-verdict-action-label {
+  font-weight: 600;
+  opacity: 1;
+}
+
+.map-overlap-verdict-duplicate {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #f87171;
+}
+
+.map-overlap-verdict-reference {
+  background: rgba(245, 158, 11, 0.07);
+  border-color: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.map-overlap-verdict-related {
+  background: rgba(100, 116, 139, 0.07);
+  border-color: rgba(100, 116, 139, 0.2);
+  color: #94a3b8;
+}
+
+.map-overlap-verdict-unknown {
+  background: rgba(55, 65, 81, 0.07);
+  border-color: rgba(55, 65, 81, 0.2);
+  color: #6b7280;
+}
+
+/* Per-verdict triage button colouring after result */
+.map-overlap-verdict-duplicate-btn {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #f87171;
+}
+
+.map-overlap-verdict-reference-btn {
+  border-color: rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+}
+
+.map-overlap-verdict-related-btn {
+  border-color: rgba(100, 116, 139, 0.4);
+  color: #94a3b8;
+}
+
 /* ── Decisions Tab ───────────────────────────────────────────────────────── */
 
 .decisions-pane {
@@ -2973,6 +3375,86 @@ body {
   border-color: #4a5080;
   color: #f5c050;
   background: #1a1200;
+}
+
+/* Repository selector dropdown panel */
+.map-source-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 200;
+  min-width: 220px;
+  background: #0f1320;
+  border: 1px solid #253050;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+  padding: 8px 0 6px;
+}
+
+.map-source-panel-head {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #3a4a6a;
+  padding: 0 12px 6px;
+  border-bottom: 1px solid #1a2030;
+  margin-bottom: 4px;
+}
+
+.map-source-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.map-source-row:hover {
+  background: #131828;
+}
+
+.map-source-row input[type="checkbox"] {
+  accent-color: #6b8cff;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.map-source-name {
+  flex: 1;
+  font-size: 12px;
+  color: #8aa0c8;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.map-source-count {
+  font-size: 11px;
+  color: #3a4a6a;
+  flex-shrink: 0;
+}
+
+.map-source-done {
+  display: block;
+  width: calc(100% - 24px);
+  margin: 6px 12px 2px;
+  padding: 4px;
+  border: 1px solid #253050;
+  border-radius: 4px;
+  background: transparent;
+  color: #4a5878;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.1s, border-color 0.1s;
+  text-align: center;
+}
+
+.map-source-done:hover {
+  color: #8aa0c8;
+  border-color: #354070;
 }
 
 /* God node badge in Map inspect panel */

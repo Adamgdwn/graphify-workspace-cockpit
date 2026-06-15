@@ -49,7 +49,7 @@ Response includes `status`, `graph_loaded`, `demo_mode`, and `ollama_connected`.
 | CORS errors in browser | `CORS_ORIGINS` doesn't match the frontend URL | Update `CORS_ORIGINS` in `backend/.env` to match exact scheme+host+port |
 | AI panel off-screen | `localStorage` position persisted off-screen | Clear `copilot_pos` from DevTools → Application → Local Storage |
 | Supabase sync failing | `SUPABASE_URL` or `SUPABASE_KEY` wrong | Check `.env`; test with `curl $SUPABASE_URL/rest/v1/decisions -H "apikey: $SUPABASE_KEY"` |
-| Cloud sync failing | MSAL token expired or wrong tenant | Re-run `POST /cloud-connectors/sync` to re-trigger device code auth flow |
+| Cloud sync failing | MSAL token expired or wrong tenant | Re-run `POST /connectors/{connector_id}/sync` or re-authenticate from Settings |
 | Frontend won't load | Port 5173 in use or Vite didn't start | Check `launcher/frontend.log`; kill stale process on that port |
 | Graph rebuild hanging | `graphify update` subprocess stalled | Check `GET /graph/rebuild/status`; kill backend and restart if stuck |
 

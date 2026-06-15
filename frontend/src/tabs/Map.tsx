@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { API } from "../config";
 import cytoscape from "cytoscape";
 import type { Core } from "cytoscape";
@@ -71,6 +71,37 @@ interface FullGraph {
 
 type Filter = "all" | "code" | "document";
 type ViewMode = "summary" | "full";
+
+// ── Overlap analysis ──────────────────────────────────────────────────────
+
+interface OverlapPair {
+  source: string;
+  target: string;
+  labelA: string;
+  labelB: string;
+  fileA: string;
+  fileB: string;
+  similarity: number;
+  sameName: boolean;
+}
+
+interface OverlapGroup {
+  clusterA: string;
+  clusterB: string;
+  edgeCount: number;
+  avgSimilarity: number;
+  maxSimilarity: number;
+  sameNameCount: number;
+  topPairs: OverlapPair[];
+}
+
+interface TriageResult {
+  verdict: "duplicate" | "reference" | "related" | "unknown";
+  confidence: number;
+  reason: string;
+  action: string;
+  model: string;
+}
 
 // ── Decision metadata (mirror of Decisions.tsx) ───────────────────────────
 
@@ -450,10 +481,11 @@ const FULL_FCOSE_LAYOUT = {
   packComponents: true,
 };
 
-function buildFullElements(full: FullGraph, filter: Filter) {
+function buildFullElements(full: FullGraph, filter: Filter, selectedClusters: Set<string> | null = null) {
   const visibleIds = new Set(
     full.nodes
       .filter((n) => filter === "all" || n.type === filter)
+      .filter((n) => selectedClusters === null || selectedClusters.has(n.cluster))
       .map((n) => n.id)
   );
 
@@ -534,8 +566,8 @@ const FULL_CY_STYLE: object[] = [
     style: {
       "curve-style": "haystack",
       width: "data(edgeWidth)",
-      "line-color": "#2e5890",
-      opacity: 0.65,
+      "line-color": "#4a7abf",
+      opacity: 0.75,
     },
   },
   {
@@ -549,13 +581,34 @@ const FULL_CY_STYLE: object[] = [
   {
     selector: "edge.semantic-edge",
     style: {
-      "curve-style": "haystack",
-      "line-color": "#a855f7",
+      "curve-style": "straight",
+      "line-color": "#22c55e",
       "line-style": "dashed",
-      "line-dash-pattern": [5, 4],
-      width: 1.2,
-      opacity: 0.5,
+      "line-dash-pattern": [6, 4],
+      width: 1.5,
+      opacity: 0.7,
     },
+  },
+  {
+    selector: "edge.semantic-edge.highlighted",
+    style: {
+      "line-color": "#22c55e",
+      "line-style": "solid",
+      opacity: 1,
+      width: 2.5,
+    },
+  },
+  {
+    selector: "edge.semantic-edge.faded",
+    style: { opacity: 0.03 },
+  },
+  {
+    selector: "edge.semantic-edge.sem-browse",
+    style: { opacity: 0.22, "line-style": "dashed" },
+  },
+  {
+    selector: "edge.struct-hidden",
+    style: { opacity: 0 },
   },
 ];
 
@@ -593,15 +646,118 @@ export function Map({ onNavigateSettings }: MapProps) {
   const [godNodeIds, setGodNodeIds] = useState<Set<string>>(new Set());
   // edge count per god node for tooltip display
   const [godNodeEdgeCounts, setGodNodeEdgeCounts] = useState<Record<string, number>>({});
-  // active vs total sources chip (from cluster selection)
-  const [sourceChip, setSourceChip] = useState<{ active: number; total: number } | null>(null);
+  // cluster/source selector panel
+  const [clusterData, setClusterData] = useState<{
+    selection: { sources: string[]; clusters: string[] | null };
+    available_clusters: { id: string; node_count: number }[];
+    available_sources: string[];
+  } | null>(null);
+  const [showSourcePanel, setShowSourcePanel] = useState(false);
+  const [selectedClusters, setSelectedClusters] = useState<Set<string> | null>(null);
+  // edge layer toggles
+  const [showStructural, setShowStructural] = useState(true);
   // semantic similarity overlay
   const [showSemantic, setShowSemantic] = useState(false);
   const [semanticEdges, setSemanticEdges] = useState<Array<{ source: string; target: string; similarity: number }>>([]);
   const [semanticMeta, setSemanticMeta] = useState<{ edge_count: number; created_at: string | null } | null>(null);
+  // overlap analysis panel
+  const [showOverlap, setShowOverlap] = useState(false);
+  const [highlightedPair, setHighlightedPair] = useState<[string, string] | null>(null);
+  const [creatingTask, setCreatingTask] = useState<string | null>(null);
+  const [taskCreated, setTaskCreated] = useState<string | null>(null);
+  // overlap filters
+  const [minSimilarity, setMinSimilarity] = useState(0.70);
+  const [sameNameOnly, setSameNameOnly] = useState(false);
+  // LLM triage
+  const [triageResults, setTriageResults] = useState<Record<string, TriageResult>>({});
+  const [triaging, setTriaging] = useState<Record<string, boolean>>({});
 
   const showSemanticRef = useRef(false);
   const semanticEdgesRef = useRef<Array<{ source: string; target: string; similarity: number }>>([]);
+  const showStructuralRef = useRef(true);
+  const nodeClusterMapRef = useRef<Record<string, string>>({});
+
+  // Cross-cluster node lookup — built once when fullGraph loads
+  const nodeClusterMap = useMemo(
+    () => Object.fromEntries(fullGraph?.nodes.map((n) => [n.id, n.cluster]) ?? []) as Record<string, string>,
+    [fullGraph],
+  );
+
+  // Cross-cluster semantic edges — what semantic mode actually shows
+  const crossSemanticEdges = useMemo(() => {
+    const hasMap = fullGraph != null;
+    if (!hasMap) return semanticEdges;
+    return semanticEdges.filter((e) => {
+      const sc = nodeClusterMap[e.source];
+      const tc = nodeClusterMap[e.target];
+      return sc && tc && sc !== tc;
+    });
+  }, [semanticEdges, nodeClusterMap, fullGraph]);
+
+  // Overlap analysis groups — ranked cross-cluster pairs by connection count
+  const overlapGroups = useMemo((): OverlapGroup[] => {
+    if (!fullGraph || !crossSemanticEdges.length) return [];
+    const nodeMap = Object.fromEntries(fullGraph.nodes.map((n) => [n.id, n]));
+    const basename = (f: string) => f.split("/").pop() ?? f;
+    const groups: Record<string, { clusterA: string; clusterB: string; edges: OverlapPair[] }> = {};
+    for (const edge of crossSemanticEdges) {
+      const sc = nodeClusterMap[edge.source];
+      const tc = nodeClusterMap[edge.target];
+      if (!sc || !tc || sc === tc) continue;
+      const ca = sc <= tc ? sc : tc;
+      const cb = sc <= tc ? tc : sc;
+      const key = `${ca}___${cb}`;
+      if (!groups[key]) groups[key] = { clusterA: ca, clusterB: cb, edges: [] };
+      const na = nodeMap[edge.source];
+      const nb = nodeMap[edge.target];
+      const fileA = na?.source_file ?? "";
+      const fileB = nb?.source_file ?? "";
+      groups[key].edges.push({
+        source: edge.source, target: edge.target,
+        similarity: edge.similarity,
+        labelA: na?.label ?? edge.source,
+        labelB: nb?.label ?? edge.target,
+        fileA,
+        fileB,
+        sameName: !!fileA && !!fileB && basename(fileA) === basename(fileB),
+      });
+    }
+    return Object.values(groups)
+      .map((g) => {
+        const avg = g.edges.reduce((s, e) => s + e.similarity, 0) / g.edges.length;
+        const maxSim = Math.max(...g.edges.map((e) => e.similarity));
+        const sameNameCount = g.edges.filter((e) => e.sameName).length;
+        // sort: same-name first, then by similarity desc
+        const sorted = [...g.edges].sort((a, b) => {
+          if (a.sameName !== b.sameName) return a.sameName ? -1 : 1;
+          return b.similarity - a.similarity;
+        });
+        return {
+          clusterA: g.clusterA,
+          clusterB: g.clusterB,
+          edgeCount: g.edges.length,
+          avgSimilarity: Math.round(avg * 100) / 100,
+          maxSimilarity: Math.round(maxSim * 100) / 100,
+          sameNameCount,
+          topPairs: sorted.slice(0, 6),
+        };
+      })
+      // sort: groups with same-name matches first, then by edge count
+      .sort((a, b) => {
+        if ((a.sameNameCount > 0) !== (b.sameNameCount > 0)) return a.sameNameCount > 0 ? -1 : 1;
+        return b.edgeCount - a.edgeCount;
+      });
+  }, [crossSemanticEdges, nodeClusterMap, fullGraph]);
+
+  // Filtered view of groups based on user-selected thresholds
+  const filteredGroups = useMemo(() =>
+    overlapGroups.filter((g) => {
+      if (g.maxSimilarity < minSimilarity) return false;
+      if (sameNameOnly && g.sameNameCount === 0) return false;
+      return true;
+    }),
+    [overlapGroups, minSimilarity, sameNameOnly],
+  );
 
   // Keep refs current
   useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
@@ -609,6 +765,8 @@ export function Map({ onNavigateSettings }: MapProps) {
   useEffect(() => { summaryRef.current = summary; }, [summary]);
   useEffect(() => { showSemanticRef.current = showSemantic; }, [showSemantic]);
   useEffect(() => { semanticEdgesRef.current = semanticEdges; }, [semanticEdges]);
+  useEffect(() => { showStructuralRef.current = showStructural; }, [showStructural]);
+  useEffect(() => { nodeClusterMapRef.current = nodeClusterMap; }, [nodeClusterMap]); // eslint-disable-line
 
   // Fetch decisions (non-critical — silently ignored if backend down)
   useEffect(() => {
@@ -624,17 +782,15 @@ export function Map({ onNavigateSettings }: MapProps) {
       .catch(() => {});
   }, []);
 
-  // Fetch cluster selection for source chip
+  // Fetch cluster/source selection data
   useEffect(() => {
     fetch(`${API}/cluster-selection`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
-        const total: number = data.available_sources.length;
-        const active: number = (data.selection.sources as string[]).filter((s: string) =>
-          (data.available_sources as string[]).includes(s)
-        ).length;
-        setSourceChip({ active, total });
+        setClusterData(data);
+        const sel = data.selection?.clusters;
+        setSelectedClusters(sel ? new Set<string>(sel) : null);
       })
       .catch(() => {});
   }, []);
@@ -651,7 +807,8 @@ export function Map({ onNavigateSettings }: MapProps) {
       .catch(() => {});
   }, []);
 
-  // Add/remove semantic edges on the live Cytoscape instance when toggle changes
+  // Add/remove semantic edges on the live Cytoscape instance when toggle changes.
+  // Shows only cross-cluster edges (inter-repo), capped at top-2000 by similarity.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || viewMode !== "full") return;
@@ -659,25 +816,40 @@ export function Map({ onNavigateSettings }: MapProps) {
       cy.elements('[?semantic]').remove();
       return;
     }
-    if (!semanticEdges.length) return;
+    if (!crossSemanticEdges.length) return;
     const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
-    const toAdd = semanticEdges
-      .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-      .filter((e) => cy.$id(`sem__${e.source}__${e.target}`).length === 0)
-      .map((e) => ({
-        group: "edges" as const,
-        data: {
-          id: `sem__${e.source}__${e.target}`,
-          source: e.source,
-          target: e.target,
-          similarity: e.similarity,
-          edgeWidth: 1.2,
-          semantic: true,
-        },
-        classes: "semantic-edge",
-      }));
-    if (toAdd.length) cy.add(toAdd);
-  }, [showSemantic, semanticEdges, viewMode]);
+    const sorted = [...crossSemanticEdges].sort((a, b) => b.similarity - a.similarity).slice(0, 2000);
+    cy.batch(() => {
+      const existingIds = new Set(cy.edges('[?semantic]').map((e) => e.id()));
+      const toAdd = sorted
+        .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+        .filter((e) => !existingIds.has(`sem__${e.source}__${e.target}`))
+        .map((e) => ({
+          group: "edges" as const,
+          data: {
+            id: `sem__${e.source}__${e.target}`,
+            source: e.source,
+            target: e.target,
+            similarity: e.similarity,
+            semantic: true,
+          },
+          classes: "semantic-edge",
+        }));
+      if (toAdd.length) cy.add(toAdd);
+    });
+  }, [showSemantic, crossSemanticEdges, viewMode]);
+
+  // Toggle structural edges on/off (class swap — no layout restart)
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || viewMode !== "full") return;
+    const structEdges = cy.edges(":not(.semantic-edge)");
+    if (showStructural) {
+      structEdges.removeClass("struct-hidden");
+    } else {
+      structEdges.addClass("struct-hidden");
+    }
+  }, [showStructural, viewMode]);
 
   // Recompute god nodes whenever summary changes
   useEffect(() => {
@@ -739,9 +911,9 @@ export function Map({ onNavigateSettings }: MapProps) {
     if (viewMode === "full") fetchFullGraph();
   }, [viewMode, fetchFullGraph]);
 
-  // Init / reinit Cytoscape when summary data changes
+  // Init / reinit Cytoscape when summary data changes (summary mode only)
   useEffect(() => {
-    if (!containerRef.current || !summary) return;
+    if (!containerRef.current || !summary || viewMode !== "summary") return;
 
     ensureExtensions();
 
@@ -835,7 +1007,7 @@ export function Map({ onNavigateSettings }: MapProps) {
       cy.destroy();
       cyRef.current = null;
     };
-  }, [summary, decisions, godNodeIds]);
+  }, [summary, decisions, godNodeIds, viewMode]);
 
   // Full-graph Cytoscape init
   useEffect(() => {
@@ -847,7 +1019,7 @@ export function Map({ onNavigateSettings }: MapProps) {
 
     const cy = cytoscape({
       container: containerRef.current,
-      elements: buildFullElements(fullGraph, filter),
+      elements: buildFullElements(fullGraph, filter, selectedClusters),
       style: FULL_CY_STYLE as any,
       layout: FULL_FCOSE_LAYOUT as any,
       pixelRatio: 1,
@@ -882,19 +1054,29 @@ export function Map({ onNavigateSettings }: MapProps) {
     cy.one("layoutstop", () => {
       if (showSemanticRef.current && semanticEdgesRef.current.length > 0) {
         const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
-        const toAdd = semanticEdgesRef.current
+        const clusterMap = nodeClusterMapRef.current;
+        const hasMap = Object.keys(clusterMap).length > 0;
+        const crossEdges = hasMap
+          ? semanticEdgesRef.current.filter((e) => {
+              const sc = clusterMap[e.source];
+              const tc = clusterMap[e.target];
+              return sc && tc && sc !== tc;
+            })
+          : semanticEdgesRef.current;
+        const sorted = [...crossEdges].sort((a, b) => b.similarity - a.similarity).slice(0, 2000);
+        const toAdd = sorted
           .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
           .map((e) => ({
             group: "edges" as const,
-            data: { id: `sem__${e.source}__${e.target}`, source: e.source, target: e.target, similarity: e.similarity, edgeWidth: 1.2, semantic: true },
+            data: { id: `sem__${e.source}__${e.target}`, source: e.source, target: e.target, similarity: e.similarity, semantic: true },
             classes: "semantic-edge",
           }));
-        if (toAdd.length) cy.add(toAdd);
+        if (toAdd.length) cy.batch(() => cy.add(toAdd));
       }
     });
 
     return () => { cy.destroy(); cyRef.current = null; };
-  }, [viewMode, fullGraph, filter]);
+  }, [viewMode, fullGraph, filter, selectedClusters]);
 
   // Apply type filter via class toggling (no re-layout) — summary mode only.
   // Full mode re-runs its init effect to rebuild elements via buildFullElements.
@@ -926,6 +1108,129 @@ export function Map({ onNavigateSettings }: MapProps) {
     }
   }, [pathMode]);
 
+  // Highlight a specific cluster pair's semantic edges on the map
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || viewMode !== "full") return;
+    if (!highlightedPair) {
+      cy.batch(() => {
+        cy.edges(".semantic-edge").removeClass("faded").removeClass("highlighted");
+      });
+      return;
+    }
+    const [ca, cb] = highlightedPair;
+    const clusterMap = nodeClusterMapRef.current;
+    cy.batch(() => {
+      cy.edges(".semantic-edge").forEach((e: any) => {
+        const src = e.data("source") as string;
+        const tgt = e.data("target") as string;
+        const sc = clusterMap[src];
+        const tc = clusterMap[tgt];
+        const inPair = (sc === ca && tc === cb) || (sc === cb && tc === ca);
+        if (inPair) {
+          e.removeClass("faded").removeClass("sem-browse").addClass("highlighted");
+        } else {
+          e.addClass("faded").removeClass("highlighted").removeClass("sem-browse");
+        }
+      });
+    });
+  }, [highlightedPair, viewMode]);
+
+  // Browse mode: dim all semantic edges when overlap panel is open but no pair is selected.
+  // This prevents the "all 1988 edges explode back" sensation when clearing a highlight.
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || viewMode !== "full") return;
+    if (showOverlap && !highlightedPair) {
+      cy.batch(() => {
+        cy.edges(".semantic-edge")
+          .removeClass("faded").removeClass("highlighted")
+          .addClass("sem-browse");
+      });
+    } else {
+      cy.edges(".semantic-edge").removeClass("sem-browse");
+    }
+  }, [showOverlap, highlightedPair, viewMode, showSemantic]);
+
+  // Clear highlighted pair when semantic is turned off
+  useEffect(() => {
+    if (!showSemantic) setHighlightedPair(null);
+  }, [showSemantic]);
+
+  async function createOverlapTask(group: OverlapGroup) {
+    const key = `${group.clusterA}${group.clusterB}`;
+    const triageKey = `${group.clusterA}___${group.clusterB}`;
+    const triage = triageResults[triageKey];
+    setCreatingTask(key);
+    try {
+      await fetch(`${API}/recommendations/from-overlap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cluster_a: group.clusterA,
+          cluster_b: group.clusterB,
+          edge_count: group.edgeCount,
+          avg_similarity: group.avgSimilarity,
+          top_pairs: group.topPairs.map((p) => ({
+            label_a: p.labelA, label_b: p.labelB,
+            file_a: p.fileA, file_b: p.fileB,
+            similarity: p.similarity,
+          })),
+          ...(triage ? {
+            triage_verdict: triage.verdict,
+            triage_action: triage.action,
+            triage_confidence: triage.confidence,
+          } : {}),
+        }),
+      });
+      setTaskCreated(key);
+      setTimeout(() => setTaskCreated((k) => (k === key ? null : k)), 3500);
+    } catch {
+      // silent — backend may not be ready
+    } finally {
+      setCreatingTask(null);
+    }
+  }
+
+  async function triageOverlapGroup(group: OverlapGroup) {
+    const key = `${group.clusterA}___${group.clusterB}`;
+    setTriaging((t) => ({ ...t, [key]: true }));
+    try {
+      const res = await fetch(`${API}/overlap/triage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cluster_a: group.clusterA,
+          cluster_b: group.clusterB,
+          edge_count: group.edgeCount,
+          avg_similarity: group.avgSimilarity,
+          top_pairs: group.topPairs.map((p) => ({
+            label_a: p.labelA, label_b: p.labelB,
+            file_a: p.fileA, file_b: p.fileB,
+            similarity: p.similarity,
+            same_name: p.sameName,
+          })),
+        }),
+      });
+      if (res.ok) {
+        const data: TriageResult = await res.json();
+        setTriageResults((r) => ({ ...r, [key]: data }));
+      }
+    } catch { }
+    finally {
+      setTriaging((t) => { const n = { ...t }; delete n[key]; return n; });
+    }
+  }
+
+  async function triageAll() {
+    for (const group of filteredGroups) {
+      const key = `${group.clusterA}___${group.clusterB}`;
+      if (!triageResults[key] && !triaging[key]) {
+        await triageOverlapGroup(group);
+      }
+    }
+  }
+
   function handleFit() {
     cyRef.current?.fit(undefined, 80);
   }
@@ -933,6 +1238,33 @@ export function Map({ onNavigateSettings }: MapProps) {
   function handleDrillDown(node: SummaryNode) {
     if (!node.is_drillable) return;
     fetchSummary(node.id);
+  }
+
+  async function toggleCluster(clusterId: string) {
+    if (!clusterData) return;
+    let next: Set<string> | null;
+    if (selectedClusters === null) {
+      const all = new Set(clusterData.available_clusters.map((c) => c.id));
+      all.delete(clusterId);
+      next = all;
+    } else {
+      next = new Set(selectedClusters);
+      if (next.has(clusterId)) {
+        next.delete(clusterId);
+      } else {
+        next.add(clusterId);
+        if (next.size === clusterData.available_clusters.length) next = null;
+      }
+    }
+    setSelectedClusters(next);
+    try {
+      await fetch(`${API}/cluster-selection`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sources: clusterData.selection.sources, clusters: next ? [...next] : null }),
+      });
+      fetchSummary();
+    } catch {}
   }
 
   function startPathFrom(nodeId: string) {
@@ -974,19 +1306,44 @@ export function Map({ onNavigateSettings }: MapProps) {
               {summary.total_nodes.toLocaleString()}&thinsp;nodes
             </span>
           )}
-          {sourceChip && sourceChip.total > 1 && (
-            <button
-              className={`map-source-chip${sourceChip.active < sourceChip.total ? " map-source-chip-partial" : ""}`}
-              onClick={onNavigateSettings}
-              title="Manage knowledge sources in Settings"
-              type="button"
-            >
-              {sourceChip.active}&thinsp;of&thinsp;{sourceChip.total}&thinsp;sources active
-            </button>
+          {clusterData && clusterData.available_clusters.length > 0 && (
+            <div style={{ position: "relative" }}>
+              <button
+                className={`map-source-chip${selectedClusters !== null ? " map-source-chip-partial" : ""}`}
+                onClick={() => setShowSourcePanel((s) => !s)}
+                title="Select which repositories are shown on the map"
+                type="button"
+              >
+                {selectedClusters === null
+                  ? `${clusterData.available_clusters.length} repos`
+                  : `${selectedClusters.size} of ${clusterData.available_clusters.length} repos`}
+              </button>
+              {showSourcePanel && (
+                <div className="map-source-panel">
+                  <div className="map-source-panel-head">Repositories</div>
+                  {clusterData.available_clusters.map((c) => {
+                    const active = selectedClusters === null || selectedClusters.has(c.id);
+                    return (
+                      <label key={c.id} className="map-source-row">
+                        <input
+                          type="checkbox"
+                          checked={active}
+                          onChange={() => toggleCluster(c.id)}
+                        />
+                        <span className="map-source-name">{c.id}</span>
+                        <span className="map-source-count">{c.node_count.toLocaleString()}</span>
+                      </label>
+                    );
+                  })}
+                  <button className="map-source-done" onClick={() => setShowSourcePanel(false)}>Done</button>
+                </div>
+              )}
+            </div>
           )}
         </div>
 
         <div className="map-toolbar-right">
+          {/* Type filter */}
           <div className="map-filter-group">
             {(["all", "code", "document"] as Filter[]).map((f) => (
               <button
@@ -999,46 +1356,100 @@ export function Map({ onNavigateSettings }: MapProps) {
             ))}
           </div>
 
+          {/* View mode — both options always visible */}
+          <div className="map-filter-group">
+            {(["summary", "full"] as ViewMode[]).map((m) => (
+              <button
+                key={m}
+                className={`map-filter-btn${viewMode === m ? " map-filter-active" : ""}`}
+                onClick={() => {
+                  setViewMode(m);
+                  setSelected(null);
+                  setSelectedFull(null);
+                }}
+              >
+                {m === "summary" ? "Summary" : fullLoading ? "Loading…" : "Full"}
+              </button>
+            ))}
+          </div>
+
+          {/* Edge layer toggles — always visible; dimmed when not in Full mode */}
           <button
-            className={`map-path-btn${viewMode === "full" ? " map-path-active" : ""}`}
-            onClick={() => {
-              setViewMode((m) => m === "full" ? "summary" : "full");
-              setSelected(null);
-              setSelectedFull(null);
-            }}
-            title="Toggle full node graph (all 533 nodes)"
+            className="map-path-btn"
+            onClick={() => { if (viewMode === "full") setShowStructural((s) => !s); }}
+            title={viewMode === "full" ? "Toggle structural (import/dependency) edges" : "Switch to Full graph to toggle structural edges"}
+            style={
+              viewMode !== "full"
+                ? { opacity: 0.3, cursor: "default" }
+                : !showStructural
+                ? { borderColor: "#2a2a3a", color: "#3a4060", background: "transparent" }
+                : { borderColor: "#4a7abf", color: "#4a7abf" }
+            }
           >
-            {fullLoading ? "Loading…" : viewMode === "full" ? "Summary" : "Full Graph"}
+            Structural
+          </button>
+          <button
+            className="map-path-btn"
+            onClick={() => { if (viewMode === "full") setShowSemantic((s) => !s); }}
+            title={
+              viewMode !== "full"
+                ? "Switch to Full graph to toggle semantic edges"
+                : crossSemanticEdges.length
+                ? `${showSemantic ? "Hide" : "Show"} ${crossSemanticEdges.length} cross-repo similarity edges (${semanticMeta?.edge_count ?? 0} total)`
+                : semanticMeta?.edge_count
+                ? "Loading cross-repo edges…"
+                : "No semantic edges yet — run Semantic Analysis in Settings"
+            }
+            style={
+              viewMode !== "full"
+                ? { opacity: 0.3, cursor: "default" }
+                : showSemantic
+                ? { borderColor: "#22c55e", color: "#22c55e", background: "rgba(34,197,94,0.07)" }
+                : {}
+            }
+          >
+            Semantic{crossSemanticEdges.length ? ` (${crossSemanticEdges.length})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
+          </button>
+          <button
+            className="map-path-btn"
+            onClick={() => {
+              if (viewMode !== "full") return;
+              setShowOverlap((s) => !s);
+              if (showOverlap) setHighlightedPair(null);
+            }}
+            title={
+              viewMode !== "full"
+                ? "Switch to Full graph for overlap analysis"
+                : !crossSemanticEdges.length
+                ? "Enable Semantic overlay to run overlap analysis"
+                : `${showOverlap ? "Close" : "Open"} overlap analysis — ${overlapGroups.length} cluster pairs detected`
+            }
+            style={
+              viewMode !== "full"
+                ? { opacity: 0.3, cursor: "default" }
+                : showOverlap
+                ? { borderColor: "#f59e0b", color: "#f59e0b", background: "rgba(245,158,11,0.07)" }
+                : crossSemanticEdges.length
+                ? { borderColor: "#7a6020", color: "#a08030" }
+                : { opacity: 0.4, cursor: "default" }
+            }
+          >
+            Overlap{overlapGroups.length ? ` (${overlapGroups.length})` : ""}
           </button>
 
-          {viewMode === "full" && (
-            <button
-              className={`map-path-btn${showSemantic ? " map-path-active" : ""}`}
-              onClick={() => setShowSemantic((s) => !s)}
-              title={
-                semanticMeta?.edge_count
-                  ? `${showSemantic ? "Hide" : "Show"} ${semanticMeta.edge_count} semantic similarity edges`
-                  : "No semantic edges yet — run Semantic Analysis in Settings"
-              }
-              style={showSemantic ? { borderColor: "#a855f7", color: "#a855f7" } : {}}
-            >
-              Semantic{semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
-            </button>
-          )}
-
-          {viewMode === "summary" && (
-            <button
-              className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
-              onClick={() => setPathMode((p) => !p)}
-              title="Trace shortest path between two nodes"
-            >
-              {pathMode
-                ? pathSource
-                  ? "Click target…"
-                  : "Click source…"
-                : "Path"}
-            </button>
-          )}
+          {/* Path tracer — always visible; dimmed in Full mode */}
+          <button
+            className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
+            onClick={() => { if (viewMode === "summary") setPathMode((p) => !p); }}
+            title={viewMode === "summary" ? "Trace shortest path between two nodes" : "Switch to Summary view to trace paths"}
+            style={viewMode !== "summary" ? { opacity: 0.3, cursor: "default" } : {}}
+          >
+            {pathMode
+              ? pathSource
+                ? "Click target…"
+                : "Click source…"
+              : "Path"}
+          </button>
 
           <button
             className="map-fit-btn"
@@ -1056,10 +1467,10 @@ export function Map({ onNavigateSettings }: MapProps) {
         <div className="map-canvas-wrap">
           <div className="map-canvas" ref={containerRef} />
 
-          {loading && (
+          {(loading || (fullLoading && viewMode === "full")) && (
             <div className="map-overlay">
               <div className="map-spinner" />
-              <span>Building graph summary…</span>
+              <span>{fullLoading && viewMode === "full" ? "Loading full graph…" : "Building graph summary…"}</span>
               <span className="map-overlay-sub">First load may take a moment</span>
             </div>
           )}
@@ -1089,8 +1500,186 @@ export function Map({ onNavigateSettings }: MapProps) {
           )}
         </div>
 
+        {/* Overlap analysis panel */}
+        {showOverlap && viewMode === "full" && (
+          <aside className="map-panel map-overlap-panel">
+            <div className="map-panel-head">
+              <span className="map-panel-name">Overlap Analysis</span>
+              <button
+                className="map-panel-close"
+                onClick={() => { setShowOverlap(false); setHighlightedPair(null); }}
+                aria-label="Close"
+              >✕</button>
+            </div>
+            {!crossSemanticEdges.length ? (
+              <div className="map-overlap-empty">
+                Enable the Semantic overlay first to see cross-repo overlap analysis.
+              </div>
+            ) : overlapGroups.length === 0 ? (
+              <div className="map-overlap-empty">No cross-repo overlaps detected.</div>
+            ) : (
+              <>
+                <div className="map-overlap-summary">
+                  <span>
+                    {filteredGroups.length}
+                    {filteredGroups.length !== overlapGroups.length ? `/${overlapGroups.length}` : ""} pairs
+                  </span>
+                  <span className="map-overlap-dot">·</span>
+                  <span>{crossSemanticEdges.length} connections</span>
+                  {overlapGroups.some((g) => g.sameNameCount > 0) && (
+                    <>
+                      <span className="map-overlap-dot">·</span>
+                      <span className="map-overlap-samename-summary">
+                        {overlapGroups.filter((g) => g.sameNameCount > 0).length} same-name
+                      </span>
+                    </>
+                  )}
+                </div>
+                {/* Similarity filter chips */}
+                <div className="map-overlap-filters">
+                  <span className="map-overlap-filter-label">≥</span>
+                  {[0.70, 0.80, 0.85, 0.90].map((v) => (
+                    <button
+                      key={v}
+                      className={`map-overlap-filter-chip${minSimilarity === v ? " map-overlap-filter-chip-on" : ""}`}
+                      onClick={() => setMinSimilarity(v)}
+                    >
+                      {Math.round(v * 100)}%
+                    </button>
+                  ))}
+                  <button
+                    className={`map-overlap-filter-chip${sameNameOnly ? " map-overlap-filter-chip-warn" : ""}`}
+                    onClick={() => setSameNameOnly((s) => !s)}
+                    title="Show only pairs with matching filenames across repos"
+                  >
+                    Same-name
+                  </button>
+                </div>
+                {/* Triage bar */}
+                <div className="map-overlap-triage-bar">
+                  <span className="map-overlap-hint-inline">LLM: duplicate / reference / related</span>
+                  <button
+                    className="map-overlap-btn map-overlap-btn-triage"
+                    onClick={triageAll}
+                    disabled={Object.keys(triaging).length > 0}
+                  >
+                    {Object.keys(triaging).length > 0 ? "Triaging…" : "Triage All"}
+                  </button>
+                </div>
+                <div className="map-overlap-list">
+                  {filteredGroups.map((g) => {
+                    const taskKey = `${g.clusterA}${g.clusterB}`;
+                    const triageKey = `${g.clusterA}___${g.clusterB}`;
+                    const isActive = highlightedPair?.[0] === g.clusterA && highlightedPair?.[1] === g.clusterB;
+                    const created = taskCreated === taskKey;
+                    const creating = creatingTask === taskKey;
+                    const triage = triageResults[triageKey];
+                    const isTriaging = triaging[triageKey] ?? false;
+                    return (
+                      <div
+                        key={taskKey}
+                        className={[
+                          "map-overlap-group",
+                          isActive ? "map-overlap-group-active" : "",
+                          g.sameNameCount > 0 ? "map-overlap-group-flagged" : "",
+                        ].filter(Boolean).join(" ")}
+                      >
+                        <div className="map-overlap-group-head">
+                          <div className="map-overlap-pair-title">
+                            <span className="map-overlap-cluster" style={{ color: clusterColor(g.clusterA) }}>{g.clusterA}</span>
+                            <span className="map-overlap-arr">↔</span>
+                            <span className="map-overlap-cluster" style={{ color: clusterColor(g.clusterB) }}>{g.clusterB}</span>
+                          </div>
+                          <div className="map-overlap-counts">
+                            {g.sameNameCount > 0 && (
+                              <span
+                                className="map-overlap-samename-badge"
+                                title={`${g.sameNameCount} pair${g.sameNameCount > 1 ? "s" : ""} share the same filename`}
+                              >
+                                ≡ {g.sameNameCount}
+                              </span>
+                            )}
+                            <span className="map-overlap-edge-count">{g.edgeCount}</span>
+                            <span className="map-overlap-sim-pct">{Math.round(g.avgSimilarity * 100)}%</span>
+                          </div>
+                        </div>
+                        {triage && (
+                          <div className={`map-overlap-verdict map-overlap-verdict-${triage.verdict}`}>
+                            <div className="map-overlap-verdict-head">
+                              <span className="map-overlap-verdict-label">
+                                {triage.verdict === "duplicate" ? "⚡ Duplicate" :
+                                 triage.verdict === "reference" ? "→ Reference" :
+                                 triage.verdict === "related" ? "~ Related" : "? Unknown"}
+                              </span>
+                              <span className="map-overlap-verdict-conf">{Math.round(triage.confidence * 100)}%</span>
+                            </div>
+                            {triage.reason && <p className="map-overlap-verdict-reason">{triage.reason}</p>}
+                            {triage.action && (
+                              <p className="map-overlap-verdict-action">
+                                <span className="map-overlap-verdict-action-label">Next step: </span>
+                                {triage.action}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                        <div className="map-overlap-pairs-list">
+                          {g.topPairs.map((p, i) => (
+                            <div
+                              key={i}
+                              className={`map-overlap-pair-row${p.sameName ? " map-overlap-pair-row-samename" : ""}`}
+                            >
+                              <span className="map-overlap-pair-label" title={p.fileA}>{p.labelA}</span>
+                              <span className="map-overlap-pair-sep">↔</span>
+                              <span className="map-overlap-pair-label" title={p.fileB}>{p.labelB}</span>
+                              {p.sameName && (
+                                <span className="map-overlap-pair-samename" title="Same filename in different repos">≡</span>
+                              )}
+                              <span className="map-overlap-pair-sim">{Math.round(p.similarity * 100)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="map-overlap-actions">
+                          <button
+                            className={`map-overlap-btn${isActive ? " map-overlap-btn-lit" : ""}`}
+                            onClick={() => {
+                              if (!showSemantic) setShowSemantic(true);
+                              setHighlightedPair(isActive ? null : [g.clusterA, g.clusterB]);
+                            }}
+                          >
+                            {isActive ? "Clear" : "Highlight"}
+                          </button>
+                          <button
+                            className={`map-overlap-btn map-overlap-btn-triage${triage ? ` map-overlap-verdict-${triage.verdict}-btn` : ""}`}
+                            onClick={() => triageOverlapGroup(g)}
+                            disabled={isTriaging}
+                            title="Ask local LLM to classify this overlap"
+                          >
+                            {isTriaging ? "…" : triage ? "Re-triage" : "Triage"}
+                          </button>
+                          <button
+                            className={`map-overlap-btn map-overlap-btn-primary${created ? " map-overlap-btn-done" : ""}`}
+                            onClick={() => createOverlapTask(g)}
+                            disabled={creating || created}
+                            title={triage ? `Create task: ${triage.action || triage.verdict}` : "Create consolidation task"}
+                          >
+                            {created ? "✓" : creating ? "…" : triage
+                              ? (triage.verdict === "duplicate" ? "Task: Merge →" :
+                                 triage.verdict === "reference" ? "Task: Review →" :
+                                 triage.verdict === "related" ? "Task: Document →" : "Task →")
+                              : "Task →"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </aside>
+        )}
+
         {/* Full-graph inspect panel */}
-        {selectedFull && viewMode === "full" && (
+        {selectedFull && viewMode === "full" && !showOverlap && (
           <aside className="map-panel">
             <div className="map-panel-head">
               <span className="map-panel-name">{selectedFull.label}</span>

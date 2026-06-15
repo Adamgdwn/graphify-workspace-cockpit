@@ -1864,6 +1864,210 @@ def get_semantic_edges() -> dict:
         return {"edges": [], "model": None, "threshold": None, "created_at": None}
 
 
+@app.get("/graph/overlap-report")
+def get_overlap_report() -> dict:
+    """Compute cross-cluster semantic overlap groups from stored semantic edges + graph."""
+    if not SEMANTIC_EDGES_FILE.exists():
+        return {"groups": [], "total_cross_edges": 0, "created_at": None}
+    try:
+        sem_data = json.loads(SEMANTIC_EDGES_FILE.read_text())
+    except Exception:
+        return {"groups": [], "total_cross_edges": 0, "created_at": None}
+
+    edges = sem_data.get("edges", [])
+    if not edges:
+        return {"groups": [], "total_cross_edges": 0, "created_at": sem_data.get("created_at")}
+
+    try:
+        g = _load_graph()
+    except Exception:
+        return {"groups": [], "total_cross_edges": 0, "created_at": sem_data.get("created_at")}
+
+    def _cl(sf: str) -> str:
+        return sf.replace("\\", "/").split("/")[0] if sf else "other"
+
+    node_meta: dict[str, dict] = {
+        n["id"]: {"label": n.get("label", n["id"]), "cluster": _cl(n.get("source_file", "")), "source_file": n.get("source_file", "")}
+        for n in g.get("nodes", [])
+    }
+
+    groups: dict[str, dict] = {}
+    total_cross = 0
+
+    for edge in edges:
+        sm = node_meta.get(edge["source"])
+        tm = node_meta.get(edge["target"])
+        if not sm or not tm:
+            continue
+        sc, tc = sm["cluster"], tm["cluster"]
+        if sc == tc:
+            continue
+        total_cross += 1
+        ca, cb = (sc, tc) if sc <= tc else (tc, sc)
+        key = f"{ca}___{cb}"
+        if key not in groups:
+            groups[key] = {"cluster_a": ca, "cluster_b": cb, "edge_count": 0, "total_sim": 0.0, "pairs": []}
+        groups[key]["edge_count"] += 1
+        groups[key]["total_sim"] += edge["similarity"]
+        groups[key]["pairs"].append({
+            "source": edge["source"], "target": edge["target"],
+            "label_a": sm["label"], "label_b": tm["label"],
+            "file_a": sm["source_file"], "file_b": tm["source_file"],
+            "similarity": round(edge["similarity"], 4),
+        })
+
+    result: list[dict] = []
+    for gd in sorted(groups.values(), key=lambda x: -x["edge_count"]):
+        top = sorted(gd["pairs"], key=lambda p: -p["similarity"])[:5]
+        avg_sim = gd["total_sim"] / gd["edge_count"] if gd["edge_count"] else 0.0
+        result.append({
+            "cluster_a": gd["cluster_a"],
+            "cluster_b": gd["cluster_b"],
+            "edge_count": gd["edge_count"],
+            "avg_similarity": round(avg_sim, 4),
+            "top_pairs": top,
+        })
+
+    return {"groups": result, "total_cross_edges": total_cross, "created_at": sem_data.get("created_at")}
+
+
+class CreateOverlapRecommendationRequest(BaseModel):
+    cluster_a: str
+    cluster_b: str
+    edge_count: int
+    avg_similarity: float
+    top_pairs: list[dict]
+    triage_verdict: Optional[str] = None   # "duplicate" | "reference" | "related"
+    triage_action: Optional[str] = None
+    triage_confidence: Optional[float] = None
+
+
+class TriageOverlapRequest(BaseModel):
+    cluster_a: str
+    cluster_b: str
+    edge_count: int
+    avg_similarity: float
+    top_pairs: list[dict]
+    model: Optional[str] = None
+
+
+@app.post("/overlap/triage")
+def triage_overlap(req: TriageOverlapRequest) -> dict:
+    """Ask the local LLM to classify overlap as duplicate/reference/related."""
+    model = (req.model or RECOMMEND_MODEL_DEFAULT).strip()
+    same_name_pairs = [p for p in req.top_pairs if p.get("same_name")]
+    pairs_text = "\n".join(
+        f"- '{p.get('label_a', '?')}' ↔ '{p.get('label_b', '?')}'  "
+        f"[{round(p.get('similarity', 0) * 100)}% similar"
+        f"{', same filename' if p.get('same_name') else ''}]"
+        for p in req.top_pairs[:6]
+    )
+    same_name_note = (
+        f"\nNote: {len(same_name_pairs)} pairs share the same filename — strong duplicate signal."
+        if same_name_pairs else ""
+    )
+    prompt = (
+        f"You are analysing code-repository overlap. Two repository clusters have "
+        f"{req.edge_count} semantically similar content connections "
+        f"(avg {round(req.avg_similarity * 100)}% cosine similarity).{same_name_note}\n\n"
+        f"Cluster A: {req.cluster_a}\n"
+        f"Cluster B: {req.cluster_b}\n\n"
+        f"Top overlapping content pairs:\n{pairs_text}\n\n"
+        f"Classify this overlap as exactly ONE of:\n"
+        f'- "duplicate": content is nearly identical — should be merged into one canonical location\n'
+        f'- "reference": one document intentionally references or extends the other — keep both\n'
+        f'- "related": similar topic but different enough in purpose to keep separate\n\n'
+        f"Return ONLY valid JSON with no extra text:\n"
+        f'{{"verdict":"duplicate"|"reference"|"related","confidence":0.0-1.0,'
+        f'"reason":"one sentence","action":"one sentence recommended action"}}'
+    )
+    try:
+        raw = _call_ollama(prompt, model, timeout=90)
+        data = json.loads(raw)
+        verdict = data.get("verdict", "related")
+        if verdict not in ("duplicate", "reference", "related"):
+            verdict = "related"
+        return {
+            "verdict": verdict,
+            "confidence": round(float(data.get("confidence", 0.5)), 2),
+            "reason": str(data.get("reason", ""))[:300],
+            "action": str(data.get("action", ""))[:400],
+            "model": model,
+        }
+    except Exception as exc:
+        return {
+            "verdict": "unknown",
+            "confidence": 0.0,
+            "reason": f"Triage failed: {exc}",
+            "action": "",
+            "model": model,
+        }
+
+
+@app.post("/recommendations/from-overlap", status_code=201)
+def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, request: Request) -> dict:
+    """Create a recommendation from overlap analysis, enriched with triage verdict when available."""
+    pairs_text = "\n".join(
+        f"- {p.get('label_a', '?')} ↔ {p.get('label_b', '?')} [{round(p.get('similarity', 0) * 100)}% similar]"
+        for p in req.top_pairs[:5]
+    )
+    now = datetime.now(tz=timezone.utc).isoformat()
+    effort = "medium" if req.edge_count > 50 else "low"
+
+    verdict = req.triage_verdict or "duplicate"
+    title_prefix = {
+        "duplicate": "Merge",
+        "reference": "Review Cross-Reference",
+        "related": "Document Relationship",
+    }.get(verdict, "Consolidate")
+    title = f"{title_prefix}: {req.cluster_a} ↔ {req.cluster_b} ({req.edge_count} overlapping nodes)"
+
+    triage_note = ""
+    if req.triage_verdict:
+        conf_pct = round((req.triage_confidence or 0) * 100)
+        triage_note = f"\n\nLLM triage verdict: {req.triage_verdict.upper()} ({conf_pct}% confidence)"
+
+    summary_tail = {
+        "duplicate": "These files appear to be near-duplicates. Review and merge into one canonical location.",
+        "reference": "One cluster intentionally references or extends the other. Verify cross-references are explicit and up-to-date.",
+        "related": "Content is similar in topic but serves different purposes. Consider documenting the relationship to avoid future confusion.",
+    }.get(verdict, "Review these files for duplication and consolidate where appropriate.")
+
+    proposed_action = req.triage_action if req.triage_action else (
+        f"Review and consolidate overlapping content between '{req.cluster_a}' and '{req.cluster_b}'. "
+        f"Focus on the {len(req.top_pairs)} highest-similarity node pairs listed above."
+    )
+
+    confidence = round(req.triage_confidence or min(0.95, req.avg_similarity), 2)
+
+    rec: dict = {
+        "id": str(uuid.uuid4()),
+        "mode": "duplicates",
+        "title": title,
+        "summary": (
+            f"Semantic analysis detected {req.edge_count} cross-repo similarity connections between "
+            f"'{req.cluster_a}' and '{req.cluster_b}' (avg {round(req.avg_similarity * 100)}% similar).{triage_note}\n\n"
+            f"Top overlapping content:\n{pairs_text}\n\n"
+            f"{summary_tail}"
+        ),
+        "evidence": [
+            f"{p.get('label_a', '?')} ↔ {p.get('label_b', '?')} ({round(p.get('similarity', 0) * 100)}%)"
+            for p in req.top_pairs[:5]
+        ],
+        "confidence": confidence,
+        "risk": "low",
+        "effort": effort,
+        "proposed_action": proposed_action,
+        "status": "pending",
+        "created_at": now,
+        "updated_at": now,
+        "model": "overlap-analysis" if not req.triage_verdict else f"overlap-analysis+triage",
+        "created_by": getattr(request.state, "user_id", "local"),
+    }
+    _save_recommendation(rec)
+    return rec
+
+
 # ---------------------------------------------------------------------------
 # Chunk Sixteen — Knowledge Base Cluster Selector
 # ---------------------------------------------------------------------------

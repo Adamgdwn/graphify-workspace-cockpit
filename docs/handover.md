@@ -1,7 +1,7 @@
 # Handover — Graphify Workspace Cockpit
 
 Status: paused — build complete
-Date: 2026-06-14
+Date: 2026-06-15
 Owner: Adam Goodwin
 
 ---
@@ -10,14 +10,14 @@ Owner: Adam Goodwin
 
 The Graphify Workspace Cockpit is a local-first decision surface that turns a
 semantic `graph.json` workspace graph into an interactive browser UI. It was
-built from zero to one in 17 chunks across a single intensive session.
+built from zero to one in 19 chunks across a single intensive session.
 
 ### The 0→1 Journey
 
 | Chunk | What Changed |
 |-------|-------------|
 | 1 | Governance baseline — docs, risk register, agent inventory, policy docs |
-| 2 | App shell — FastAPI backend, React/Vite frontend, five-tab cockpit, start.sh |
+| 2 | App shell — FastAPI backend, React/Vite frontend, six-tab cockpit, start.sh |
 | 3 | Ask interface — graph-backed Q&A, Ollama synthesis, session transcripts |
 | 4 | Readable map — Cytoscape.js, drill-down, inspect panel, path tracing |
 | 5 | Decision ledger — persistent classifications, Map badges |
@@ -33,6 +33,8 @@ built from zero to one in 17 chunks across a single intensive session.
 | 15 | Hardening, polish, and help — rate limiting, session pruning, graph rebuild, HelpModal, ErrorBoundary |
 | 16 | Knowledge base cluster selector — source/cluster toggles, cluster-filtered context |
 | 17 | In-cockpit AI assistant — floating overlay panel, SSE streaming, graph context |
+| 18 | Overlap analysis — cross-cluster semantic edge panel, Highlight on map, Create Task from overlap |
+| 19 | Signal/noise filtering + LLM triage — same-name detection, similarity chips, POST /overlap/triage, verdict badges, Next step actions, triage-aware task creation, Highlight/fade bug fix |
 
 ### Key Design Decisions
 
@@ -49,16 +51,19 @@ Agents AG-001, AG-002, AG-003, and AG-005 cannot mutate workspace files. Only AG
 
 ## Current State at Pause
 
-The cockpit is fully functional. All 17 chunks are complete and committed through Chunk 14. Chunks 15–17 and the documentation pass are uncommitted local changes.
+The cockpit is fully functional. All 19 chunks are complete.
 
 **What works:**
 - All six tabs: Ask, Map, Decisions, Recommendations, Work Queue, Settings
-- Floating AI assistant with SSE streaming and cluster-filtered context
-- Knowledge base cluster selector (Settings → Knowledge Sources)
-- Cloud connector sync (SharePoint + OneNote) — opt-in via env vars
-- Supabase cross-device sync — opt-in via `STORAGE_BACKEND=supabase`
-- API key auth, Caddy HTTPS, Docker deployment, rate limiting
+- Floating AI assistant with SSE streaming and cluster-filtered context (Chunk 17)
+- Knowledge base cluster selector (Settings → Knowledge Sources) (Chunk 16)
+- Cloud connector sync (SharePoint + OneNote) — opt-in via env vars (Chunk 14)
+- Supabase cross-device sync — opt-in via `STORAGE_BACKEND=supabase` (Chunk 11)
+- API key auth, Caddy HTTPS, Docker deployment, rate limiting (Chunks 9–10, 15)
 - Desktop launcher (`~/Desktop/graphify-cockpit.desktop`)
+- **Overlap Analysis panel** — 14 cross-cluster pairs, 1,988 semantic edges, Highlight on map, Create Task (Chunk 18)
+- **LLM triage** — `POST /overlap/triage` classifies each pair as duplicate/reference/related using phi4; same-name detection surfaces filename matches as strong duplicate signal; verdict drives task title and proposed_action (Chunk 19)
+- **Highlight/fade** — fixed CSS specificity bug so non-highlighted pairs actually fade; browse mode dims edges to 22% when panel is open
 
 **What is not yet built (candidates, not commitments):**
 - End-to-end test suite (Playwright or Vitest + MSW)

@@ -185,9 +185,9 @@ Write a full script for this topic:
    Graphify extracts the graph, the cockpit records the decisions, UAOS consumes
    the handoff. What the export looks like and why the format matters.
 
-7. **Zero to one in one session** — The build story. 17 chunks, one Claude Code
+7. **Zero to one in one session** — The build story. 19 chunks, one Claude Code
    session, one context ceiling hit. What the governance baseline in Chunk 1
-   made possible in Chunks 14–17.
+   made possible in Chunks 14–19.
 
 8. **Ask vs. Chat** — When to use the Ask tab (structured Q&A with evidence
    nodes) vs. the AI assistant (conversational follow-up). How they share cluster

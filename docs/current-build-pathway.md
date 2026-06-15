@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-14
-Status: active — Chunk Fifteen complete; Chunk Sixteen complete; Chunk Seventeen complete
+Last Updated: 2026-06-15
+Status: active — Chunk Eighteen complete; Chunk Nineteen complete
 Owner: Adam Goodwin
 
 ## Purpose
@@ -41,12 +41,14 @@ For material or risk-triggering work:
 | Chunk Nine — GitHub packaging + network wiring | Complete | 2026-06-14 | Env vars, Docker, demo graph, CI, README |
 | Chunk Ten — network-ready deployment | Complete | 2026-06-14 | API key auth, graph upload, Settings tab, Caddy, responsive, deployment guide |
 | Chunk Eleven — shared state / company-wide source of truth | Complete | 2026-06-14 | Storage abstraction, Supabase backend, ETag polling, created_by, graph list, UAOS handoff, integration guide |
-| Chunk Twelve — real graph foundation | Complete | 2026-06-14 | graphify-out/graph.json: 533 nodes, 645 edges; demo_mode flag in /health; dismissible frontend banner; all five tabs validated against live data |
+| Chunk Twelve — real graph foundation | Complete | 2026-06-14 | graphify-out/graph.json: 533 nodes, 645 edges; demo_mode flag in /health; dismissible frontend banner; core tabs validated against live data |
 | Chunk Thirteen — demo polish and UX quality | Complete | 2026-06-14 | Toast system, skeleton shimmer, connection status dot, Ctrl+K, Export JSON/UAOS, empty states, edge-count warning, typography pass |
 | Chunk Fourteen — cloud knowledge base connectors | Complete | 2026-06-14 | MSAL device code auth, SharePoint + OneNote connectors, background sync, Connected Sources UI in Settings, integration-guide updated |
 | Chunk Fifteen — hardening, polish & help | Complete | 2026-06-14 | slowapi rate limiting (60/min, exempt /health), session pruning (50 max), POST /graph/rebuild + GET /graph/rebuild/status, graph_stats in /settings/org, god node gold ring (top-5 by edge weight), ErrorBoundary per tab, HelpModal (? button), rebuild button + token savings in Settings |
 | Chunk Sixteen — knowledge base cluster selector | Complete | 2026-06-14 | GET/PUT /cluster-selection; graph_summary + /ask filter layer; Knowledge Sources panel in Settings (source + cluster toggles, select all/deselect all); Map source chip ("X of Y sources active") navigating to Settings |
 | Chunk Seventeen — in-cockpit AI assistant | Complete | 2026-06-14 | Floating draggable/resizable AI panel; POST /chat SSE streaming; GET/PUT /chat-config; cluster-aware graph context; "X nodes used" chip; localStorage position/size persistence; Settings → AI Assistant section for system prompt + model |
+| Chunk Eighteen — overlap analysis + actionable consolidation | Complete | 2026-06-14 | Cross-cluster semantic edge filtering (1988 cross-repo vs 14501 total); Overlap Analysis panel in Map tab; GET /graph/overlap-report; POST /recommendations/from-overlap (no LLM — computed from graph data); Highlight pair on map; Create Task → Recommendations flow |
+| Chunk Nineteen — signal/noise filtering + LLM triage | Complete | 2026-06-15 | Layer 1: same-name detection, similarity filter chips (70/80/85/90%), sameNameCount badge, pairs sort same-name first; Layer 2: POST /overlap/triage (Ollama phi4, structured JSON verdict); triageAll button; verdict badge (duplicate/reference/related); Next step action displayed for all verdicts; Task button verb reflects verdict (Merge/Review/Document); triage data flows into recommendation title + proposed_action; CSS specificity fix for Highlight/fade behaviour |
 
 ---
 
@@ -376,9 +378,9 @@ Outputs:
 - `.gitignore` reviewed — no private paths, graphs, secrets, or local state committed
 - `.github/workflows/ci.yml` — TypeScript typecheck (`tsc --noEmit`) + Python
   import check (`python -c "import main"`) on push
-- Architecture note added to `docs/architecture.md`: "Add auth before network
-  exposure — the API has no authentication; do not expose it to a non-local
-  network without adding the API key gate defined in Chunk Ten"
+- Architecture note added to `docs/architecture.md`: set `API_KEY` before
+  exposing the backend to a non-local network; localhost-only mode may leave it
+  unset for convenience.
 - All private workspace paths removed from committed files
 
 Acceptance criteria:
@@ -445,7 +447,7 @@ Outputs:
 - **Settings panel** in the frontend (new Settings tab or slide-out): shows
   active graph name + node count, Ollama connection status, backend version,
   API URL; allows uploading a new graph; shows connected Ollama model list
-- **Responsive layout audit**: all five tabs plus Settings are usable at
+- **Responsive layout audit**: all six tabs are usable at
   >= 768px (Android tablet landscape) with no horizontal scroll and no
   truncated controls; buttons and inputs reflow correctly
 - **Windows setup guide** added to `docs/deployment-guide.md` — Docker
@@ -455,7 +457,7 @@ Outputs:
 
 Acceptance criteria:
 
-- [x] Android tablet browser can use all five tabs without horizontal scroll (responsive CSS, 768px media queries)
+- [x] Android tablet browser can use all six tabs without horizontal scroll (responsive CSS, 768px media queries)
 - [x] Windows machine can run `docker-compose up` and reach the app in its browser (deployment-guide.md)
 - [x] API key required when `API_KEY` env var is set; unrestricted when unset
 - [x] HTTPS works via Caddy when `DOMAIN` env var is set (config/Caddyfile, docker-compose --profile https)
@@ -591,8 +593,9 @@ Outcomes:
   to get started." Dismissible per session via `sessionStorage`.
 - `.env.example` updated with `graphify-out/graph.json` and full workspace
   graph path as documented `GRAPH_PATH` options.
-- All five tabs validated against real graph: Ask, Map, Decisions,
-  Recommendations, Work Queue all return live data.
+- Core tabs validated against real graph: Ask, Map, Decisions,
+  Recommendations, and Work Queue all return live data. Settings validates
+  active graph and service status.
 
 Acceptance criteria:
 
@@ -631,7 +634,7 @@ spacing. This chunk does one complete quality pass across the whole product.
 
 Inputs:
 
-- All five tabs (current state after Chunks 2–11)
+- All five core workflow tabs plus Settings (current state after Chunks 2–11)
 - Figma or visual reference: not required — the standard is "would you show
   this to a new user without embarrassment?"
 
@@ -917,7 +920,7 @@ Acceptance criteria:
 - [x] Each tab renders an error fallback card when it throws during render
       (verified by temporarily throwing in dev)
 - [x] Session directory contains ≤50 files after a startup with >50 sessions
-- [x] `?` button opens help modal covering all five core tabs, cloud connectors,
+- [x] `?` button opens help modal covering all five core workflow tabs, cloud connectors,
       and the upcoming AI assistant
 - [x] README and integration-guide setup steps verified against live codebase;
       stale references corrected (deferred — accuracy pass is a docs-only
@@ -1112,6 +1115,61 @@ Use ISO-style timestamps for work notes, handoffs, decisions, exceptions, and va
 date -Iseconds
 ```
 
+## Chunk Nineteen — Signal/Noise Filtering + LLM Triage
+
+Status: **complete** — 2026-06-15
+
+Completion target: Task complete
+
+Budget class: Small
+
+### Objective
+
+With 1,988 cross-cluster semantic edges across 14 pairs, the Overlap Analysis
+panel surfaced too much noise. This chunk adds two triage layers so the cockpit
+can help Adam decide what to act on — without leaving the browser.
+
+**Layer 1 — Heuristic filtering (instant, no LLM):**
+- Same-name detection: `basename(fileA) === basename(fileB)` per edge pair
+- `sameNameCount` per group; groups with matches sorted to top, badged `≡ N`
+- Same-name pair rows highlighted amber in the pair list
+- Similarity filter chips (70 / 80 / 85 / 90%) — `filteredGroups` useMemo hides groups below `maxSimilarity` threshold
+- "Same-name" toggle chip shows only groups with filename matches
+
+**Layer 2 — LLM triage (on-demand, phi4 via Ollama):**
+- `POST /overlap/triage` — accepts group data, builds structured prompt with same-name hint, returns `{verdict, confidence, reason, action, model}`
+- Verdict: `duplicate` | `reference` | `related` | `unknown`
+- "Triage" button per group; "Triage All" runs visible groups sequentially
+- Verdict badge (colour-coded: red/amber/gray) displayed below group header
+- **Next step action shown for all verdict types** (not just duplicate)
+- "Task →" button label changes by verdict: "Task: Merge →", "Task: Review →", "Task: Document →"
+- Creating a task from a triaged group passes `triage_verdict + triage_action + triage_confidence` to backend
+- Backend `POST /recommendations/from-overlap` uses triage data for verdict-specific title prefix and `proposed_action`
+
+**Bug fix — Highlight/Clear visual regression:**
+- Root cause: CSS specificity conflict — `edge.faded { opacity: 0.03 }` appeared before `edge.semantic-edge { opacity: 0.7 }` in the stylesheet; when both classes applied, the later rule won and edges stayed visible
+- Fix: Added `edge.semantic-edge.faded { opacity: 0.03 }` as a two-class selector (higher specificity than either single-class rule)
+- Also fixed: browse mode (`sem-browse` at opacity 0.22) so clearing a highlight returns to a quiet dim state instead of all 1,988 edges snapping back to full brightness
+
+### Acceptance criteria
+
+- [x] Same-name pairs detected and sorted to top in each group
+- [x] Similarity filter chips filter `filteredGroups` correctly; "Same-name" chip works
+- [x] `POST /overlap/triage` returns structured verdict; phi4 differentiates duplicate vs reference correctly
+- [x] "Triage All" runs sequentially without blocking UI
+- [x] Verdict badge + Next step action displayed for all verdicts
+- [x] Task button label reflects triage verdict
+- [x] Task created from triaged group carries verdict-specific title and action
+- [x] Highlight on map fades non-matching edges to opacity 0.03 (CSS specificity fix)
+- [x] Clearing highlight returns to browse mode (0.22 opacity), not full 0.7
+- [x] `tsc --noEmit` zero errors; `npm run build` clean
+
+### Stop condition
+
+Reached: all acceptance criteria pass, backend live on port 8000, build clean.
+
+---
+
 ## Validation Log
 
 | Timestamp | Command | Result | Notes |
@@ -1163,3 +1221,9 @@ date -Iseconds
 | 2026-06-14 | Frontend typecheck after Chunk Fifteen — tsc --noEmit | Pass | Zero errors; ErrorBoundary, HelpModal, god nodes, Settings rebuild/token savings |
 | 2026-06-14 | Backend import check after Chunk Sixteen — python3 -c "import main" | Pass | CLUSTER_SELECTION_FILE, _load/save_cluster_selection, _is_node_selected, GET/PUT /cluster-selection load cleanly |
 | 2026-06-14 | Frontend typecheck after Chunk Sixteen — tsc --noEmit | Pass | Zero errors; ClusterSelectionData, MapProps, source chip, Knowledge Sources panel |
+| 2026-06-15 | Frontend typecheck after Chunk Nineteen — tsc --noEmit | Pass | Zero errors; TriageResult interface, filteredGroups useMemo, triageOverlapGroup, triageAll, overlayBrowse effect, sem-browse stylesheet entry |
+| 2026-06-15 | npm run build after Chunk Nineteen | Pass | ✓ built in 2.75s, no TypeScript errors, 1256.61 kB |
+| 2026-06-15 | POST /overlap/triage (different-name pair) | Pass | phi4:latest → verdict=reference, confidence=0.95 |
+| 2026-06-15 | POST /overlap/triage (same-name pair) | Pass | phi4:latest → verdict=duplicate, confidence=0.95, action=Merge CLAUDE.md… |
+| 2026-06-15 | GET /health after Chunk Nineteen backend restart | Pass | 200 {"status":"ok","version":"0.1.0"} |
+| 2026-06-15T08:07:42-06:00 | Demo-readiness cleanup — governance preflight, git diff --check, python3 -m py_compile, backend app import | Pass | Governance preflight 0 warnings; whitespace clean; backend compiles/imports with 51 routes. Frontend build not rerun in this shell because node/npm are not on PATH. |

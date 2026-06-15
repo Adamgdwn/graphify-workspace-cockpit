@@ -6,6 +6,40 @@ changed, or fixed in that chunk.
 
 ---
 
+## Chunk Nineteen — Signal/Noise Filtering + LLM Triage (2026-06-15)
+
+### Added
+- Layer 1 heuristics: `sameName` flag per edge pair (basename comparison), `sameNameCount` per group, groups with same-name pairs sorted first and badged `≡ N`, same-name pair rows highlighted amber
+- Similarity filter chips (70 / 80 / 85 / 90%) — filter on `maxSimilarity` so groups with any high-confidence pair stay visible
+- "Same-name" toggle chip to isolate filename-matched groups
+- `filteredGroups` useMemo derived from `overlapGroups`, used by both panel JSX and `triageAll()`
+- `POST /overlap/triage` — LLM triage endpoint: accepts group data, builds structured prompt with same-name hint, calls Ollama `phi4:latest`, returns `{verdict, confidence, reason, action, model}`
+- `TriageResult` interface and triage state (`triageResults`, `triaging`) in Map component
+- "Triage" per-group button and "Triage All" toolbar button
+- Verdict badge (colour-coded red/amber/gray/neutral) with confidence %, reason, and "Next step" action for **all** verdict types
+- Task button verb reflects triage verdict: "Task: Merge →", "Task: Review →", "Task: Document →"
+- `triage_verdict`, `triage_action`, `triage_confidence` optional fields on `CreateOverlapRecommendationRequest`; backend uses them for verdict-specific task title prefix and `proposed_action`
+
+### Fixed
+- **Highlight/fade bug**: `edge.faded { opacity: 0.03 }` was overridden by the later `edge.semantic-edge { opacity: 0.7 }` rule (equal specificity, last-wins). Added `edge.semantic-edge.faded { opacity: 0.03 }` as a two-class selector to win on specificity.
+- **Clear regression**: After clearing a highlighted pair, all 1,988 edges snapped back to 70% opacity simultaneously. Fixed via `sem-browse` browse mode (opacity 0.22) — active whenever the Overlap panel is open but no pair is highlighted.
+
+---
+
+## Chunk Eighteen — Overlap Analysis + Actionable Consolidation (2026-06-14)
+
+### Added
+- Cross-cluster semantic edge filtering: isolates the 1,988 cross-repo edges from the 14,501 total; cross-edges are the ones where source and target nodes belong to different clusters
+- `overlapGroups` useMemo: groups cross-edges by cluster pair, computes `edgeCount`, `avgSimilarity`, `topPairs` (top 6 by similarity), sorts by edge count
+- Overlap Analysis panel in Map tab — toggled by "Overlap (N)" toolbar button
+- "Highlight" button per group — dims all non-matching semantic edges on the Cytoscape canvas, brightens the selected pair; "Clear" restores browse mode
+- `POST /recommendations/from-overlap` — creates a `mode: "duplicates"` recommendation from overlap evidence without requiring LLM
+- "Create Task →" button per group — fires recommendation endpoint and shows ✓ confirmation
+- `GET /graph/overlap-report` — server-side overlap computation (reference; frontend computes client-side)
+- Real data finding: 14 cluster pairs, 1,988 edges; top pair is AI_BOOTSTRAP.md ↔ docs (771 edges, 80% avg)
+
+---
+
 ## Chunk Seventeen — In-Cockpit AI Assistant (2026-06-14)
 
 ### Added
@@ -81,7 +115,7 @@ Original plan called for a Chat tab (sixth nav tab). Changed during implementati
 - Live `graph.json` from real workspace: 533 nodes, 645 edges
 - `demo_mode` flag in `/health` response
 - Dismissible demo banner in frontend (stored in `sessionStorage`)
-- All five tabs validated against live graph data
+- Core tabs validated against live graph data; Settings validates graph and service status
 
 ---
 

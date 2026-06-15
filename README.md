@@ -37,10 +37,11 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 
 - Read-only by default. No destructive actions without explicit human approval.
 - Recommendations are proposals — they do not trigger actions.
-- No autonomous commits, pushes, deletes, or external service calls.
+- No autonomous commits, pushes, deletes, or unapproved external side effects.
+- Supabase and cloud connectors are opt-in and disabled unless configured.
 - User-supplied graphs stay local. Secrets and environment files are never indexed, printed, or committed.
 
-> **Security note:** The API has no authentication in this release. Do not expose the backend to a non-local network without first adding the API key gate described in [Chunk Ten](docs/current-build-pathway.md). Running behind `localhost` is safe; running on a public port is not.
+> **Security note:** Leave `API_KEY` unset only for localhost use. Set `API_KEY` before exposing the backend to any non-local network, and prefer HTTPS for hosted deployments.
 
 ---
 
@@ -68,7 +69,7 @@ cd graphify-workspace-cockpit
 
 ```bash
 cd backend
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
@@ -146,9 +147,9 @@ State (decisions, recommendations, actions) is persisted in `workspace/state/` o
 
 To use your own graph with Docker, either:
 - Set `GRAPH_PATH` to a path inside the container and mount the file
-- Or use the graph upload API (available in Chunk Ten)
+- Or use the graph upload API
 
-> **Security note:** When you run this on a non-local host, set `API_KEY` and use HTTPS (both available in Chunk Ten) before exposing the backend to a network. The current release is authentication-free and designed for localhost use.
+> **Security note:** When you run this on a non-local host, set `API_KEY` and use HTTPS before exposing the backend to a network.
 
 ---
 
@@ -167,6 +168,7 @@ GRAPH_PATH      Path to graph.json (default: workspace/demo/graph.json)
 STATE_DIR       Persistent state directory (default: workspace/state)
 CORS_ORIGINS    Comma-separated allowed origins (default: http://localhost:5173)
 OLLAMA_URL      Ollama base URL (default: http://localhost:11434)
+API_KEY         Optional API key for non-local deployments
 ```
 
 **Frontend** (see `frontend/.env.example`):

@@ -27,3 +27,6 @@ workspace/out/
 
 # OS
 .DS_Store
+
+# Runtime logs
+launcher/*.log
