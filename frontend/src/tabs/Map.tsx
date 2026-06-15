@@ -416,11 +416,22 @@ function buildElements(
 // ── Full-graph helpers ────────────────────────────────────────────────────
 
 const CLUSTER_COLORS: Record<string, string> = {
-  backend:  "#3b82f6",
-  frontend: "#0ea5e9",
-  docs:     "#f59e0b",
-  other:    "#6b7280",
+  backend:   "#3b82f6",
+  frontend:  "#0ea5e9",
+  docs:      "#f59e0b",
+  src:       "#a78bfa",
+  lib:       "#34d399",
+  scripts:   "#fb923c",
+  db:        "#f472b6",
+  tests:     "#4ade80",
+  test:      "#4ade80",
+  other:     "#6b7280",
 };
+
+function clusterColor(cluster: string): string {
+  if (!cluster || cluster.includes(".")) return CLUSTER_COLORS.other;
+  return CLUSTER_COLORS[cluster] ?? CLUSTER_COLORS.other;
+}
 
 const FULL_FCOSE_LAYOUT = {
   name: "fcose",
@@ -455,7 +466,7 @@ function buildFullElements(full: FullGraph, filter: Filter) {
         type: n.type,
         cluster: n.cluster,
         source_file: n.source_file,
-        color: CLUSTER_COLORS[n.cluster] ?? CLUSTER_COLORS.other,
+        color: clusterColor(n.cluster),
       },
     }));
 
@@ -474,7 +485,7 @@ function buildFullElements(full: FullGraph, filter: Filter) {
         source: e.source,
         target: e.target,
         relation: e.relation,
-        edgeWidth: Math.max(0.5, Math.min(3, e.weight)),
+        edgeWidth: Math.max(1.2, Math.min(3, e.weight * 1.2)),
       },
     }));
 
@@ -523,8 +534,8 @@ const FULL_CY_STYLE: object[] = [
     style: {
       "curve-style": "haystack",
       width: "data(edgeWidth)",
-      "line-color": "#1e2d4a",
-      opacity: 0.4,
+      "line-color": "#2e5890",
+      opacity: 0.65,
     },
   },
   {
@@ -998,7 +1009,7 @@ export function Map({ onNavigateSettings }: MapProps) {
               <span className={`map-type-badge map-type-${selectedFull.type}`}>{selectedFull.type}</span>
               <span
                 className="map-type-badge"
-                style={{ color: CLUSTER_COLORS[selectedFull.cluster] ?? CLUSTER_COLORS.other, borderColor: CLUSTER_COLORS[selectedFull.cluster] ?? CLUSTER_COLORS.other }}
+                style={{ color: clusterColor(selectedFull.cluster), borderColor: clusterColor(selectedFull.cluster) }}
               >
                 {selectedFull.cluster}
               </span>
