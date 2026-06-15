@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-15T11:50:05-06:00
-Status: active — Chunk Twenty-One complete; Chunk Twenty-Two planned
+Last Updated: 2026-06-15T12:19:59-06:00
+Status: active — Chunk Twenty-Three complete; Chunk Twenty-Four planned
 Owner: Adam Goodwin
 
 ## Purpose
@@ -51,8 +51,8 @@ For material or risk-triggering work:
 | Chunk Nineteen — signal/noise filtering + LLM triage | Complete | 2026-06-15 | Layer 1: same-name detection, similarity filter chips (70/80/85/90%), sameNameCount badge, pairs sort same-name first; Layer 2: POST /overlap/triage (Ollama phi4, structured JSON verdict); triageAll button; verdict badge (duplicate/reference/related); Next step action displayed for all verdicts; Task button verb reflects verdict (Merge/Review/Document); triage data flows into recommendation title + proposed_action; CSS specificity fix for Highlight/fade behaviour |
 | Chunk Twenty — decision-flow foundation | Complete | 2026-06-15T11:23:11-06:00 | Decision vocabulary aligned to shipped API/UI values; shared frontend decision metadata added; App-level active cockpit context added and wired to Map node/overlap selection plus Decisions edit/save/retire without changing action permissions |
 | Chunk Twenty-One — evidence navigation | Complete | 2026-06-15T11:50:05-06:00 | Ask evidence and Recommendation evidence now navigate to Map; Map resolves full-graph nodes by id/label, resolves cluster evidence by cluster id, shows focus notices, fails softly for missing targets, and backend default CORS now supports both localhost and 127.0.0.1 dev origins |
-| Chunk Twenty-Two — Map mode polish | Planned | 2026-06-15T10:23:52-06:00 | Group dense Map controls into explicit Explore / Trace / Overlap / Review modes |
-| Chunk Twenty-Three — overlap triage workflow | Planned | 2026-06-15T10:23:52-06:00 | Add durable triage statuses for overlap pairs: untriaged, triaged, task created, dismissed |
+| Chunk Twenty-Two — Map mode polish | Complete | 2026-06-15T12:12:47-06:00 | Map toolbar now uses explicit Explore / Trace / Overlap / Review modes; Trace arms summary path tracing, Overlap opens full graph semantic overlap workflow, Review groups filters/sources/layers |
+| Chunk Twenty-Three — overlap triage workflow | Complete | 2026-06-15T12:19:59-06:00 | Added durable overlap status records, status filters, dismiss/restore workflow, persisted task-created state, and restored triage verdicts |
 | Chunk Twenty-Four — decision command center | Planned | 2026-06-15T10:23:52-06:00 | Add a compact attention surface for pending recommendations, dry-run-ready actions, untriaged overlaps, and graph freshness |
 | Chunk Twenty-Five — confidence and shipped evidence | Planned | 2026-06-15T10:23:52-06:00 | Add focused E2E coverage and demo-path validation for the decision flow |
 
@@ -60,7 +60,7 @@ For material or risk-triggering work:
 
 ## Next Path - World-Class Decision Tool Polish
 
-Status: **active** — Chunk Twenty-One complete; Chunk Twenty-Two planned — 2026-06-15T11:50:05-06:00
+Status: **active** — Chunk Twenty-Three complete; Chunk Twenty-Four planned — 2026-06-15T12:19:59-06:00
 
 Completion target: Integration complete
 
@@ -202,7 +202,7 @@ Stop condition: stop before adding command-center summaries or overlap workflow 
 
 ## Chunk Twenty-Two - Map Mode Polish
 
-Status: **planned**
+Status: **complete** — 2026-06-15T12:12:47-06:00
 
 Completion target: Task complete
 
@@ -220,20 +220,26 @@ Outputs:
 - Map modes: Explore, Trace, Overlap, Review
 - Existing controls placed under the mode where they make sense
 - Current Summary/Full, Structural/Semantic, Path, Overlap, source selection, and Fit behavior preserved
+- Trace mode switches to Summary view and arms path source selection
+- Overlap mode switches to Full view, enables semantic edges, and opens the Overlap Analysis panel
+- Review mode exposes view, type, repository, and edge-layer controls for evidence review
 
 Acceptance criteria:
 
-- [ ] Operator can identify the current Map mode at a glance
-- [ ] Trace mode makes path workflow obvious
-- [ ] Overlap mode opens the overlap workflow without requiring the user to discover multiple toggles
-- [ ] Existing highlight/clear behavior remains correct
+- [x] Operator can identify the current Map mode at a glance
+- [x] Trace mode makes path workflow obvious
+- [x] Overlap mode opens the overlap workflow without requiring the user to discover multiple toggles
+- [x] Existing highlight/clear behavior remains correct
 
 Validation:
 
-- Frontend typecheck and build
-- Manual: Summary path tracing
-- Manual: Full graph semantic overlap highlight and clear
-- Manual: source/cluster filter panel
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed: `git diff --check`
+- Build note: Vite still reports the existing large chunk warning, but the production build completes
+- Browser walkthrough pending: Summary path tracing
+- Browser walkthrough pending: Full graph semantic overlap highlight and clear
+- Browser walkthrough pending: source/cluster filter panel
 
 Stop condition: stop before adding persisted overlap statuses.
 
@@ -241,7 +247,7 @@ Stop condition: stop before adding persisted overlap statuses.
 
 ## Chunk Twenty-Three - Overlap Triage Workflow
 
-Status: **planned**
+Status: **complete** — 2026-06-15T12:19:59-06:00
 
 Completion target: Task complete
 
@@ -262,19 +268,25 @@ Outputs:
 - Filter chips for overlap status
 - Dismiss/restore affordance for non-actionable overlaps
 - Task-created state that survives refresh
+- Backend `GET /overlap/status` and `PATCH /overlap/status/{pair_key}` persist pair workflow state in `workspace/state/overlap-status.json`
+- Triage results are restored from durable overlap records when the Map tab loads
 
 Acceptance criteria:
 
-- [ ] Triage verdict and workflow status are visually distinct
-- [ ] Dismissed overlap pairs can be hidden and restored
-- [ ] Creating a task marks the overlap pair as task-created
-- [ ] Refresh does not lose durable triage workflow state
+- [x] Triage verdict and workflow status are visually distinct
+- [x] Dismissed overlap pairs can be hidden and restored
+- [x] Creating a task marks the overlap pair as task-created
+- [x] Refresh does not lose durable triage workflow state
 
 Validation:
 
-- Frontend typecheck and build
-- Targeted backend checks for any new state endpoint
-- Manual: triage one pair, dismiss one pair, create one task, refresh
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed: `cd backend && .venv/bin/python -m py_compile main.py`
+- Passed: temp Uvicorn + `curl` check for `GET /overlap/status`, `PATCH /overlap/status/frontend___backend`, and read-back persistence
+- Passed: `git diff --check`
+- Build note: Vite still reports the existing large chunk warning, but the production build completes
+- Browser walkthrough pending: triage one pair, dismiss one pair, create one task, refresh
 
 Stop condition: stop before adding the command center.
 

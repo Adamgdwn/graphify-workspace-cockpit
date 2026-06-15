@@ -431,14 +431,23 @@ body {
 
 .map-toolbar {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   justify-content: space-between;
-  gap: 12px;
-  padding: 7px 14px;
+  gap: 8px;
+  padding: 8px 14px 9px;
   background: #111420;
   border-bottom: 1px solid #1a1e2e;
   flex-shrink: 0;
-  min-height: 42px;
+  min-height: 72px;
+}
+
+.map-toolbar-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
 }
 
 .map-breadcrumb {
@@ -512,6 +521,72 @@ body {
   align-items: center;
   gap: 7px;
   flex-shrink: 0;
+  min-width: 0;
+}
+
+.map-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #1a1e2e;
+  border-radius: 6px;
+  background: #0a0c14;
+  flex-shrink: 0;
+}
+
+.map-mode-tab {
+  min-width: 72px;
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: #53617f;
+  font-size: 0.74rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+
+.map-mode-tab:hover {
+  color: #9ab0d8;
+  border-color: #263657;
+}
+
+.map-mode-tab-active {
+  color: #d5def4;
+  border-color: #31426d;
+  background: #1a2848;
+}
+
+.map-mode-controls {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.map-mode-label {
+  color: #c2cce5;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.map-mode-hint {
+  color: #53617f;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.map-source-control {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .map-filter-group {
@@ -542,6 +617,19 @@ body {
 .map-filter-active {
   background: #1a2848 !important;
   color: #6b8cff !important;
+}
+
+.map-view-lock {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border: 1px solid #1f2b46;
+  border-radius: 4px;
+  background: #0d1322;
+  color: #6f819f;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .map-path-btn {
@@ -1045,6 +1133,7 @@ body {
 .map-overlap-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .map-overlap-btn {
@@ -1153,6 +1242,15 @@ body {
   flex-wrap: wrap;
 }
 
+.map-overlap-status-filters {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 14px 7px;
+  border-bottom: 1px solid #141828;
+  flex-wrap: wrap;
+}
+
 .map-overlap-filter-label {
   font-size: 0.66rem;
   color: #4a5272;
@@ -1187,6 +1285,45 @@ body {
   border-color: #f59e0b;
   color: #f59e0b;
   background: rgba(245, 158, 11, 0.08);
+}
+
+.map-overlap-status-chip {
+  border-radius: 4px;
+  font-size: 0.66rem;
+}
+
+.map-overlap-status-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.map-overlap-status-untriaged {
+  color: #6b7280;
+  background: rgba(107, 114, 128, 0.07);
+}
+
+.map-overlap-status-triaged {
+  color: #a090e0;
+  background: rgba(120, 100, 200, 0.08);
+}
+
+.map-overlap-status-task-created {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.07);
+}
+
+.map-overlap-status-dismissed {
+  color: #64748b;
+  background: rgba(100, 116, 139, 0.06);
+}
+
+.map-overlap-btn-dismiss {
+  flex: 0 0 auto;
+  color: #64748b;
 }
 
 /* Triage bar */
@@ -2646,10 +2783,34 @@ body {
   }
 
   .map-toolbar {
-    flex-wrap: wrap;
     gap: 6px;
     min-height: unset;
     padding: 8px 10px;
+  }
+
+  .map-toolbar-main,
+  .map-mode-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .map-toolbar-main {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 7px;
+  }
+
+  .map-mode-switch {
+    width: 100%;
+    overflow-x: auto;
+  }
+
+  .map-mode-tab {
+    flex: 1;
+    min-width: 68px;
+  }
+
+  .map-mode-hint {
+    white-space: normal;
   }
 
   .map-toolbar-right {

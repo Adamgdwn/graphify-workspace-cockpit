@@ -74,6 +74,14 @@ interface FullGraph {
 
 type Filter = "all" | "code" | "document";
 type ViewMode = "summary" | "full";
+type MapMode = "explore" | "trace" | "overlap" | "review";
+
+const MAP_MODES: Array<{ id: MapMode; label: string; hint: string }> = [
+  { id: "explore", label: "Explore", hint: "Browse the graph and inspect connected context." },
+  { id: "trace", label: "Trace", hint: "Choose a source and target to see the shortest summary path." },
+  { id: "overlap", label: "Overlap", hint: "Review cross-repo semantic overlap and consolidation candidates." },
+  { id: "review", label: "Review", hint: "Filter repositories, layers, and node types for evidence review." },
+];
 
 // ── Overlap analysis ──────────────────────────────────────────────────────
 
@@ -105,6 +113,27 @@ interface TriageResult {
   action: string;
   model: string;
 }
+
+type OverlapWorkflowStatus = "untriaged" | "triaged" | "task-created" | "dismissed";
+type OverlapStatusFilter = "active" | OverlapWorkflowStatus;
+
+interface OverlapStatusRecord {
+  pair_key: string;
+  cluster_a?: string;
+  cluster_b?: string;
+  status: OverlapWorkflowStatus;
+  triage_result?: TriageResult;
+  recommendation_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+const OVERLAP_STATUS_LABELS: Record<OverlapWorkflowStatus, string> = {
+  untriaged: "Untriaged",
+  triaged: "Triaged",
+  "task-created": "Task Created",
+  dismissed: "Dismissed",
+};
 
 const DECISION_META = Object.fromEntries(
   DECISION_CLASSIFICATIONS.map((c) => [c.id, { label: c.label, color: c.color }]),
@@ -633,6 +662,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   const [selectedFull, setSelectedFull] = useState<FullNode | null>(null);
   const [breadcrumb, setBreadcrumb] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
+  const [mapMode, setMapMode] = useState<MapMode>("explore");
   const [pathMode, setPathMode] = useState(false);
   const [pathSource, setPathSource] = useState<string | null>(null);
   const [pathNoRoute, setPathNoRoute] = useState(false);
@@ -664,6 +694,8 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   // overlap filters
   const [minSimilarity, setMinSimilarity] = useState(0.70);
   const [sameNameOnly, setSameNameOnly] = useState(false);
+  const [overlapStatusFilter, setOverlapStatusFilter] = useState<OverlapStatusFilter>("active");
+  const [overlapStatuses, setOverlapStatuses] = useState<Record<string, OverlapStatusRecord>>({});
   // LLM triage
   const [triageResults, setTriageResults] = useState<Record<string, TriageResult>>({});
   const [triaging, setTriaging] = useState<Record<string, boolean>>({});
@@ -746,14 +778,39 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
       });
   }, [crossSemanticEdges, nodeClusterMap, fullGraph]);
 
+  function overlapKey(group: Pick<OverlapGroup, "clusterA" | "clusterB">) {
+    return `${group.clusterA}___${group.clusterB}`;
+  }
+
+  function workflowStatusFor(group: OverlapGroup): OverlapWorkflowStatus {
+    const key = overlapKey(group);
+    return overlapStatuses[key]?.status ?? (triageResults[key] ? "triaged" : "untriaged");
+  }
+
+  const overlapStatusCounts = useMemo(() => {
+    const counts: Record<OverlapWorkflowStatus, number> = {
+      untriaged: 0,
+      triaged: 0,
+      "task-created": 0,
+      dismissed: 0,
+    };
+    for (const group of overlapGroups) {
+      counts[workflowStatusFor(group)] += 1;
+    }
+    return counts;
+  }, [overlapGroups, overlapStatuses, triageResults]);
+
   // Filtered view of groups based on user-selected thresholds
   const filteredGroups = useMemo(() =>
     overlapGroups.filter((g) => {
       if (g.maxSimilarity < minSimilarity) return false;
       if (sameNameOnly && g.sameNameCount === 0) return false;
+      const status = workflowStatusFor(g);
+      if (overlapStatusFilter === "active") return status !== "dismissed";
+      if (status !== overlapStatusFilter) return false;
       return true;
     }),
-    [overlapGroups, minSimilarity, sameNameOnly],
+    [overlapGroups, minSimilarity, sameNameOnly, overlapStatusFilter, overlapStatuses, triageResults],
   );
 
   // Keep refs current
@@ -865,6 +922,25 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
         if (!d) return;
         setSemanticEdges(d.edges ?? []);
         setSemanticMeta({ edge_count: (d.edges ?? []).length, created_at: d.created_at ?? null });
+      })
+      .catch(() => {});
+  }, []);
+
+  // Load durable overlap review status on mount
+  useEffect(() => {
+    fetch(`${API}/overlap/status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { pairs?: Record<string, OverlapStatusRecord> } | null) => {
+        const pairs = d?.pairs ?? {};
+        setOverlapStatuses(pairs);
+        const restoredTriage = Object.fromEntries(
+          Object.entries(pairs)
+            .filter(([, record]) => record.triage_result)
+            .map(([key, record]) => [key, record.triage_result as TriageResult]),
+        );
+        if (Object.keys(restoredTriage).length) {
+          setTriageResults((current) => ({ ...restoredTriage, ...current }));
+        }
       })
       .catch(() => {});
   }, []);
@@ -1306,13 +1382,48 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     }
   }, [showSemantic, onActiveContextChange]);
 
+  async function saveOverlapStatus(
+    group: OverlapGroup,
+    status: OverlapWorkflowStatus,
+    extras: Pick<OverlapStatusRecord, "triage_result" | "recommendation_id"> = {},
+  ) {
+    const key = overlapKey(group);
+    const record: OverlapStatusRecord = {
+      ...overlapStatuses[key],
+      ...extras,
+      pair_key: key,
+      cluster_a: group.clusterA,
+      cluster_b: group.clusterB,
+      status,
+    };
+    setOverlapStatuses((current) => ({ ...current, [key]: record }));
+    try {
+      const res = await fetch(`${API}/overlap/status/${encodeURIComponent(key)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status,
+          cluster_a: group.clusterA,
+          cluster_b: group.clusterB,
+          ...extras,
+        }),
+      });
+      if (res.ok) {
+        const saved: OverlapStatusRecord = await res.json();
+        setOverlapStatuses((current) => ({ ...current, [key]: saved }));
+      }
+    } catch {
+      // Keep the optimistic local state if the backend is temporarily unavailable.
+    }
+  }
+
   async function createOverlapTask(group: OverlapGroup) {
-    const key = `${group.clusterA}${group.clusterB}`;
-    const triageKey = `${group.clusterA}___${group.clusterB}`;
+    const key = overlapKey(group);
+    const triageKey = overlapKey(group);
     const triage = triageResults[triageKey];
     setCreatingTask(key);
     try {
-      await fetch(`${API}/recommendations/from-overlap`, {
+      const res = await fetch(`${API}/recommendations/from-overlap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1332,6 +1443,12 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
           } : {}),
         }),
       });
+      if (!res.ok) throw new Error("Failed to create overlap recommendation");
+      const rec = await res.json();
+      await saveOverlapStatus(group, "task-created", {
+        ...(triage ? { triage_result: triage } : {}),
+        ...(rec?.id ? { recommendation_id: rec.id } : {}),
+      });
       setTaskCreated(key);
       setTimeout(() => setTaskCreated((k) => (k === key ? null : k)), 3500);
     } catch {
@@ -1342,7 +1459,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   }
 
   async function triageOverlapGroup(group: OverlapGroup) {
-    const key = `${group.clusterA}___${group.clusterB}`;
+    const key = overlapKey(group);
     setTriaging((t) => ({ ...t, [key]: true }));
     try {
       const res = await fetch(`${API}/overlap/triage`, {
@@ -1364,6 +1481,11 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
       if (res.ok) {
         const data: TriageResult = await res.json();
         setTriageResults((r) => ({ ...r, [key]: data }));
+        const currentStatus = workflowStatusFor(group);
+        const nextStatus = currentStatus === "task-created" || currentStatus === "dismissed"
+          ? currentStatus
+          : "triaged";
+        await saveOverlapStatus(group, nextStatus, { triage_result: data });
       }
     } catch { }
     finally {
@@ -1373,7 +1495,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
 
   async function triageAll() {
     for (const group of filteredGroups) {
-      const key = `${group.clusterA}___${group.clusterB}`;
+      const key = overlapKey(group);
       if (!triageResults[key] && !triaging[key]) {
         await triageOverlapGroup(group);
       }
@@ -1382,6 +1504,36 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
 
   function handleFit() {
     cyRef.current?.fit(undefined, 80);
+  }
+
+  function switchMapMode(mode: MapMode) {
+    setMapMode(mode);
+    setFocusNotice(null);
+
+    if (mode === "trace") {
+      setViewMode("summary");
+      setShowOverlap(false);
+      setHighlightedPair(null);
+      onActiveContextChange?.(null);
+      setSelectedFull(null);
+      setPathNoRoute(false);
+      setPathMode(true);
+      return;
+    }
+
+    setPathMode(false);
+    setPathNoRoute(false);
+
+    if (mode === "overlap") {
+      setViewMode("full");
+      setShowSemantic(true);
+      setShowOverlap(true);
+      return;
+    }
+
+    setShowOverlap(false);
+    setHighlightedPair(null);
+    onActiveContextChange?.(null);
   }
 
   function handleDrillDown(node: SummaryNode) {
@@ -1433,181 +1585,263 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     ? Math.round((selected.code_count / Math.max(1, selected.node_count)) * 100)
     : 0;
 
+  const activeMapMode = MAP_MODES.find((mode) => mode.id === mapMode) ?? MAP_MODES[0];
+
+  const sourceSelector = clusterData && clusterData.available_clusters.length > 0 ? (
+    <div className="map-source-control">
+      <button
+        className={`map-source-chip${selectedClusters !== null ? " map-source-chip-partial" : ""}`}
+        onClick={() => setShowSourcePanel((s) => !s)}
+        title="Select which repositories are shown on the map"
+        type="button"
+      >
+        {selectedClusters === null
+          ? `${clusterData.available_clusters.length} repos`
+          : `${selectedClusters.size} of ${clusterData.available_clusters.length} repos`}
+      </button>
+      {showSourcePanel && (
+        <div className="map-source-panel">
+          <div className="map-source-panel-head">Repositories</div>
+          {clusterData.available_clusters.map((c) => {
+            const active = selectedClusters === null || selectedClusters.has(c.id);
+            return (
+              <label key={c.id} className="map-source-row">
+                <input
+                  type="checkbox"
+                  checked={active}
+                  onChange={() => toggleCluster(c.id)}
+                />
+                <span className="map-source-name">{c.id}</span>
+                <span className="map-source-count">{c.node_count.toLocaleString()}</span>
+              </label>
+            );
+          })}
+          <button className="map-source-done" onClick={() => setShowSourcePanel(false)}>Done</button>
+        </div>
+      )}
+    </div>
+  ) : null;
+
+  const typeFilterControls = (
+    <div className="map-filter-group" aria-label="Node type filter">
+      {(["all", "code", "document"] as Filter[]).map((f) => (
+        <button
+          key={f}
+          className={`map-filter-btn${filter === f ? " map-filter-active" : ""}`}
+          onClick={() => setFilter(f)}
+          type="button"
+        >
+          {f === "all" ? "All" : f === "code" ? "Code" : "Docs"}
+        </button>
+      ))}
+    </div>
+  );
+
+  const viewModeControls = (
+    <div className="map-filter-group" aria-label="Graph view">
+      {(["summary", "full"] as ViewMode[]).map((m) => (
+        <button
+          key={m}
+          className={`map-filter-btn${viewMode === m ? " map-filter-active" : ""}`}
+          onClick={() => {
+            setViewMode(m);
+            setSelected(null);
+            setSelectedFull(null);
+            if (m === "full") setPathMode(false);
+          }}
+          type="button"
+        >
+          {m === "summary" ? "Summary" : fullLoading ? "Loading..." : "Full"}
+        </button>
+      ))}
+    </div>
+  );
+
+  const summaryViewLock = <span className="map-view-lock">Summary view</span>;
+  const fullViewLock = <span className="map-view-lock">Full graph</span>;
+
+  const edgeLayerControls = (
+    <>
+      <button
+        className="map-path-btn"
+        onClick={() => { if (viewMode === "full") setShowStructural((s) => !s); }}
+        title={viewMode === "full" ? "Toggle structural (import/dependency) edges" : "Switch to Full graph to toggle structural edges"}
+        style={
+          viewMode !== "full"
+            ? { opacity: 0.3, cursor: "default" }
+            : !showStructural
+            ? { borderColor: "#2a2a3a", color: "#3a4060", background: "transparent" }
+            : { borderColor: "#4a7abf", color: "#4a7abf" }
+        }
+        type="button"
+      >
+        Structural
+      </button>
+      <button
+        className="map-path-btn"
+        onClick={() => { if (viewMode === "full") setShowSemantic((s) => !s); }}
+        title={
+          viewMode !== "full"
+            ? "Switch to Full graph to toggle semantic edges"
+            : crossSemanticEdges.length
+            ? `${showSemantic ? "Hide" : "Show"} ${crossSemanticEdges.length} cross-repo similarity edges (${semanticMeta?.edge_count ?? 0} total)`
+            : semanticMeta?.edge_count
+            ? "Loading cross-repo edges..."
+            : "No semantic edges yet - run Semantic Analysis in Settings"
+        }
+        style={
+          viewMode !== "full"
+            ? { opacity: 0.3, cursor: "default" }
+            : showSemantic
+            ? { borderColor: "#22c55e", color: "#22c55e", background: "rgba(34,197,94,0.07)" }
+            : {}
+        }
+        type="button"
+      >
+        Semantic{crossSemanticEdges.length ? ` (${crossSemanticEdges.length})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
+      </button>
+    </>
+  );
+
+  const overlapControl = (
+    <button
+      className="map-path-btn"
+      onClick={() => {
+        if (viewMode !== "full") return;
+        setShowOverlap((s) => !s);
+        if (showOverlap) {
+          setHighlightedPair(null);
+          onActiveContextChange?.(null);
+        }
+      }}
+      title={
+        viewMode !== "full"
+          ? "Switch to Full graph for overlap analysis"
+          : !crossSemanticEdges.length
+          ? "Enable Semantic overlay to run overlap analysis"
+          : `${showOverlap ? "Close" : "Open"} overlap analysis - ${overlapGroups.length} cluster pairs detected`
+      }
+      style={
+        viewMode !== "full"
+          ? { opacity: 0.3, cursor: "default" }
+          : showOverlap
+          ? { borderColor: "#f59e0b", color: "#f59e0b", background: "rgba(245,158,11,0.07)" }
+          : crossSemanticEdges.length
+          ? { borderColor: "#7a6020", color: "#a08030" }
+          : { opacity: 0.4, cursor: "default" }
+      }
+      type="button"
+    >
+      Overlap{overlapGroups.length ? ` (${overlapGroups.length})` : ""}
+    </button>
+  );
+
+  const pathControl = (
+    <button
+      className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
+      onClick={() => {
+        if (viewMode !== "summary") {
+          setViewMode("summary");
+          return;
+        }
+        setPathMode((p) => !p);
+      }}
+      title={viewMode === "summary" ? "Trace shortest path between two nodes" : "Switch to Summary view to trace paths"}
+      style={viewMode !== "summary" ? { opacity: 0.75 } : {}}
+      type="button"
+    >
+      {pathMode
+        ? pathSource
+          ? "Pick Target"
+          : "Pick Source"
+        : "Start Trace"}
+    </button>
+  );
+
   return (
     <div className="map-pane">
       {/* ── Toolbar ── */}
       <div className="map-toolbar">
-        <div className="map-breadcrumb">
-          <button
-            className={`map-crumb-btn${breadcrumb.length === 0 ? " map-crumb-active" : ""}`}
-            onClick={() => fetchSummary()}
-          >
-            Workspace
-          </button>
-          {breadcrumb.map((crumb, i) => (
-            <span key={i} className="map-crumb-segment">
-              <span className="map-crumb-sep">›</span>
-              <span className="map-crumb-label">{crumb}</span>
-            </span>
-          ))}
-          {summary && !loading && (
-            <span className="map-meta-pill">
-              {summary.nodes.length}&thinsp;groups&thinsp;·&thinsp;
-              {summary.total_nodes.toLocaleString()}&thinsp;nodes
-            </span>
-          )}
-          {clusterData && clusterData.available_clusters.length > 0 && (
-            <div style={{ position: "relative" }}>
+        <div className="map-toolbar-main">
+          <div className="map-breadcrumb">
+            <button
+              className={`map-crumb-btn${breadcrumb.length === 0 ? " map-crumb-active" : ""}`}
+              onClick={() => fetchSummary()}
+              type="button"
+            >
+              Workspace
+            </button>
+            {breadcrumb.map((crumb, i) => (
+              <span key={i} className="map-crumb-segment">
+                <span className="map-crumb-sep">›</span>
+                <span className="map-crumb-label">{crumb}</span>
+              </span>
+            ))}
+            {summary && !loading && (
+              <span className="map-meta-pill">
+                {summary.nodes.length}&thinsp;groups&thinsp;·&thinsp;
+                {summary.total_nodes.toLocaleString()}&thinsp;nodes
+              </span>
+            )}
+          </div>
+
+          <div className="map-mode-switch" aria-label="Map mode">
+            {MAP_MODES.map((mode) => (
               <button
-                className={`map-source-chip${selectedClusters !== null ? " map-source-chip-partial" : ""}`}
-                onClick={() => setShowSourcePanel((s) => !s)}
-                title="Select which repositories are shown on the map"
+                key={mode.id}
+                className={`map-mode-tab${mapMode === mode.id ? " map-mode-tab-active" : ""}`}
+                onClick={() => switchMapMode(mode.id)}
+                title={mode.hint}
                 type="button"
               >
-                {selectedClusters === null
-                  ? `${clusterData.available_clusters.length} repos`
-                  : `${selectedClusters.size} of ${clusterData.available_clusters.length} repos`}
+                {mode.label}
               </button>
-              {showSourcePanel && (
-                <div className="map-source-panel">
-                  <div className="map-source-panel-head">Repositories</div>
-                  {clusterData.available_clusters.map((c) => {
-                    const active = selectedClusters === null || selectedClusters.has(c.id);
-                    return (
-                      <label key={c.id} className="map-source-row">
-                        <input
-                          type="checkbox"
-                          checked={active}
-                          onChange={() => toggleCluster(c.id)}
-                        />
-                        <span className="map-source-name">{c.id}</span>
-                        <span className="map-source-count">{c.node_count.toLocaleString()}</span>
-                      </label>
-                    );
-                  })}
-                  <button className="map-source-done" onClick={() => setShowSourcePanel(false)}>Done</button>
-                </div>
-              )}
-            </div>
-          )}
+            ))}
+          </div>
         </div>
 
-        <div className="map-toolbar-right">
-          {/* Type filter */}
-          <div className="map-filter-group">
-            {(["all", "code", "document"] as Filter[]).map((f) => (
-              <button
-                key={f}
-                className={`map-filter-btn${filter === f ? " map-filter-active" : ""}`}
-                onClick={() => setFilter(f)}
-              >
-                {f === "all" ? "All" : f === "code" ? "Code" : "Docs"}
-              </button>
-            ))}
-          </div>
+        <div className="map-mode-controls">
+          <span className="map-mode-label">{activeMapMode.label}</span>
+          <span className="map-mode-hint">{activeMapMode.hint}</span>
 
-          {/* View mode — both options always visible */}
-          <div className="map-filter-group">
-            {(["summary", "full"] as ViewMode[]).map((m) => (
-              <button
-                key={m}
-                className={`map-filter-btn${viewMode === m ? " map-filter-active" : ""}`}
-                onClick={() => {
-                  setViewMode(m);
-                  setSelected(null);
-                  setSelectedFull(null);
-                }}
-              >
-                {m === "summary" ? "Summary" : fullLoading ? "Loading…" : "Full"}
-              </button>
-            ))}
-          </div>
+          {mapMode === "explore" && (
+            <div className="map-toolbar-right">
+              {viewModeControls}
+              {typeFilterControls}
+              {sourceSelector}
+            </div>
+          )}
 
-          {/* Edge layer toggles — always visible; dimmed when not in Full mode */}
-          <button
-            className="map-path-btn"
-            onClick={() => { if (viewMode === "full") setShowStructural((s) => !s); }}
-            title={viewMode === "full" ? "Toggle structural (import/dependency) edges" : "Switch to Full graph to toggle structural edges"}
-            style={
-              viewMode !== "full"
-                ? { opacity: 0.3, cursor: "default" }
-                : !showStructural
-                ? { borderColor: "#2a2a3a", color: "#3a4060", background: "transparent" }
-                : { borderColor: "#4a7abf", color: "#4a7abf" }
-            }
-          >
-            Structural
-          </button>
-          <button
-            className="map-path-btn"
-            onClick={() => { if (viewMode === "full") setShowSemantic((s) => !s); }}
-            title={
-              viewMode !== "full"
-                ? "Switch to Full graph to toggle semantic edges"
-                : crossSemanticEdges.length
-                ? `${showSemantic ? "Hide" : "Show"} ${crossSemanticEdges.length} cross-repo similarity edges (${semanticMeta?.edge_count ?? 0} total)`
-                : semanticMeta?.edge_count
-                ? "Loading cross-repo edges…"
-                : "No semantic edges yet — run Semantic Analysis in Settings"
-            }
-            style={
-              viewMode !== "full"
-                ? { opacity: 0.3, cursor: "default" }
-                : showSemantic
-                ? { borderColor: "#22c55e", color: "#22c55e", background: "rgba(34,197,94,0.07)" }
-                : {}
-            }
-          >
-            Semantic{crossSemanticEdges.length ? ` (${crossSemanticEdges.length})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
-          </button>
-          <button
-            className="map-path-btn"
-            onClick={() => {
-              if (viewMode !== "full") return;
-              setShowOverlap((s) => !s);
-              if (showOverlap) {
-                setHighlightedPair(null);
-                onActiveContextChange?.(null);
-              }
-            }}
-            title={
-              viewMode !== "full"
-                ? "Switch to Full graph for overlap analysis"
-                : !crossSemanticEdges.length
-                ? "Enable Semantic overlay to run overlap analysis"
-                : `${showOverlap ? "Close" : "Open"} overlap analysis — ${overlapGroups.length} cluster pairs detected`
-            }
-            style={
-              viewMode !== "full"
-                ? { opacity: 0.3, cursor: "default" }
-                : showOverlap
-                ? { borderColor: "#f59e0b", color: "#f59e0b", background: "rgba(245,158,11,0.07)" }
-                : crossSemanticEdges.length
-                ? { borderColor: "#7a6020", color: "#a08030" }
-                : { opacity: 0.4, cursor: "default" }
-            }
-          >
-            Overlap{overlapGroups.length ? ` (${overlapGroups.length})` : ""}
-          </button>
+          {mapMode === "trace" && (
+            <div className="map-toolbar-right">
+              {summaryViewLock}
+              {pathControl}
+              {typeFilterControls}
+            </div>
+          )}
 
-          {/* Path tracer — always visible; dimmed in Full mode */}
-          <button
-            className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
-            onClick={() => { if (viewMode === "summary") setPathMode((p) => !p); }}
-            title={viewMode === "summary" ? "Trace shortest path between two nodes" : "Switch to Summary view to trace paths"}
-            style={viewMode !== "summary" ? { opacity: 0.3, cursor: "default" } : {}}
-          >
-            {pathMode
-              ? pathSource
-                ? "Click target…"
-                : "Click source…"
-              : "Path"}
-          </button>
+          {mapMode === "overlap" && (
+            <div className="map-toolbar-right">
+              {fullViewLock}
+              {edgeLayerControls}
+              {overlapControl}
+            </div>
+          )}
+
+          {mapMode === "review" && (
+            <div className="map-toolbar-right">
+              {viewModeControls}
+              {typeFilterControls}
+              {sourceSelector}
+              {edgeLayerControls}
+            </div>
+          )}
 
           <button
             className="map-fit-btn"
             onClick={handleFit}
             title="Fit to viewport"
+            type="button"
           >
             ⊡
           </button>
@@ -1685,6 +1919,12 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                   </span>
                   <span className="map-overlap-dot">·</span>
                   <span>{crossSemanticEdges.length} connections</span>
+                  {overlapStatusCounts.dismissed > 0 && (
+                    <>
+                      <span className="map-overlap-dot">·</span>
+                      <span>{overlapStatusCounts.dismissed} dismissed</span>
+                    </>
+                  )}
                   {overlapGroups.some((g) => g.sameNameCount > 0) && (
                     <>
                       <span className="map-overlap-dot">·</span>
@@ -1714,6 +1954,24 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                     Same-name
                   </button>
                 </div>
+                <div className="map-overlap-status-filters">
+                  {(["active", "untriaged", "triaged", "task-created", "dismissed"] as OverlapStatusFilter[]).map((status) => {
+                    const count = status === "active"
+                      ? overlapGroups.length - overlapStatusCounts.dismissed
+                      : overlapStatusCounts[status];
+                    const label = status === "active" ? "Active" : OVERLAP_STATUS_LABELS[status];
+                    return (
+                      <button
+                        key={status}
+                        className={`map-overlap-filter-chip map-overlap-status-chip${overlapStatusFilter === status ? " map-overlap-filter-chip-on" : ""}`}
+                        onClick={() => setOverlapStatusFilter(status)}
+                        type="button"
+                      >
+                        {label} {count}
+                      </button>
+                    );
+                  })}
+                </div>
                 {/* Triage bar */}
                 <div className="map-overlap-triage-bar">
                   <span className="map-overlap-hint-inline">LLM: duplicate / reference / related</span>
@@ -1726,11 +1984,16 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                   </button>
                 </div>
                 <div className="map-overlap-list">
+                  {filteredGroups.length === 0 && (
+                    <div className="map-overlap-empty">No overlap pairs match the current filters.</div>
+                  )}
                   {filteredGroups.map((g) => {
-                    const taskKey = `${g.clusterA}${g.clusterB}`;
-                    const triageKey = `${g.clusterA}___${g.clusterB}`;
+                    const taskKey = overlapKey(g);
+                    const triageKey = overlapKey(g);
                     const isActive = highlightedPair?.[0] === g.clusterA && highlightedPair?.[1] === g.clusterB;
-                    const created = taskCreated === taskKey;
+                    const workflowStatus = workflowStatusFor(g);
+                    const workflowRecord = overlapStatuses[triageKey];
+                    const created = workflowStatus === "task-created" || taskCreated === taskKey;
                     const creating = creatingTask === taskKey;
                     const triage = triageResults[triageKey];
                     const isTriaging = triaging[triageKey] ?? false;
@@ -1750,6 +2013,9 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                             <span className="map-overlap-cluster" style={{ color: clusterColor(g.clusterB) }}>{g.clusterB}</span>
                           </div>
                           <div className="map-overlap-counts">
+                            <span className={`map-overlap-status-badge map-overlap-status-${workflowStatus}`}>
+                              {OVERLAP_STATUS_LABELS[workflowStatus]}
+                            </span>
                             {g.sameNameCount > 0 && (
                               <span
                                 className="map-overlap-samename-badge"
@@ -1836,13 +2102,37 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                             className={`map-overlap-btn map-overlap-btn-primary${created ? " map-overlap-btn-done" : ""}`}
                             onClick={() => createOverlapTask(g)}
                             disabled={creating || created}
-                            title={triage ? `Create task: ${triage.action || triage.verdict}` : "Create consolidation task"}
+                            title={
+                              workflowRecord?.recommendation_id
+                                ? `Recommendation created: ${workflowRecord.recommendation_id}`
+                                : triage
+                                ? `Create task: ${triage.action || triage.verdict}`
+                                : "Create consolidation task"
+                            }
                           >
                             {created ? "✓" : creating ? "…" : triage
                               ? (triage.verdict === "duplicate" ? "Task: Merge →" :
                                  triage.verdict === "reference" ? "Task: Review →" :
                                  triage.verdict === "related" ? "Task: Document →" : "Task →")
                               : "Task →"}
+                          </button>
+                          <button
+                            className="map-overlap-btn map-overlap-btn-dismiss"
+                            onClick={() => {
+                              const nextStatus = workflowStatus === "dismissed"
+                                ? (triage ? "triaged" : "untriaged")
+                                : "dismissed";
+                              if (nextStatus === "dismissed" && isActive) {
+                                setHighlightedPair(null);
+                                onActiveContextChange?.(null);
+                              }
+                              saveOverlapStatus(g, nextStatus, triage ? { triage_result: triage } : {});
+                            }}
+                            disabled={workflowStatus === "task-created"}
+                            title={workflowStatus === "dismissed" ? "Restore this pair to the active review queue" : "Dismiss this pair as non-actionable"}
+                            type="button"
+                          >
+                            {workflowStatus === "dismissed" ? "Restore" : "Dismiss"}
                           </button>
                         </div>
                       </div>

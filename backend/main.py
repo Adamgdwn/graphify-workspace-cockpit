@@ -40,6 +40,7 @@ CHAT_CONFIG_FILE      = WORKSPACE_STATE / "chat-config.json"
 CHAT_SESSIONS_DIR     = WORKSPACE_STATE / "chat-sessions"
 SCAN_DIRS_FILE        = WORKSPACE_STATE / "scan-dirs.json"
 SEMANTIC_EDGES_FILE   = WORKSPACE_STATE / "semantic-edges.json"
+OVERLAP_STATUS_FILE   = WORKSPACE_STATE / "overlap-status.json"
 _CHAT_DEFAULT_SYSTEM_PROMPT = (
     "You are an assistant with access to the user's knowledge graph. "
     "Answer based on the provided graph context. "
@@ -1952,6 +1953,65 @@ class TriageOverlapRequest(BaseModel):
     avg_similarity: float
     top_pairs: list[dict]
     model: Optional[str] = None
+
+
+OverlapWorkflowStatus = Literal["untriaged", "triaged", "task-created", "dismissed"]
+
+
+class PatchOverlapStatusRequest(BaseModel):
+    status: OverlapWorkflowStatus
+    cluster_a: Optional[str] = None
+    cluster_b: Optional[str] = None
+    triage_result: Optional[dict] = None
+    recommendation_id: Optional[str] = None
+
+
+def _load_overlap_statuses() -> dict[str, dict]:
+    if not OVERLAP_STATUS_FILE.exists():
+        return {}
+    try:
+        data = json.loads(OVERLAP_STATUS_FILE.read_text())
+        if isinstance(data, dict):
+            return {str(k): v for k, v in data.items() if isinstance(v, dict)}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_overlap_statuses(statuses: dict[str, dict]) -> None:
+    OVERLAP_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    OVERLAP_STATUS_FILE.write_text(json.dumps(statuses, indent=2))
+
+
+@app.get("/overlap/status")
+def list_overlap_statuses() -> dict:
+    return {"pairs": _load_overlap_statuses()}
+
+
+@app.patch("/overlap/status/{pair_key}")
+def patch_overlap_status(pair_key: str, req: PatchOverlapStatusRequest) -> dict:
+    statuses = _load_overlap_statuses()
+    now = datetime.now(tz=timezone.utc).isoformat()
+    current = statuses.get(pair_key, {})
+    record = {
+        **current,
+        "pair_key": pair_key,
+        "status": req.status,
+        "updated_at": now,
+    }
+    if "created_at" not in record:
+        record["created_at"] = now
+    if req.cluster_a is not None:
+        record["cluster_a"] = req.cluster_a
+    if req.cluster_b is not None:
+        record["cluster_b"] = req.cluster_b
+    if req.triage_result is not None:
+        record["triage_result"] = req.triage_result
+    if req.recommendation_id is not None:
+        record["recommendation_id"] = req.recommendation_id
+    statuses[pair_key] = record
+    _save_overlap_statuses(statuses)
+    return record
 
 
 @app.post("/overlap/triage")
