@@ -55,6 +55,17 @@ wait_for() {
   done
 }
 
+load_node_env() {
+  if command -v npm >/dev/null 2>&1; then
+    return
+  fi
+  if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    # GUI launchers and non-interactive shells often skip nvm initialization.
+    # shellcheck source=/dev/null
+    source "$HOME/.nvm/nvm.sh"
+  fi
+}
+
 # ── already running? ─────────────────────────────────────────────────────────
 
 if backend_running && frontend_running; then
@@ -81,6 +92,7 @@ fi
 if ! frontend_running; then
   echo "==> Starting frontend…"
   cd "$FRONTEND_DIR"
+  load_node_env
   if [ ! -d "node_modules" ]; then
     npm install --silent
   fi

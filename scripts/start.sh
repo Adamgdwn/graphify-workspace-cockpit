@@ -5,6 +5,17 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$REPO_DIR/backend"
 FRONTEND_DIR="$REPO_DIR/frontend"
 
+load_node_env() {
+  if command -v npm >/dev/null 2>&1; then
+    return
+  fi
+  if [ -s "$HOME/.nvm/nvm.sh" ]; then
+    # Non-interactive shells often skip nvm initialization.
+    # shellcheck source=/dev/null
+    source "$HOME/.nvm/nvm.sh"
+  fi
+}
+
 echo "==> Starting backend (localhost:8000)…"
 cd "$BACKEND_DIR"
 if [ ! -d ".venv" ]; then
@@ -16,6 +27,7 @@ BACKEND_PID=$!
 
 echo "==> Starting frontend (localhost:5173)…"
 cd "$FRONTEND_DIR"
+load_node_env
 if [ ! -d "node_modules" ]; then
   npm install --silent
 fi
