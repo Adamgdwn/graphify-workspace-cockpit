@@ -46,7 +46,31 @@ interface GraphSummary {
   edges: SummaryEdge[];
 }
 
+// Full graph (all raw nodes/edges)
+interface FullNode {
+  id: string;
+  label: string;
+  type: "code" | "document" | "rationale";
+  cluster: string;
+  source_file: string;
+}
+
+interface FullEdge {
+  source: string;
+  target: string;
+  relation: string;
+  weight: number;
+}
+
+interface FullGraph {
+  node_count: number;
+  edge_count: number;
+  nodes: FullNode[];
+  edges: FullEdge[];
+}
+
 type Filter = "all" | "code" | "document";
+type ViewMode = "summary" | "full";
 
 // ── Decision metadata (mirror of Decisions.tsx) ───────────────────────────
 
@@ -389,6 +413,130 @@ function buildElements(
   return [...nodes, ...edges];
 }
 
+// ── Full-graph helpers ────────────────────────────────────────────────────
+
+const CLUSTER_COLORS: Record<string, string> = {
+  backend:  "#3b82f6",
+  frontend: "#0ea5e9",
+  docs:     "#f59e0b",
+  other:    "#6b7280",
+};
+
+const FULL_FCOSE_LAYOUT = {
+  name: "fcose",
+  quality: "default",
+  randomize: true,
+  animate: true,
+  animationDuration: 1200,
+  animationEasing: "ease-out-cubic",
+  fit: true,
+  padding: 60,
+  nodeSeparation: 40,
+  nodeRepulsion: () => 6500,
+  idealEdgeLength: () => 80,
+  edgeElasticity: () => 0.45,
+  numIter: 2500,
+  packComponents: true,
+};
+
+function buildFullElements(full: FullGraph, filter: Filter) {
+  const visibleIds = new Set(
+    full.nodes
+      .filter((n) => filter === "all" || n.type === filter)
+      .map((n) => n.id)
+  );
+
+  const nodes = full.nodes
+    .filter((n) => visibleIds.has(n.id))
+    .map((n) => ({
+      data: {
+        id: n.id,
+        label: n.label,
+        type: n.type,
+        cluster: n.cluster,
+        source_file: n.source_file,
+        color: CLUSTER_COLORS[n.cluster] ?? CLUSTER_COLORS.other,
+      },
+    }));
+
+  const seen = new Set<string>();
+  const edges = full.edges
+    .filter((e) => visibleIds.has(e.source) && visibleIds.has(e.target))
+    .filter((e) => {
+      const k = `${e.source}::${e.target}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map((e) => ({
+      data: {
+        id: `${e.source}::${e.target}`,
+        source: e.source,
+        target: e.target,
+        relation: e.relation,
+        edgeWidth: Math.max(0.5, Math.min(3, e.weight)),
+      },
+    }));
+
+  return [...nodes, ...edges];
+}
+
+const FULL_CY_STYLE: object[] = [
+  {
+    selector: "node",
+    style: {
+      width: 10,
+      height: 10,
+      "background-color": "data(color)",
+      "border-width": 0,
+      label: "data(label)",
+      color: "#8aa0c8",
+      "text-outline-color": "#070a12",
+      "text-outline-width": 2,
+      "font-family": '"JetBrains Mono", ui-monospace, monospace',
+      "font-size": 7,
+      "text-valign": "bottom",
+      "text-margin-y": 3,
+      "min-zoomed-font-size": 9,
+    },
+  },
+  {
+    selector: "node:hover",
+    style: { "border-width": 2, "border-color": "#fff", width: 13, height: 13 },
+  },
+  {
+    selector: "node.selected",
+    style: {
+      width: 14, height: 14,
+      "border-width": 2, "border-color": "#fff",
+      "shadow-blur": 16, "shadow-color": "data(color)", "shadow-opacity": 0.9,
+      "shadow-offset-x": 0, "shadow-offset-y": 0,
+      color: "#e8eaf0",
+    },
+  },
+  {
+    selector: "node.faded",
+    style: { opacity: 0.08 },
+  },
+  {
+    selector: "edge",
+    style: {
+      "curve-style": "haystack",
+      width: "data(edgeWidth)",
+      "line-color": "#1e2d4a",
+      opacity: 0.4,
+    },
+  },
+  {
+    selector: "edge.highlighted",
+    style: { "line-color": "#6b8cff", opacity: 1, width: 2 },
+  },
+  {
+    selector: "edge.faded",
+    style: { opacity: 0.03 },
+  },
+];
+
 // ── Component ─────────────────────────────────────────────────────────────
 
 interface MapProps {
@@ -404,10 +552,14 @@ export function Map({ onNavigateSettings }: MapProps) {
   const pathSourceRef = useRef<string | null>(null);
   const summaryRef = useRef<GraphSummary | null>(null);
 
+  const [viewMode, setViewMode] = useState<ViewMode>("summary");
   const [summary, setSummary] = useState<GraphSummary | null>(null);
+  const [fullGraph, setFullGraph] = useState<FullGraph | null>(null);
+  const [fullLoading, setFullLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SummaryNode | null>(null);
+  const [selectedFull, setSelectedFull] = useState<FullNode | null>(null);
   const [breadcrumb, setBreadcrumb] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [pathMode, setPathMode] = useState(false);
@@ -495,6 +647,26 @@ export function Map({ onNavigateSettings }: MapProps) {
   }, []);
 
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
+
+  const fetchFullGraph = useCallback(async () => {
+    if (fullGraph) return; // already loaded
+    setFullLoading(true);
+    try {
+      const res = await fetch(`${API}/graph/full`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: FullGraph = await res.json();
+      setFullGraph(data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setFullLoading(false);
+    }
+  }, [fullGraph]);
+
+  // When switching to full mode, load the full graph once
+  useEffect(() => {
+    if (viewMode === "full") fetchFullGraph();
+  }, [viewMode, fetchFullGraph]);
 
   // Init / reinit Cytoscape when summary data changes
   useEffect(() => {
@@ -593,6 +765,49 @@ export function Map({ onNavigateSettings }: MapProps) {
       cyRef.current = null;
     };
   }, [summary, decisions, godNodeIds]);
+
+  // Full-graph Cytoscape init
+  useEffect(() => {
+    if (viewMode !== "full" || !containerRef.current || !fullGraph) return;
+
+    ensureExtensions();
+    cyRef.current?.destroy();
+    cyRef.current = null;
+
+    const cy = cytoscape({
+      container: containerRef.current,
+      elements: buildFullElements(fullGraph, filter),
+      style: FULL_CY_STYLE as any,
+      layout: FULL_FCOSE_LAYOUT as any,
+      pixelRatio: 1,
+      minZoom: 0.02,
+      maxZoom: 12,
+    });
+
+    cy.one("layoutstop", () => cy.fit(undefined, 40));
+
+    cy.on("tap", "node", (e: any) => {
+      const node = e.target;
+      cy.nodes().removeClass("selected");
+      cy.edges().removeClass("highlighted");
+      node.addClass("selected");
+      node.connectedEdges().addClass("highlighted");
+      const n = fullGraph.nodes.find((n) => n.id === node.id()) ?? null;
+      setSelectedFull(n);
+      setSelected(null);
+    });
+
+    cy.on("tap", (e: any) => {
+      if (e.target === cy) {
+        cy.nodes().removeClass("selected");
+        cy.edges().removeClass("highlighted");
+        setSelectedFull(null);
+      }
+    });
+
+    cyRef.current = cy;
+    return () => { cy.destroy(); cyRef.current = null; };
+  }, [viewMode, fullGraph, filter]);
 
   // Apply type filter via class toggling (no re-layout)
   useEffect(() => {
@@ -697,16 +912,30 @@ export function Map({ onNavigateSettings }: MapProps) {
           </div>
 
           <button
-            className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
-            onClick={() => setPathMode((p) => !p)}
-            title="Trace shortest path between two nodes"
+            className={`map-path-btn${viewMode === "full" ? " map-path-active" : ""}`}
+            onClick={() => {
+              setViewMode((m) => m === "full" ? "summary" : "full");
+              setSelected(null);
+              setSelectedFull(null);
+            }}
+            title="Toggle full node graph (all 533 nodes)"
           >
-            {pathMode
-              ? pathSource
-                ? "Click target…"
-                : "Click source…"
-              : "Path"}
+            {fullLoading ? "Loading…" : viewMode === "full" ? "Summary" : "Full Graph"}
           </button>
+
+          {viewMode === "summary" && (
+            <button
+              className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
+              onClick={() => setPathMode((p) => !p)}
+              title="Trace shortest path between two nodes"
+            >
+              {pathMode
+                ? pathSource
+                  ? "Click target…"
+                  : "Click source…"
+                : "Path"}
+            </button>
+          )}
 
           <button
             className="map-fit-btn"
@@ -757,8 +986,31 @@ export function Map({ onNavigateSettings }: MapProps) {
           )}
         </div>
 
-        {/* Inspect panel */}
-        {selected && (
+        {/* Full-graph inspect panel */}
+        {selectedFull && viewMode === "full" && (
+          <aside className="map-panel">
+            <div className="map-panel-head">
+              <span className="map-panel-name">{selectedFull.label}</span>
+              <button className="map-panel-close" onClick={() => setSelectedFull(null)} aria-label="Close">✕</button>
+            </div>
+            <div className="map-panel-section">
+              <span className={`map-type-badge map-type-${selectedFull.type}`}>{selectedFull.type}</span>
+              <span
+                className="map-type-badge"
+                style={{ color: CLUSTER_COLORS[selectedFull.cluster] ?? CLUSTER_COLORS.other, borderColor: CLUSTER_COLORS[selectedFull.cluster] ?? CLUSTER_COLORS.other }}
+              >
+                {selectedFull.cluster}
+              </span>
+            </div>
+            {selectedFull.source_file && (
+              <div className="map-panel-stats" style={{ fontSize: 11, color: "#6b8cff", wordBreak: "break-all", padding: "8px 0" }}>
+                {selectedFull.source_file}
+              </div>
+            )}
+          </aside>
+        )}
+
+        {selected && viewMode === "summary" && (
           <aside className="map-panel">
             <div className="map-panel-head">
               <span className="map-panel-name">{selected.label}</span>

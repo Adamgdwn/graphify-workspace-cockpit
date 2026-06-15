@@ -585,6 +585,46 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
     return result
 
 
+@app.get("/graph/full")
+def graph_full() -> dict:
+    """Return all raw nodes and links for full-graph rendering in the Map."""
+    try:
+        g = _load_graph()
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=f"Graph not loaded: {exc}")
+
+    def _cluster(source_file: str) -> str:
+        parts = source_file.replace("\\", "/").split("/")
+        return parts[0] if parts else "other"
+
+    nodes = [
+        {
+            "id": n["id"],
+            "label": n.get("label", n["id"]),
+            "type": n.get("file_type", "code"),
+            "cluster": _cluster(n.get("source_file", "")),
+            "source_file": n.get("source_file", ""),
+        }
+        for n in g.get("nodes", [])
+    ]
+
+    seen: set[str] = set()
+    edges = []
+    for lnk in g.get("links", []):
+        key = f"{lnk['source']}::{lnk['target']}"
+        if key in seen:
+            continue
+        seen.add(key)
+        edges.append({
+            "source": lnk["source"],
+            "target": lnk["target"],
+            "relation": lnk.get("relation", ""),
+            "weight": float(lnk.get("weight", 1.0)),
+        })
+
+    return {"node_count": len(nodes), "edge_count": len(edges), "nodes": nodes, "edges": edges}
+
+
 # ---------------------------------------------------------------------------
 # Decision ledger
 # ---------------------------------------------------------------------------
