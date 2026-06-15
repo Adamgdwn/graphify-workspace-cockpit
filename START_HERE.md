@@ -1,58 +1,58 @@
 # Start Here
 
-Last Updated: 2026-06-14T08:18:40-06:00
-Status: current
+Last Updated: 2026-06-14
+Status: paused — build complete
 Owner: Adam Goodwin
 
-## Current Plan
+## State at Pause
 
-This is the first file an agent should read when starting work in this project. Keep it short, current, and pointed at the active build path.
+All 17 chunks complete. The cockpit is a working local-first decision surface:
+six tabs (Ask, Map, Decisions, Recommendations, Work Queue, Settings) plus a
+floating AI assistant overlay. Desktop launcher is at
+`~/Desktop/graphify-cockpit.desktop`.
 
-Current status:
+Last commit: `15e2a83` — Chunks 15–17 + full documentation handover pass.
 
-All 17 chunks of the build pathway are complete as of 2026-06-14. The cockpit
-is a working local-first decision surface. See `docs/current-build-pathway.md`
-for the full chunk status table and `docs/roadmap.md` for what was built and
-what comes next.
+## Where Things Live
 
-Priorities for any new work:
+| What | Where |
+|------|-------|
+| Build history and chunk status | `docs/current-build-pathway.md` |
+| Architecture + ADRs | `docs/architecture.md` |
+| Roadmap and non-goals | `docs/roadmap.md` |
+| Full 0→1 build record | `docs/handover.md` |
+| Operator manual | `docs/manual.md` |
+| Operational runbook | `docs/runbook.md` |
+| Context routing map | `docs/context-map.md` |
 
-- confirm scope against `docs/current-build-pathway.md` (all 17 chunks done — new work needs explicit direction)
-- apply `docs/policy/durable-development-engineering-policy.md` during implementation
-- apply `docs/standards/ship-ready-engineering-standard.md` before declaring meaningful work complete
-- use `docs/context-map.md` as the short routing map for task-specific context loads
-- keep startup lean: use short repo orientation first, then trigger governance, Graphify, plugins, MCP tools, and release checks by task risk or scope
-- use Graphify before broad source exploration or architecture analysis, using workspace routing plus repo-local semantic graphs for heavy active repos
-- keep work in context-window-friendly chunks
-- timestamp material work, decisions, validation, and handoffs
+## To Resume
 
-## Current Build Pathway
+1. `git status --short` — confirm clean tree.
+2. Read `docs/handover.md` for the full build record and resume context.
+3. Define any new work as a new chunk in `docs/current-build-pathway.md`.
+4. Use `docs/context-map.md` to select what to load for the task.
 
-Use [docs/current-build-pathway.md](docs/current-build-pathway.md) as the live build route.
+## Work Patterns
 
-For ordinary scoped work:
+**Ordinary scoped work:**
+1. `git status --short`
+2. Read repo-local agent instructions (`CLAUDE.md`, `AI_BOOTSTRAP.md`)
+3. Use `docs/context-map.md` when context routing is unclear
+4. Inspect only the specific files or errors needed
+5. Run targeted validation after the change
 
-1. Run `git status --short`.
-2. Read the repo-local agent instructions.
-3. Use `docs/context-map.md` when context routing is unclear.
-4. Inspect the specific files, errors, or docs needed for the task.
-5. Run targeted validation after the change.
+**Material or risk-triggering changes:**
+1. `bash scripts/governance-preflight.sh`
+2. `docs/standards/README.md` → `docs/policy/durable-development-engineering-policy.md`
+3. `docs/standards/ship-ready-engineering-standard.md` before declaring complete
+4. `date -Iseconds` — timestamp the work
+5. Work in the smallest complete chunk that can be reviewed safely
 
-For material or risk-triggering changes:
-
-1. Run `bash scripts/governance-preflight.sh`.
-2. Review `docs/standards/README.md`.
-3. Review `docs/standards/engineering-governance-by-use-case.md`.
-4. Review `docs/policy/durable-development-engineering-policy.md`.
-5. Review `docs/standards/ship-ready-engineering-standard.md`.
-6. Review `project-control.yaml`.
-7. Check `exceptions` in `project-control.yaml` and any exception records.
-8. For broad source exploration, architecture analysis, dependency tracing, or cross-repo planning, use the Graphify policy at `/home/adamgoodwin/code/Tools/graphify/docs/agent-governance.md` before reading raw source broadly. Reference `/home/adamgoodwin/code/Tools/graphify/workspace/out/graph.json` for cross-repo routing, set up repo-local Graphify when a new repo becomes active, run `/graphify /path/to/repo` from Claude Code for full semantic repo graphs on heavy active repos, and update the relevant graph after code changes.
-9. Capture the work timestamp with `date -Iseconds`.
-10. Work in the smallest complete chunk that can be reviewed safely.
-
-Risk-triggering work includes production, deployment, authentication, authorization, payments, secrets, sensitive data, database migrations, customer communications, external side effects, infrastructure or provider settings, destructive actions, autonomous tool use, risk classification, governance policy changes, or release readiness.
+Risk-triggering work: production, deployment, auth, payments, secrets, database
+migrations, external side effects, infrastructure, destructive actions, autonomous
+tool use, governance changes, release readiness.
 
 ## Agent Handoff
 
-Update this file only when the top-level plan or handoff point changes. Put detailed step-by-step progress in `docs/current-build-pathway.md`.
+Update this file only when the top-level plan or pause state changes. Put
+detailed chunk progress in `docs/current-build-pathway.md`.
