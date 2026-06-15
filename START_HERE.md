@@ -1,15 +1,20 @@
 # Start Here
 
-Last Updated: 2026-06-15
-Status: paused — build complete
+Last Updated: 2026-06-15T11:23:11-06:00
+Status: active — Chunk Twenty complete; Chunk Twenty-One planned
 Owner: Adam Goodwin
 
 ## State at Pause
 
-All 19 chunks complete. The cockpit is a working local-first decision surface:
-six tabs (Ask, Map, Decisions, Recommendations, Work Queue, Settings) plus a
-floating AI assistant overlay. Desktop launcher is at
+The first 20 build chunks are complete. The cockpit is a working local-first decision
+surface: six tabs (Ask, Map, Decisions, Recommendations, Work Queue, Settings)
+plus a floating AI assistant overlay. Desktop launcher is at
 `~/Desktop/graphify-cockpit.desktop`.
+
+The active path is decision-flow polish, split into token-friendly chunks in
+`docs/current-build-pathway.md`. Chunk Twenty established the shared decision
+vocabulary and App-level active cockpit context. Chunk Twenty-One is next:
+clickable evidence that navigates to focused Map context.
 
 **Chunks 18–19 highlights:**
 - Map → Overlap Analysis panel: 14 cross-cluster pairs, 1,988 semantic edges
@@ -17,9 +22,9 @@ floating AI assistant overlay. Desktop launcher is at
 - Highlight on map, filter chips (70–90%), Task button creates verdict-specific recommendation
 - Highlight/fade CSS specificity bug fixed; browse mode dims edges when panel open
 
-Last documented commit before this cleanup: `15e2a83` — Chunks 15–17 + first
-documentation handover pass. Chunks 18–19 and demo-readiness cleanup are local
-changes — run `git status --short` to confirm.
+Latest pushed demo-readiness commits before this planning pass:
+`effaf4b` Prepare cockpit demo handoff, `15f889f` Fix launcher Node environment
+loading, and `79ccf42` Fix overlap semantic highlight clearing.
 
 ## Where Things Live
 
@@ -36,9 +41,9 @@ changes — run `git status --short` to confirm.
 ## To Resume
 
 1. `git status --short` — confirm clean tree.
-2. Read `docs/handover.md` for the full build record and resume context.
-3. Define any new work as a new chunk in `docs/current-build-pathway.md`.
-4. Use `docs/context-map.md` to select what to load for the task.
+2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Twenty-One - Evidence Navigation" sections in `docs/current-build-pathway.md`.
+3. Load only the context listed for Chunk Twenty-One.
+4. Use `docs/context-map.md` if routing is still unclear.
 
 ## Work Patterns
 

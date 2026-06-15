@@ -22,8 +22,8 @@ When a term changes, update this file and the affected code or documentation in 
 | **Cluster** | A named group of thematically related nodes, produced by Graphify community detection | "tag", "category", "folder" | `cluster-selection.json`, cluster toggle in Settings |
 | **Source** | A named origin of graph content — a local workspace path or a cloud knowledge base (SharePoint, OneNote) | "provider", "connector", "feed" | Source toggle in Settings, source chip in Map |
 | **Active Cluster Selection** | The user-configured set of sources and clusters whose nodes are included in Ask, Chat, and Recommendation context | "filter", "scope", "active graph" | `cluster-selection.json`, `GET/PUT /cluster-selection` |
-| **Decision** | A durable human classification of a workspace area: invest, finish, merge, archive, extract, or ignore | "choice", "verdict", "label" | `decisions.json`, `POST /decisions`, Decisions tab |
-| **Classification** | The specific value of a Decision (invest / finish / merge / archive / extract / ignore) | "status", "category", "type" | `classification` field in decision record |
+| **Decision** | A durable human classification of a workspace area: invest, client-ready, monitor, archive, or paused | "choice", "verdict", "label" | `decisions.json`, `POST /decisions`, Decisions tab |
+| **Classification** | The specific value of a Decision (invest / client-ready / monitor / archive / paused) | "status", "category", "type" | `classification` field in decision record |
 | **Recommendation** | A model-backed proposal card with evidence, confidence, risk, and a proposed action | "suggestion", "hint", "alert" | `recommendations/`, `POST /recommendations`, Recommendations tab |
 | **Action** | An approved, dry-run-verified operation queued for execution in the workspace | "task", "job", "command" | `action-queue/`, `POST /actions`, Work Queue tab |
 | **Dry Run** | A preview of what an action would do without executing it — required before all actions | "preview", "simulate", "check" | `GET /actions/{id}/dry-run`, dry-run gate |

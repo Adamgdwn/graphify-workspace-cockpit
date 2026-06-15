@@ -2,41 +2,26 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { API } from "../config";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import {
+  DECISION_CLASSIFICATIONS,
+  decisionClassificationMeta,
+  normalizeDecisionClassification,
+  type DecisionClassification,
+} from "../domain/decision";
+import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────
-
-type Classification = "invest" | "client-ready" | "monitor" | "archive" | "paused";
 
 interface DecisionRecord {
   id: string;
   target_id: string;
   label: string;
-  classification: Classification;
+  classification: string;
   rationale: string;
   created_at: string;
   updated_at: string;
   status: "active" | "retired";
   created_by?: string;
-}
-
-// ── Classification metadata ───────────────────────────────────────────────
-
-const CLASSIFICATIONS: {
-  id: Classification;
-  label: string;
-  color: string;
-  bg: string;
-  description: string;
-}[] = [
-  { id: "invest",       label: "Invest",       color: "#4ade80", bg: "#071a0f", description: "Actively build or expand" },
-  { id: "client-ready", label: "Client Ready", color: "#f5d280", bg: "#1e1608", description: "Presentable to clients" },
-  { id: "monitor",      label: "Monitor",      color: "#6b8cff", bg: "#08102a", description: "Watch, no action yet" },
-  { id: "archive",      label: "Archive",      color: "#9ca3af", bg: "#111318", description: "Wind down or deprecate" },
-  { id: "paused",       label: "Paused",       color: "#f97316", bg: "#1c0e04", description: "On hold" },
-];
-
-function classificationMeta(id: string) {
-  return CLASSIFICATIONS.find((c) => c.id === id) ?? CLASSIFICATIONS[2];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -61,9 +46,13 @@ function downloadJson(data: unknown, filename: string) {
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-const BLANK = { target_id: "", classification: "" as Classification | "", rationale: "" };
+const BLANK = { target_id: "", classification: "" as DecisionClassification | "", rationale: "" };
 
-export function Decisions() {
+interface DecisionsProps {
+  onActiveContextChange?: ActiveCockpitContextHandler;
+}
+
+export function Decisions({ onActiveContextChange }: DecisionsProps) {
   const [decisions, setDecisions] = useState<DecisionRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,13 +94,27 @@ export function Decisions() {
   }, []);
 
   function startEdit(d: DecisionRecord) {
+    const classification = normalizeDecisionClassification(d.classification);
     setEditId(d.id);
-    setForm({ target_id: d.target_id, classification: d.classification, rationale: d.rationale });
+    setForm({ target_id: d.target_id, classification, rationale: d.rationale });
+    onActiveContextChange?.({
+      kind: "decision",
+      source: "decisions",
+      decisionId: d.id,
+      targetId: d.target_id,
+      label: d.label,
+      classification,
+    });
+  }
+
+  function resetForm() {
+    setEditId(null);
+    setForm({ ...BLANK });
   }
 
   function cancelForm() {
-    setEditId(null);
-    setForm({ ...BLANK });
+    resetForm();
+    onActiveContextChange?.(null);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -126,6 +129,15 @@ export function Decisions() {
           body: JSON.stringify({ classification: form.classification, rationale: form.rationale }),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const updated: DecisionRecord = await r.json();
+        onActiveContextChange?.({
+          kind: "decision",
+          source: "decisions",
+          decisionId: updated.id,
+          targetId: updated.target_id,
+          label: updated.label,
+          classification: normalizeDecisionClassification(updated.classification),
+        });
         addToast("Decision updated", "success");
       } else {
         const r = await fetch(`${API}/decisions`, {
@@ -139,9 +151,18 @@ export function Decisions() {
           }),
         });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const created: DecisionRecord = await r.json();
+        onActiveContextChange?.({
+          kind: "decision",
+          source: "decisions",
+          decisionId: created.id,
+          targetId: created.target_id,
+          label: created.label,
+          classification: normalizeDecisionClassification(created.classification),
+        });
         addToast("Decision saved", "success");
       }
-      cancelForm();
+      resetForm();
       await fetchDecisions();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -159,6 +180,7 @@ export function Decisions() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "retired" }),
       });
+      onActiveContextChange?.(null);
       addToast("Decision retired", "info");
       await fetchDecisions();
     } catch (e) {
@@ -170,10 +192,20 @@ export function Decisions() {
 
   async function handleReactivate(id: string) {
     try {
-      await fetch(`${API}/decisions/${id}`, {
+      const r = await fetch(`${API}/decisions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "active" }),
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const decision: DecisionRecord = await r.json();
+      onActiveContextChange?.({
+        kind: "decision",
+        source: "decisions",
+        decisionId: decision.id,
+        targetId: decision.target_id,
+        label: decision.label,
+        classification: normalizeDecisionClassification(decision.classification),
       });
       addToast("Decision reactivated", "success");
       await fetchDecisions();
@@ -226,7 +258,7 @@ export function Decisions() {
           <div className="dec-field">
             <label>Classification</label>
             <div className="dec-chips">
-              {CLASSIFICATIONS.map((c) => (
+              {DECISION_CLASSIFICATIONS.map((c) => (
                 <button
                   key={c.id}
                   type="button"
@@ -307,7 +339,7 @@ export function Decisions() {
         )}
 
         {activeDecisions.map((d) => {
-          const meta = classificationMeta(d.classification);
+          const meta = decisionClassificationMeta(d.classification);
           return (
             <div
               key={d.id}
@@ -367,7 +399,7 @@ export function Decisions() {
 
             {showRetired &&
               retiredDecisions.map((d) => {
-                const meta = classificationMeta(d.classification);
+                const meta = decisionClassificationMeta(d.classification);
                 return (
                   <div
                     key={d.id}

@@ -6,6 +6,8 @@ import type { Core } from "cytoscape";
 import fcose from "cytoscape-fcose";
 // @ts-ignore
 import layoutUtilities from "cytoscape-layout-utilities";
+import { DECISION_CLASSIFICATIONS } from "../domain/decision";
+import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
 
 // ── Extension registration (once per page lifetime) ───────────────────────
 
@@ -103,15 +105,9 @@ interface TriageResult {
   model: string;
 }
 
-// ── Decision metadata (mirror of Decisions.tsx) ───────────────────────────
-
-const DECISION_META: Record<string, { label: string; color: string }> = {
-  "invest":       { label: "Invest",       color: "#4ade80" },
-  "client-ready": { label: "Client Ready", color: "#f5d280" },
-  "monitor":      { label: "Monitor",      color: "#6b8cff" },
-  "archive":      { label: "Archive",      color: "#9ca3af" },
-  "paused":       { label: "Paused",       color: "#f97316" },
-};
+const DECISION_META = Object.fromEntries(
+  DECISION_CLASSIFICATIONS.map((c) => [c.id, { label: c.label, color: c.color }]),
+) as Record<string, { label: string; color: string }>;
 
 // ── Cytoscape stylesheet ──────────────────────────────────────────────────
 
@@ -612,9 +608,10 @@ const FULL_CY_STYLE: object[] = [
 
 interface MapProps {
   onNavigateSettings?: () => void;
+  onActiveContextChange?: ActiveCockpitContextHandler;
 }
 
-export function Map({ onNavigateSettings }: MapProps) {
+export function Map({ onNavigateSettings, onActiveContextChange }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
 
@@ -988,6 +985,16 @@ export function Map({ onNavigateSettings }: MapProps) {
       const nodeData =
         summaryRef.current?.nodes.find((n) => n.id === nodeId) ?? null;
       setSelected(nodeData);
+      if (nodeData) {
+        onActiveContextChange?.({
+          kind: "node",
+          source: "map",
+          nodeId: nodeData.id,
+          label: nodeData.label,
+          nodeType: nodeData.dominant_type,
+          viewMode: "summary",
+        });
+      }
     });
 
     cy.on("tap", (e: any) => {
@@ -995,6 +1002,7 @@ export function Map({ onNavigateSettings }: MapProps) {
         cy.nodes().removeClass("selected");
         cy.edges().removeClass("highlighted");
         setSelected(null);
+        onActiveContextChange?.(null);
       }
     });
 
@@ -1034,6 +1042,17 @@ export function Map({ onNavigateSettings }: MapProps) {
       const n = fullGraph.nodes.find((n) => n.id === node.id()) ?? null;
       setSelectedFull(n);
       setSelected(null);
+      if (n) {
+        onActiveContextChange?.({
+          kind: "node",
+          source: "map",
+          nodeId: n.id,
+          label: n.label,
+          nodeType: n.type,
+          clusterId: n.cluster,
+          viewMode: "full",
+        });
+      }
     });
 
     cy.on("tap", (e: any) => {
@@ -1041,6 +1060,7 @@ export function Map({ onNavigateSettings }: MapProps) {
         cy.nodes().removeClass("selected");
         cy.edges().removeClass("highlighted");
         setSelectedFull(null);
+        onActiveContextChange?.(null);
       }
     });
 
@@ -1134,8 +1154,11 @@ export function Map({ onNavigateSettings }: MapProps) {
 
   // Clear highlighted pair when semantic is turned off
   useEffect(() => {
-    if (!showSemantic) setHighlightedPair(null);
-  }, [showSemantic]);
+    if (!showSemantic) {
+      setHighlightedPair(null);
+      onActiveContextChange?.(null);
+    }
+  }, [showSemantic, onActiveContextChange]);
 
   async function createOverlapTask(group: OverlapGroup) {
     const key = `${group.clusterA}${group.clusterB}`;
@@ -1251,6 +1274,7 @@ export function Map({ onNavigateSettings }: MapProps) {
     const cy = cyRef.current;
     if (!cy) return;
     setSelected(null);
+    onActiveContextChange?.(null);
     setPathNoRoute(false);
     cy.nodes().removeClass("path-source path-target");
     cy.elements().removeClass("path-edge faded");
@@ -1395,7 +1419,10 @@ export function Map({ onNavigateSettings }: MapProps) {
             onClick={() => {
               if (viewMode !== "full") return;
               setShowOverlap((s) => !s);
-              if (showOverlap) setHighlightedPair(null);
+              if (showOverlap) {
+                setHighlightedPair(null);
+                onActiveContextChange?.(null);
+              }
             }}
             title={
               viewMode !== "full"
@@ -1487,7 +1514,7 @@ export function Map({ onNavigateSettings }: MapProps) {
               <span className="map-panel-name">Overlap Analysis</span>
               <button
                 className="map-panel-close"
-                onClick={() => { setShowOverlap(false); setHighlightedPair(null); }}
+                onClick={() => { setShowOverlap(false); setHighlightedPair(null); onActiveContextChange?.(null); }}
                 aria-label="Close"
               >✕</button>
             </div>
@@ -1625,9 +1652,21 @@ export function Map({ onNavigateSettings }: MapProps) {
                               if (isActive) {
                                 setHighlightedPair(null);
                                 setShowSemantic(false);
+                                onActiveContextChange?.(null);
                               } else {
                                 if (!showSemantic) setShowSemantic(true);
                                 setHighlightedPair([g.clusterA, g.clusterB]);
+                                onActiveContextChange?.({
+                                  kind: "overlap-pair",
+                                  source: "map",
+                                  clusterA: g.clusterA,
+                                  clusterB: g.clusterB,
+                                  sourceNodeId: g.topPairs[0]?.source,
+                                  targetNodeId: g.topPairs[0]?.target,
+                                  labelA: g.topPairs[0]?.labelA,
+                                  labelB: g.topPairs[0]?.labelB,
+                                  similarity: g.maxSimilarity,
+                                });
                               }
                             }}
                           >
@@ -1668,7 +1707,7 @@ export function Map({ onNavigateSettings }: MapProps) {
           <aside className="map-panel">
             <div className="map-panel-head">
               <span className="map-panel-name">{selectedFull.label}</span>
-              <button className="map-panel-close" onClick={() => setSelectedFull(null)} aria-label="Close">✕</button>
+              <button className="map-panel-close" onClick={() => { setSelectedFull(null); onActiveContextChange?.(null); }} aria-label="Close">✕</button>
             </div>
             <div className="map-panel-section">
               <span className={`map-type-badge map-type-${selectedFull.type}`}>{selectedFull.type}</span>
@@ -1693,7 +1732,7 @@ export function Map({ onNavigateSettings }: MapProps) {
               <span className="map-panel-name">{selected.label}</span>
               <button
                 className="map-panel-close"
-                onClick={() => setSelected(null)}
+                onClick={() => { setSelected(null); onActiveContextChange?.(null); }}
                 aria-label="Close panel"
               >
                 ✕

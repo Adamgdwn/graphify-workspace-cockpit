@@ -45,8 +45,8 @@ traces the shortest path between any two nodes. God nodes (top-5 by edge
 weight) are highlighted with a gold ring. Drill down to file level on demand.
 
 **Decisions tab**
-A durable human decision ledger. You classify workspace areas: invest, finish,
-merge, archive, extract, or ignore. Decisions persist in
+A durable human decision ledger. You classify workspace areas: invest,
+client-ready, monitor, archive, or paused. Decisions persist in
 `workspace/state/decisions.json` and appear as badges on Map nodes. The model
 never makes decisions — only surfaces options.
 

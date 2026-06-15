@@ -1,6 +1,6 @@
 # Roadmap
 
-Last Updated: 2026-06-15
+Last Updated: 2026-06-15T10:23:52-06:00
 Owner: Adam Goodwin
 
 ## Done — Chunks 1–19 (all complete as of 2026-06-15)
@@ -27,7 +27,11 @@ Owner: Adam Goodwin
 
 ## Now
 
-The 19-chunk build pathway is complete. The cockpit is a working local-first decision surface with:
+The 19-chunk build pathway is complete. The next planned path is decision-flow
+polish: making the existing surfaces feel like one continuous decision tool
+rather than six adjacent tabs.
+
+The cockpit is a working local-first decision surface with:
 
 - Graph-backed Q&A, interactive map, decision ledger, recommendation queue, and action log
 - Floating AI assistant available in every tab
@@ -37,7 +41,16 @@ The 19-chunk build pathway is complete. The cockpit is a working local-first dec
 - Cross-device shared state via Supabase
 - API key auth, Caddy HTTPS, Docker deployment, rate limiting, and session pruning
 
-Immediate candidates for follow-on work:
+Planned decision-flow chunks:
+
+- **Chunk Twenty** — Decision-flow foundation: align decision vocabulary and introduce active cockpit context
+- **Chunk Twenty-One** — Evidence navigation: click Ask and Recommendation evidence into focused Map context
+- **Chunk Twenty-Two** — Map mode polish: group dense Map controls into Explore / Trace / Overlap / Review modes
+- **Chunk Twenty-Three** — Overlap triage workflow: persist untriaged, triaged, task-created, and dismissed states
+- **Chunk Twenty-Four** — Decision command center: surface pending recommendations, dry-run actions, untriaged overlaps, and graph freshness
+- **Chunk Twenty-Five** — Confidence and shipped evidence: focused tests and demo-path validation
+
+Additional candidates for follow-on work:
 
 - End-to-end test suite (Playwright or Vitest + MSW)
 - Graph rebuild UI polish (progress streaming, error reporting)

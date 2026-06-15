@@ -1,7 +1,7 @@
 # Current Build Pathway
 
-Last Updated: 2026-06-15
-Status: active — Chunk Eighteen complete; Chunk Nineteen complete
+Last Updated: 2026-06-15T11:23:11-06:00
+Status: active — Chunk Twenty complete; Chunk Twenty-One planned
 Owner: Adam Goodwin
 
 ## Purpose
@@ -49,6 +49,301 @@ For material or risk-triggering work:
 | Chunk Seventeen — in-cockpit AI assistant | Complete | 2026-06-14 | Floating draggable/resizable AI panel; POST /chat SSE streaming; GET/PUT /chat-config; cluster-aware graph context; "X nodes used" chip; localStorage position/size persistence; Settings → AI Assistant section for system prompt + model |
 | Chunk Eighteen — overlap analysis + actionable consolidation | Complete | 2026-06-14 | Cross-cluster semantic edge filtering (1988 cross-repo vs 14501 total); Overlap Analysis panel in Map tab; GET /graph/overlap-report; POST /recommendations/from-overlap (no LLM — computed from graph data); Highlight pair on map; Create Task → Recommendations flow |
 | Chunk Nineteen — signal/noise filtering + LLM triage | Complete | 2026-06-15 | Layer 1: same-name detection, similarity filter chips (70/80/85/90%), sameNameCount badge, pairs sort same-name first; Layer 2: POST /overlap/triage (Ollama phi4, structured JSON verdict); triageAll button; verdict badge (duplicate/reference/related); Next step action displayed for all verdicts; Task button verb reflects verdict (Merge/Review/Document); triage data flows into recommendation title + proposed_action; CSS specificity fix for Highlight/fade behaviour |
+| Chunk Twenty — decision-flow foundation | Complete | 2026-06-15T11:23:11-06:00 | Decision vocabulary aligned to shipped API/UI values; shared frontend decision metadata added; App-level active cockpit context added and wired to Map node/overlap selection plus Decisions edit/save/retire without changing action permissions |
+| Chunk Twenty-One — evidence navigation | Planned | 2026-06-15T10:23:52-06:00 | Make evidence chips and overlap pairs navigate to focused Map context without adding new analysis behavior |
+| Chunk Twenty-Two — Map mode polish | Planned | 2026-06-15T10:23:52-06:00 | Group dense Map controls into explicit Explore / Trace / Overlap / Review modes |
+| Chunk Twenty-Three — overlap triage workflow | Planned | 2026-06-15T10:23:52-06:00 | Add durable triage statuses for overlap pairs: untriaged, triaged, task created, dismissed |
+| Chunk Twenty-Four — decision command center | Planned | 2026-06-15T10:23:52-06:00 | Add a compact attention surface for pending recommendations, dry-run-ready actions, untriaged overlaps, and graph freshness |
+| Chunk Twenty-Five — confidence and shipped evidence | Planned | 2026-06-15T10:23:52-06:00 | Add focused E2E coverage and demo-path validation for the decision flow |
+
+---
+
+## Next Path - World-Class Decision Tool Polish
+
+Status: **active** — Chunk Twenty complete; Chunk Twenty-One planned — 2026-06-15T11:23:11-06:00
+
+Completion target: Integration complete
+
+Budget class: Medium overall, split into Small chunks
+
+Objective: Turn the existing six surfaces into one continuous decision workflow. The app already has the functional bones; this path should reduce context switching, make evidence navigable, and help the operator answer: what am I looking at, why does it matter, what did I decide, and what should happen next?
+
+Non-goals:
+
+- No autonomous execution or broader action permissions
+- No hosted model adapter work
+- No broad visual redesign
+- No large schema migration unless a chunk explicitly accepts it
+- No replacement of existing tabs; improve continuity between them
+
+Context hygiene:
+
+- Start each chunk with `git status --short`, `AGENTS.md`, and this section only.
+- Load `docs/domain-language.md` for vocabulary work.
+- Load the specific tab file being changed and any directly connected backend endpoint.
+- Avoid loading full `backend/main.py` unless changing or validating an endpoint.
+- Avoid broad Graphify exploration unless adding new graph traversal behavior.
+- Keep each chunk to one UI workflow plus targeted validation.
+- Update this section after any chunk changes status or scope.
+
+Recommended validation per UI chunk:
+
+- `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Manual browser check against `http://127.0.0.1:5173`
+- For backend/state changes, targeted `curl` checks against the changed endpoint
+
+Stop condition: stop at the end of each chunk once the workflow is usable, validated, and documented. Do not roll forward into the next chunk in the same context window unless the change is tiny and the tree is clean.
+
+---
+
+## Chunk Twenty - Decision-Flow Foundation
+
+Status: **complete** — 2026-06-15T11:23:11-06:00
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Establish the shared product language and minimal active-context foundation needed for cross-tab decision workflows.
+
+Context to load:
+
+- `docs/domain-language.md`
+- `frontend/src/App.tsx`
+- `frontend/src/tabs/Decisions.tsx`
+- `frontend/src/tabs/Map.tsx`
+- Backend decision routes only if classification values change at the API/state layer
+
+Outputs:
+
+- Decision classifications aligned across docs, UI labels, and backend expectations
+- A lightweight active cockpit context shape at App level, initially able to hold selected node, cluster, overlap pair, recommendation, or decision
+- No visible workflow overhaul yet; existing tab behavior remains stable
+- Shared frontend decision metadata now lives in `frontend/src/domain/decision.ts`
+- Active cockpit context type now lives in `frontend/src/domain/cockpitContext.ts`
+- Legacy or unknown saved decision classifications render safely and normalize to `monitor` when edited
+
+Acceptance criteria:
+
+- [x] Decision vocabulary no longer conflicts between `docs/domain-language.md`, `docs/manual.md`, `docs/video-script-prompt.md`, backend decision route types, and `Decisions.tsx`
+- [x] Existing saved decisions still render safely or have a documented compatibility path
+- [x] App can store and clear active context without breaking tab navigation
+- [x] No changes to action execution permissions
+
+Validation:
+
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Passed: `curl -I http://127.0.0.1:5173` returned `200 OK`
+- Passed: `curl http://127.0.0.1:8000/health` returned `{"status":"ok","version":"0.1.0","demo_mode":false}`
+- Browser walkthrough pending: create/edit/retire one decision
+- Browser walkthrough pending: Map still renders decisions and node selection
+
+Stop condition: stop before making evidence chips navigate or changing Map toolbar structure.
+
+---
+
+## Chunk Twenty-One - Evidence Navigation
+
+Status: **planned**
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Make evidence feel tangible by allowing users to move from Ask and Recommendation evidence directly to the relevant Map context.
+
+Context to load:
+
+- `frontend/src/App.tsx`
+- `frontend/src/tabs/Ask.tsx`
+- `frontend/src/tabs/Recommendations.tsx`
+- `frontend/src/tabs/Map.tsx`
+- Backend graph lookup route only if the Map needs a new focus endpoint
+
+Outputs:
+
+- Clickable evidence nodes in Ask results
+- Clickable evidence chips in Recommendation cards
+- Map focus behavior for selected node/cluster when navigated from another tab
+- Clear empty/error handling when an evidence target is not present in the current graph
+
+Acceptance criteria:
+
+- [ ] Ask evidence click navigates to Map and focuses the target when resolvable
+- [ ] Recommendation evidence click navigates to Map and focuses the target when resolvable
+- [ ] The active context is visible enough that the operator knows why Map changed
+- [ ] Missing evidence targets fail softly
+
+Validation:
+
+- Frontend typecheck and build
+- Manual: Ask question → click evidence → Map focus
+- Manual: Recommendation evidence → Map focus
+
+Stop condition: stop before adding command-center summaries or overlap workflow status.
+
+---
+
+## Chunk Twenty-Two - Map Mode Polish
+
+Status: **planned**
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Reduce Map toolbar density by grouping existing controls into explicit operator modes while preserving current functionality.
+
+Context to load:
+
+- `frontend/src/tabs/Map.tsx`
+- Map-related sections of `frontend/src/styles.css`
+
+Outputs:
+
+- Map modes: Explore, Trace, Overlap, Review
+- Existing controls placed under the mode where they make sense
+- Current Summary/Full, Structural/Semantic, Path, Overlap, source selection, and Fit behavior preserved
+
+Acceptance criteria:
+
+- [ ] Operator can identify the current Map mode at a glance
+- [ ] Trace mode makes path workflow obvious
+- [ ] Overlap mode opens the overlap workflow without requiring the user to discover multiple toggles
+- [ ] Existing highlight/clear behavior remains correct
+
+Validation:
+
+- Frontend typecheck and build
+- Manual: Summary path tracing
+- Manual: Full graph semantic overlap highlight and clear
+- Manual: source/cluster filter panel
+
+Stop condition: stop before adding persisted overlap statuses.
+
+---
+
+## Chunk Twenty-Three - Overlap Triage Workflow
+
+Status: **planned**
+
+Completion target: Task complete
+
+Budget class: Small to Medium
+
+Objective: Turn overlap analysis from a panel into a review queue with durable status.
+
+Context to load:
+
+- `frontend/src/tabs/Map.tsx`
+- Overlap-related backend routes in `backend/main.py`
+- Existing recommendation creation route for overlap tasks
+- State storage helper only if adding persisted overlap status
+
+Outputs:
+
+- Per-overlap status: untriaged, triaged, task-created, dismissed
+- Filter chips for overlap status
+- Dismiss/restore affordance for non-actionable overlaps
+- Task-created state that survives refresh
+
+Acceptance criteria:
+
+- [ ] Triage verdict and workflow status are visually distinct
+- [ ] Dismissed overlap pairs can be hidden and restored
+- [ ] Creating a task marks the overlap pair as task-created
+- [ ] Refresh does not lose durable triage workflow state
+
+Validation:
+
+- Frontend typecheck and build
+- Targeted backend checks for any new state endpoint
+- Manual: triage one pair, dismiss one pair, create one task, refresh
+
+Stop condition: stop before adding the command center.
+
+---
+
+## Chunk Twenty-Four - Decision Command Center
+
+Status: **planned**
+
+Completion target: Draft complete
+
+Budget class: Medium
+
+Objective: Add a compact attention surface that tells the operator what needs a decision next.
+
+Context to load:
+
+- `frontend/src/App.tsx`
+- `frontend/src/tabs/Recommendations.tsx`
+- `frontend/src/tabs/WorkQueue.tsx`
+- `frontend/src/tabs/Map.tsx`
+- Backend list endpoints for recommendations, actions, overlap status, graph status
+
+Outputs:
+
+- A new first tab or top-level dashboard surface
+- Counts and direct links for pending recommendations, accepted-not-queued recommendations, dry-run-ready actions, untriaged overlaps, stale graph rebuild, stale semantic pass
+- No new recommendation generation logic
+
+Acceptance criteria:
+
+- [ ] Operator can see the next most important review items without visiting every tab
+- [ ] Each summary item links to the relevant tab/context
+- [ ] Empty states are calm and demo-ready
+- [ ] Dashboard does not duplicate complex tab internals
+
+Validation:
+
+- Frontend typecheck and build
+- Manual: navigate from each dashboard item to its destination
+- Manual: empty state with no pending items
+
+Stop condition: stop before expanding into analytics, charts, or team workflows.
+
+---
+
+## Chunk Twenty-Five - Confidence And Shipped Evidence
+
+Status: **planned**
+
+Completion target: Integration complete
+
+Budget class: Small
+
+Objective: Lock the decision-flow polish behind focused tests and demo-path evidence.
+
+Context to load:
+
+- Existing frontend package/test setup
+- Only the tabs covered by the demo path
+- `docs/video-script-prompt.md` for demo expectations
+- `docs/runbook.md` if operational instructions change
+
+Outputs:
+
+- Focused E2E or component-level coverage for the core decision path
+- Demo checklist for Ask → Evidence → Map → Decision → Recommendation → Work Queue
+- Updated docs for any changed user workflow
+
+Acceptance criteria:
+
+- [ ] Automated coverage protects the main demo path or documents why manual coverage is the correct temporary gate
+- [ ] Demo checklist matches actual UI labels and behavior
+- [ ] `docs/video-script-prompt.md` remains accurate after UX changes
+- [ ] Final validation commands are recorded in the handoff or pathway
+
+Validation:
+
+- Frontend typecheck and build
+- New tests, if added
+- Manual full-path demo run
+
+Stop condition: stop when the decision-flow path is validated and documented. Further polish becomes a new planned path.
 
 ---
 

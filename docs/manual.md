@@ -40,7 +40,7 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and HTTPS
 |-----|---------|
 | **Ask** | Ask natural language questions about your workspace graph. Answers are backed by `graphify query/path/explain` with optional Ollama synthesis. Evidence nodes link directly to map view. |
 | **Map** | Interactive Cytoscape.js graph at project/cluster level. Click any node to inspect. Filter by type, theme, or decision status. Use "Why connected?" to trace paths between nodes. |
-| **Decisions** | Record durable human decisions about workspace areas. Classifications: invest, finish, merge, archive, extract, ignore. Decision badges appear on Map nodes. |
+| **Decisions** | Record durable human decisions about workspace areas. Classifications: invest, client-ready, monitor, archive, paused. Decision badges appear on Map nodes. |
 | **Recommendations** | Review model-backed cards with evidence, confidence, risk, and a proposed action. Accept, reject, or defer. Accepted recommendations flow into the Work Queue. |
 | **Work Queue** | Review queued actions from accepted recommendations. Every action requires a dry-run preview before execution. Executed actions include a rollback note. |
 | **Settings** | Upload a graph, view Ollama connection status, configure source + cluster toggles for context filtering, configure the AI assistant, and trigger a graph rebuild. |
