@@ -25,7 +25,7 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 
 | Task | Load First |
 |---|---|
-| Current plan, chunking, validation, or handoff | `docs/current-build-pathway.md` |
+| Current plan, chunking, validation, or handoff | `docs/stabilization-plan.md`; use `docs/current-build-pathway.md` only for archived build history |
 | Engineering standards map | `docs/standards/README.md` |
 | Context windows, token budgets, compaction, scoped reads, or handoffs | `docs/standards/context-hygiene-standard.md` |
 | Durable implementation, design quality, testing discipline, or AI coding fundamentals | `docs/policy/durable-development-engineering-policy.md` |
@@ -70,8 +70,8 @@ For meaningful work, define:
 - handoff location
 
 Tiny edits may use an inline version of this packet. Large or strategic work
-should record the packet in `docs/current-build-pathway.md`, an ADR, or a short
-handoff note.
+should record the packet in the active plan named by `START_HERE.md`, an ADR, or
+a short handoff note.
 
 ## Maintenance
 

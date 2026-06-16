@@ -1,53 +1,50 @@
 # Start Here
 
-Last Updated: 2026-06-15T16:30:47-06:00
-Status: integration complete — decision packet polish complete; awaiting owner UI testing
+Last Updated: 2026-06-16T16:18:15-06:00
+Status: active plan moved to stabilization plan; current-build pathway archived
 Owner: Adam Goodwin
+
+## Fast Startup
+
+Use this file as the lightweight router. Do not load the historical build log by
+default.
+
+1. Run `git status --short`.
+2. Read `AGENTS.md`.
+3. Read `docs/stabilization-plan.md`.
+4. Load only the files named in the selected stabilization chunk.
+5. Open `docs/current-build-pathway.md` only when investigating old chunk
+   history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
 
-The first 30 build chunks are complete. The cockpit is a working local-first decision
-surface: seven tabs (Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings)
-plus a floating AI assistant overlay. Desktop launcher is at
-`~/Desktop/graphify-cockpit.desktop`.
+The first 30 build chunks are complete. The cockpit is a working local-first
+decision surface with seven tabs (`Command`, `Ask`, `Map`, `Decisions`,
+`Recommendations`, `Work Queue`, `Settings`) plus a floating AI assistant
+overlay. The prior decision-tool polish path is integration complete and now
+archived in `docs/current-build-pathway.md`.
 
-The current decision-tool polish path is integration complete and split into
-token-friendly chunks in `docs/current-build-pathway.md`. Chunk Twenty established the shared decision
-vocabulary and App-level active cockpit context. Chunk Twenty-One made Ask and
-Recommendation evidence navigate into focused Map context. Chunk Twenty-Two
-grouped the Map toolbar into explicit Explore / Trace / Overlap / Review modes.
-Chunk Twenty-Three turned overlap analysis into a durable review queue with
-untriaged, triaged, task-created, and dismissed workflow states. Chunk
-Twenty-Four added the Command Center as the first tab, with attention counts for
-pending recommendations, accepted-not-queued items, dry-run-ready actions,
-untriaged overlaps, graph freshness, and semantic freshness. Chunk Twenty-Five
-added the demo smoke check, demo-path checklist, runbook note, and updated video
-prompt. Chunk Twenty-Six closed the decision-flow polish path with a final live
-browser sweep across all seven tabs and an Ask evidence submission. No new
-owner-reported UI blocker was supplied in Chunk Twenty-Six, so no speculative
-product-code change was made. A post-close-out documentation sweep aligned the
-README, manual, architecture, deployment guide, roadmap, handover, changelog,
-runbook, risk register, integration guide, tool permission matrix, vision, and
-video prompts with the current seven-tab/demo-ready state. Chunks Twenty-Seven
-through Thirty then deepened the decision surface: node provenance inspector,
-overlap evidence dossier, recommendation action plans, and read-only decision
-packets in Recommendation cards.
+The active next path is controlled hosted beta stabilization in
+`docs/stabilization-plan.md`. No runtime code has been changed for this path yet.
+The recommended first implementation chunk is graph schema normalization and
+backend contract tests for `links`/`edges` compatibility.
 
-**Chunks 18–19 highlights:**
-- Map → Overlap Analysis panel: 14 cross-cluster pairs, 1,988 semantic edges
-- Per-pair LLM triage (phi4): classifies duplicate / reference / related with same-name detection
-- Highlight on map, filter chips (70–90%), Task button creates verdict-specific recommendation
-- Highlight/fade CSS specificity bug fixed; browse mode dims edges when panel open
-
-Latest pushed demo-readiness commits before this planning pass:
-`effaf4b` Prepare cockpit demo handoff, `15f889f` Fix launcher Node environment
-loading, and `79ccf42` Fix overlap semantic highlight clearing.
+Open owner-review flags before implementation:
+- Project is classified as `AI agent with tools` while selected governance is
+  low / level 1; do not auto-change governance, but use stronger review for
+  hosted beta auth, uploads, deployment, Graphify execution, and Supabase mode.
+- Decide whether Docker/runtime should install `graphifyy` or expose a clear
+  Graphify-missing demo/readiness mode.
+- Do not run live Supabase migrations without explicit owner approval.
+- The planned frontend API-key support stores the key in browser localStorage
+  unless Adam selects a stronger hosted auth pattern.
 
 ## Where Things Live
 
 | What | Where |
 |------|-------|
-| Build history and chunk status | `docs/current-build-pathway.md` |
+| Active stabilization plan | `docs/stabilization-plan.md` |
+| Archived build history | `docs/current-build-pathway.md` — superseded for startup |
 | Architecture + ADRs | `docs/architecture.md` |
 | Roadmap and non-goals | `docs/roadmap.md` |
 | Full 0→1 build record | `docs/handover.md` |
@@ -57,10 +54,11 @@ loading, and `79ccf42` Fix overlap semantic highlight clearing.
 
 ## To Resume
 
-1. `git status --short` — confirm whether the Chunk Twenty-Seven through Thirty decision-tool polish packet has been committed.
-2. Read the "Next Path - World-Class Decision Tool Polish" and "Chunk Thirty - Decision Packet View" sections in `docs/current-build-pathway.md`.
-3. If Adam reports a specific UI issue, load only the affected tab/component and the related backend endpoint if needed.
-4. Use `docs/context-map.md` if routing is still unclear.
+1. `git status --short` — preserve unrelated work.
+2. Read `docs/stabilization-plan.md`.
+3. Pick or confirm the next stabilization chunk.
+4. Load only the files named in that chunk.
+5. Use `docs/context-map.md` if routing is still unclear.
 
 ## Work Patterns
 
@@ -85,4 +83,6 @@ tool use, governance changes, release readiness.
 ## Agent Handoff
 
 Update this file only when the top-level plan or pause state changes. Put
-detailed chunk progress in `docs/current-build-pathway.md`.
+detailed stabilization progress in `docs/stabilization-plan.md`. Treat
+`docs/current-build-pathway.md` as an archived historical record unless Adam
+explicitly asks to reopen it.

@@ -1,12 +1,22 @@
-# Current Build Pathway
+# Current Build Pathway - Superseded Archive
 
-Last Updated: 2026-06-15T16:34:48-06:00
-Status: integration complete — Chunk Thirty complete; awaiting owner UI testing
+Last Updated: 2026-06-16T16:18:15-06:00
+Status: superseded for active startup — use `docs/stabilization-plan.md`
 Owner: Adam Goodwin
+
+> **Superseded for active work:** This file is now an archived build-history
+> record for the first 30 chunks and earlier validation evidence. The active
+> implementation plan is `docs/stabilization-plan.md`. For normal startup,
+> read only this notice and then use `START_HERE.md` plus
+> `docs/stabilization-plan.md`. Open the rest of this file only when old chunk
+> history, prior validation evidence, or regression context is specifically
+> needed.
 
 ## Purpose
 
-Live build route from current state to shipped product. Keep chunks small, timestamped, and easy to resume.
+Archived build route and validation history through the original local-first
+decision cockpit build. Keep this file as historical evidence; do not use it as
+the active planning surface unless Adam explicitly reopens it.
 
 ## Required Work Pattern
 
@@ -26,7 +36,7 @@ For material or risk-triggering work:
 4. Capture timestamp with `date -Iseconds`.
 5. Work in the smallest complete chunk that can be reviewed safely.
 
-## Active Path
+## Archived Path Summary
 
 | Step | Status | Timestamp | Notes |
 |------|--------|-----------|-------|
@@ -60,6 +70,7 @@ For material or risk-triggering work:
 | Chunk Twenty-Eight — overlap evidence dossier | Complete | 2026-06-15T16:10:13-06:00 | Overlap triage now returns and renders a structured dossier: why it matters, per-side purpose, similarities, differences, canonicality signals, open questions, and full path context |
 | Chunk Twenty-Nine — recommendation action plans | Complete | 2026-06-15T16:15:53-06:00 | Overlap-created recommendations now include action_plan briefs with canonical target, sources, steps, conservative savings, risks, acceptance criteria, rollback, and open questions; queue/dry-run carries the plan |
 | Chunk Thirty — decision packet view | Complete | 2026-06-15T16:30:47-06:00 | Recommendations now expose a read-only decision packet that combines evidence provenance, overlap dossier, action plan, related decisions, queued action state, approval gate, and Markdown/JSON export |
+| Chunk Thirty-One — graph schema normalization | Planned | 2026-06-16T16:06:24-06:00 | First controlled hosted beta stabilization implementation chunk; normalize links/edges and add backend contract tests |
 
 ---
 
@@ -830,6 +841,619 @@ Validation:
 
 Stop condition: stop with the ground-level decision evidence path integrated and
 demo-ready; future polish should be based on Adam's hands-on testing notes.
+
+---
+
+## Next Path - Controlled Hosted Beta Stabilization
+
+Status: **draft complete** — plan created; awaiting Adam's owner review — 2026-06-16T16:06:24-06:00
+
+Completion target: Draft complete for planning; future implementation chunks target Task complete or Integration complete as noted.
+
+Budget class: Medium overall, split into Small chunks.
+
+Planning artifact: `docs/stabilization-plan.md`
+
+Objective: Turn the cockpit from a local demo with fragile assumptions into a
+controlled hosted beta candidate by addressing release blockers around graph
+schema compatibility, graph activation, Graphify runtime detection, API-key
+frontend support, upload safety, clean-state persistence, Caddy routing, backend
+contract tests, Supabase schema alignment, and readiness visibility.
+
+Baseline findings from the audit review:
+
+- Governance preflight passed with 0 warnings on 2026-06-16.
+- Backend entrypoint is `uvicorn backend.main:app`.
+- Frontend build command is `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`.
+- No `tests/` directory currently exists.
+- Docker installs `backend/requirements.txt`, which does not include Graphify;
+  Ask/Rebuild still call the `graphify` CLI directly.
+- Demo graph uses `links`, while connector ingest emits `edges`.
+- `/settings` currently counts `edges`, creating a false zero-edge risk for
+  Graphify `links` graphs.
+- Backend graph activation route is `POST /graphs/{name}/activate`; Settings
+  currently calls `POST /graphs/{name}`.
+- Graph upload uses raw `file.filename`, minimal schema checks, and direct writes.
+- `config/Caddyfile` handles the frontend catch-all before `/api/*`.
+- Supabase migration `001_initial.sql` lacks newer JSON fields now used by
+  recommendations/actions.
+- Frontend has many direct `fetch()` calls and no shared API-key client wrapper.
+
+Flags for owner review before implementation:
+
+- `project-control.yaml` classifies this project as `AI agent with tools` while
+  selected `risk_tier` is `low` and `governance_level` is `1`; local standards
+  say not to auto-change governance, but hosted beta work should use stronger
+  owner review for auth, upload, deployment, tool execution, and Supabase paths.
+- Supabase schema changes should not be run against any live project without
+  explicit owner approval.
+- Graphify packaging has a product decision: either install `graphifyy` in the
+  backend runtime or make demo-only / Graphify-missing mode explicit and visible.
+- API-key UX will store the key in browser localStorage unless a stronger hosted
+  auth pattern is selected.
+- Backend module splitting is deliberately deferred until tests exist.
+
+Context hygiene:
+
+- Start each stabilization chunk with `git status --short`, `AGENTS.md`, and
+  `docs/stabilization-plan.md`.
+- Use this archived pathway only for old validation evidence or regression
+  history.
+- Avoid `graphify-out/`, `graphify-out/cache/`, generated graph JSON, `.venv/`,
+  `node_modules/`, and build outputs.
+- Search before reading `backend/main.py`; load only the route/helper ranges
+  relevant to the active chunk.
+- Keep each implementation chunk to one trust boundary or workflow.
+- Update this section and validation evidence after each chunk.
+
+Recommended validation baseline:
+
+- `bash scripts/governance-preflight.sh`
+- `python -m compileall -q backend`
+- `python -m pytest` once tests exist
+- `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Targeted `curl` or browser checks only for the route/UI touched by the chunk
+
+Stop condition: do not implement code until Adam selects the first chunk or
+accepts this plan. Once implementation starts, stop after each chunk's validation
+and pathway update.
+
+---
+
+## Chunk Thirty-One - Graph Schema Normalization
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Normalize graph relationships so Graphify `links`, legacy/internal
+`edges`, Settings counts, full/summary graph routes, and connector ingest use a
+consistent contract.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 1
+- `backend/main.py` graph load, `/settings`, `/graph/summary`, and `/graph/full` ranges
+- `backend/connectors/ingest.py`
+- `workspace/demo/graph.json`
+- `frontend/src/tabs/Settings.tsx` count display only
+
+Likely outputs:
+
+- `backend/graph_schema.py` with `normalize_graph`, `validate_graph`, and
+  `count_links`
+- Backend callers use normalized `links`
+- Connector ingest emits or normalizes to `links`
+- Backend tests and small fixtures for links, edges, malformed links, and
+  settings counts
+
+Acceptance criteria:
+
+- [ ] Graph with `links` reports correct relationship count
+- [ ] Graph with `edges` reports correct relationship count
+- [ ] Malformed relationships missing `source` or `target` are rejected
+- [ ] Settings no longer falsely reports zero edges for a valid Graphify graph
+- [ ] Connector-created graph data remains compatible
+
+Validation:
+
+- Pending: `python -m pytest tests/test_graph_schema.py tests/test_settings_counts.py`
+- Pending: `python -m compileall -q backend`
+
+Stop condition: stop before changing upload hardening, API auth, or Caddy routing.
+
+---
+
+## Chunk Thirty-Two - Graph Activation Fix
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Make Settings activate graphs through the backend's actual
+`POST /graphs/{name}/activate` endpoint and preserve useful user-facing errors.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 2
+- `frontend/src/tabs/Settings.tsx`
+- `backend/main.py` graph list/activation route range
+
+Likely outputs:
+
+- Settings activation call fixed
+- Backend activation contract tests
+- No broad Settings redesign
+
+Acceptance criteria:
+
+- [ ] User can activate a listed demo or uploaded graph from Settings
+- [ ] Active graph state refreshes after success
+- [ ] Failed activation shows backend `detail` or a useful fallback
+
+Validation:
+
+- Pending: `python -m pytest tests/test_graph_activation.py`
+- Pending: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Pending: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+
+Stop condition: stop before upload hardening unless owner explicitly combines
+activation with upload in one PR.
+
+---
+
+## Chunk Thirty-Three - Graphify Runtime Detection
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Small to Medium
+
+Objective: Wrap Graphify CLI usage so missing CLI, timeout, and command failure
+states become structured runtime/readiness signals instead of vague failures.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 3
+- `backend/main.py` Ask and rebuild subprocess ranges
+- `Dockerfile`, `docker-compose.yml`, `backend/requirements.txt`
+- `README.md`, `docs/deployment-guide.md`, `docs/runbook.md`
+
+Likely outputs:
+
+- `backend/services/graphify_service.py`
+- Ask/Rebuild route calls through the wrapper
+- Runtime status includes Graphify availability/version/path
+- Docker/docs either install Graphify or clearly document demo-only missing mode
+- Tests for missing CLI and command failure behavior
+
+Acceptance criteria:
+
+- [ ] Ask/Rebuild do not expose raw command-not-found behavior
+- [ ] UI/status endpoints can show whether Graphify is available
+- [ ] Docker/runtime Graphify expectation is explicit
+
+Validation:
+
+- Pending: `python -m pytest tests/test_graphify_service.py`
+- Pending: `python -m compileall -q backend`
+- Pending: `docker compose build backend`
+
+Stop condition: stop before readiness panel UI unless owner selects that follow-up.
+
+---
+
+## Chunk Thirty-Four - Frontend API Client And API-Key Support
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Integration complete
+
+Budget class: Medium
+
+Objective: Add a shared frontend API client and Settings API-key controls so the
+browser UI works when backend `API_KEY` protection is enabled.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 4
+- `frontend/src/config.ts`
+- Direct frontend `fetch()` call sites under `frontend/src`
+- Backend API-key middleware range in `backend/main.py`
+- `docs/deployment-guide.md`, `README.md`
+
+Likely outputs:
+
+- `frontend/src/api/client.ts`
+- Direct frontend `fetch()` calls replaced with `apiFetch`
+- Settings UI to save, test, and clear API key locally
+- Clear 401/403 copy
+- Docs for hosted API-key setup
+
+Acceptance criteria:
+
+- [ ] Hosted frontend can call authenticated backend
+- [ ] Local unauthenticated dev still works when backend `API_KEY` is unset
+- [ ] `FormData` uploads keep browser-managed multipart headers
+- [ ] Unauthorized responses are clear to the user
+
+Validation:
+
+- Pending: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Pending: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+- Pending: targeted local smoke with `API_KEY` enabled
+
+Stop condition: stop before changing backend auth policy or introducing a new
+hosted auth provider.
+
+---
+
+## Chunk Thirty-Five - Graph Upload Hardening
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Small to Medium
+
+Objective: Treat graph upload as a trust boundary by sanitizing filenames,
+validating normalized graph schema, enforcing file type/size, writing atomically,
+and refusing to activate invalid graphs.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 5
+- `backend/main.py` graph upload/list/activate ranges
+- `backend/graph_schema.py` after Chunk Thirty-One
+- `frontend/src/tabs/Settings.tsx` upload flow
+
+Likely outputs:
+
+- Hardened `POST /graph/upload`
+- Upload safety tests for valid graph, invalid JSON, missing nodes, malformed
+  link, traversal filename, non-json extension, and oversized file
+
+Acceptance criteria:
+
+- [ ] Valid graph upload succeeds and activates
+- [ ] Invalid uploads are rejected with safe, useful errors
+- [ ] Upload cannot write outside `GRAPHS_DIR`
+- [ ] Invalid graph files are not activated
+
+Validation:
+
+- Pending: `python -m pytest tests/test_graph_upload.py`
+- Pending: `python -m compileall -q backend`
+
+Stop condition: stop before broader state-store conversion unless selected.
+
+---
+
+## Chunk Thirty-Six - Atomic State Writes And Clean-State Safety
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Medium
+
+Objective: Centralize local JSON writes so fresh state directories work and
+state files are written atomically.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 6
+- `backend/main.py` `write_text` / `write_bytes` call sites
+- `backend/connectors/*.py` write helpers
+
+Likely outputs:
+
+- `backend/state_store.py`
+- Local JSON state writes converted to `write_json_atomic`
+- Clean-state tests with temporary state directory
+
+Acceptance criteria:
+
+- [ ] Fresh empty state directory can write settings, decisions,
+  recommendations, actions, overlap status, semantic edges, scan dirs, and chat config
+- [ ] Local JSON writes create parent directories and replace files atomically
+- [ ] Existing Supabase path remains unchanged
+
+Validation:
+
+- Pending: `python -m pytest tests/test_clean_state.py`
+- Pending: `python -m compileall -q backend`
+
+Stop condition: stop before backend module splitting.
+
+---
+
+## Chunk Thirty-Seven - Caddy And Deployment Routing Fix
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Ensure hosted `/api/*` requests route to the backend before the
+frontend catch-all.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 7
+- `config/Caddyfile`
+- `docker-compose.yml`
+- `Dockerfile.frontend`, `config/nginx.conf`
+- `docs/deployment-guide.md`, `README.md`
+
+Likely outputs:
+
+- Caddy `/api/*` handle moved before frontend handle
+- Deployment docs aligned to the actual API routing strategy
+- Hosted smoke checklist updated
+
+Acceptance criteria:
+
+- [ ] `GET /api/health` returns backend JSON through Caddy
+- [ ] `GET /` returns frontend app through Caddy
+- [ ] Docs correctly describe `VITE_API_URL` for the Caddy profile
+
+Validation:
+
+- Pending: `docker compose --profile https config`
+- Pending: `docker compose build frontend backend`
+
+Stop condition: stop before unrelated Docker/nginx refactors.
+
+---
+
+## Chunk Thirty-Eight - Minimum Backend Test Suite
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Medium
+
+Objective: Add minimum backend contract tests for release-critical paths so
+future stabilization changes have a real feedback loop.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 8
+- `backend/main.py` route contracts being tested
+- `backend/requirements.txt`
+- `.github/workflows/ci.yml`
+
+Likely outputs:
+
+- `tests/conftest.py`
+- `tests/fixtures/*.json`
+- Tests for graph schema, settings counts, upload, activation, API-key auth, and clean state
+- Pytest dependency wiring
+
+Acceptance criteria:
+
+- [ ] `python -m pytest` passes locally
+- [ ] P0 backend contracts named in the stabilization plan are covered
+- [ ] Tests isolate state with temporary directories
+
+Validation:
+
+- Pending: `python -m pytest`
+- Pending: `python -m compileall -q backend`
+
+Stop condition: stop before CI expansion unless owner approves.
+
+---
+
+## Chunk Thirty-Nine - Supabase Schema Alignment
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Draft complete or Task complete depending on owner approval
+
+Budget class: Small to Medium
+
+Objective: Align Supabase migration/docs with current recommendation/action
+records or clearly mark Supabase mode as not hosted-beta-ready until migration
+is applied.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 9
+- `db/migrations/001_initial.sql`
+- Supabase persistence ranges in `backend/main.py`
+- `docs/integration-guide.md`, `docs/deployment-guide.md`, `docs/runbook.md`
+
+Likely outputs:
+
+- Optional `db/migrations/002_recommendation_action_plans.sql`
+- Docs explaining required migration and schema limitation
+- Runtime readiness warning if schema verification is added
+
+Acceptance criteria:
+
+- [ ] Supabase docs match actual current object shape
+- [ ] New optional fields have a migration or Supabase mode is visibly limited
+- [ ] No live Supabase command is run without owner approval
+
+Validation:
+
+- Pending: `python -m compileall -q backend` if backend readiness code changes
+- Pending: SQL review if a migration is added
+
+Stop condition: stop before applying migration to any live database.
+
+---
+
+## Chunk Forty - Workspace Readiness Panel
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Integration complete
+
+Budget class: Medium
+
+Objective: Show a first-use readiness state so a beta user can immediately see
+backend, Graphify, Ollama, active graph, auth, connector, and next-action status.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 10
+- `frontend/src/tabs/Dashboard.tsx`
+- `frontend/src/tabs/Settings.tsx`
+- Runtime/status backend ranges after Graphify service and graph schema chunks
+
+Likely outputs:
+
+- `GET /runtime/status` or equivalent readiness object
+- Command Center readiness panel
+- Tests for readiness object
+
+Acceptance criteria:
+
+- [ ] Workspace status is Ready, Partial, or Not Ready
+- [ ] Missing Graphify/Ollama/auth/graph conditions are visible
+- [ ] Next best action points the operator to the right Settings or setup step
+
+Validation:
+
+- Pending: `python -m pytest tests/test_runtime_status.py`
+- Pending: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`
+- Pending: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`
+
+Stop condition: stop before visual redesign.
+
+---
+
+## Chunk Forty-One - Connector Graph Normalization
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Make SharePoint/OneNote connector graph output match the normalized
+local graph contract.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 11
+- `backend/connectors/ingest.py`
+- `backend/connectors/base.py`
+- `backend/connectors/sharepoint.py`
+- `backend/connectors/onenote.py`
+- `backend/graph_schema.py`
+
+Likely outputs:
+
+- Connector ingest emits normalized `links` with `relation`
+- Connector merge writes atomically
+- Tests for connector ingest fixtures
+
+Acceptance criteria:
+
+- [ ] Connector relationships appear in graph counts
+- [ ] Connector nodes remain grouped/labeled correctly
+- [ ] No external Microsoft auth/sync is run during tests
+
+Validation:
+
+- Pending: `python -m pytest tests/test_connector_ingest.py`
+- Pending: `python -m compileall -q backend`
+
+Stop condition: stop before live connector sync.
+
+---
+
+## Chunk Forty-Two - Token-Saving Repo Cleanup And Agent Docs
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Task complete
+
+Budget class: Small
+
+Objective: Reduce future agent context cost with concise architecture, file
+summary, known issue, and quickstart docs while confirming generated outputs are ignored.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 12
+- `.gitignore`
+- `AGENTS.md`, `docs/context-map.md`, `docs/architecture.md`
+
+Likely outputs:
+
+- `AGENT_QUICKSTART.md`
+- `docs/ARCHITECTURE_MAP.md`
+- `docs/FILE_SUMMARIES.md`
+- `docs/KNOWN_ISSUES.md`
+- `.gitignore` updates only if needed
+
+Acceptance criteria:
+
+- [ ] Future agents can orient without reading generated graph/cache files
+- [ ] Context map remains accurate
+- [ ] Docs are concise and do not duplicate long existing docs
+
+Validation:
+
+- Pending: `git diff --check`
+- Pending: `git status --short`
+
+Stop condition: stop before unrelated docs rewrite.
+
+---
+
+## Chunk Forty-Three - Backend Module Split Plan
+
+Status: **planned** — 2026-06-16T16:06:24-06:00
+
+Completion target: Draft complete first; later Task complete in move-only PRs
+
+Budget class: Medium to Large
+
+Objective: Reduce `backend/main.py` complexity only after tests exist, preserving
+`uvicorn backend.main:app` compatibility and avoiding behavior changes hidden in
+the refactor.
+
+Context to load:
+
+- `docs/stabilization-plan.md`, Chunk 13
+- Passing backend tests
+- `backend/main.py` route index
+- Helper modules created by earlier chunks
+
+Likely outputs:
+
+- Move-only split into config/auth/state/schema/services/routes modules
+- `backend/main.py` remains an import-compatible app entrypoint
+- Full backend test run before and after each move group
+
+Acceptance criteria:
+
+- [ ] Routes behave the same after move
+- [ ] Tests pass before and after split
+- [ ] No feature changes are bundled into the refactor
+
+Validation:
+
+- Pending: `python -m pytest`
+- Pending: `python -m compileall -q backend`
+- Pending: `curl http://127.0.0.1:8000/health`
+
+Stop condition: stop immediately if tests reveal behavior drift; split is not a
+release blocker ahead of P0 fixes.
 
 ---
 
