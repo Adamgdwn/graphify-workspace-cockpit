@@ -56,6 +56,21 @@ source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://
 
 Then walk the manual demo path in `docs/demo-path-checklist.md`.
 
+For hosted Caddy deployments, confirm Caddy routes the API prefix and frontend
+root separately:
+
+```bash
+curl https://cockpit.example.com/api/health
+curl -I https://cockpit.example.com/
+```
+
+Then run the smoke gate against the hosted origin. If `API_KEY` is set, provide
+it as `SMOKE_API_KEY` or `API_KEY`:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_URL=https://cockpit.example.com node scripts/demo-path-smoke.mjs
+```
+
 ## Alerts and Failures
 
 | Symptom | Likely Cause | First Action |

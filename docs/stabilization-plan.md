@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T19:37:26-06:00
-Status: active plan - Chunk 6 task complete; next recommended chunk is Chunk 7 Caddy and Deployment Routing Fix
+Last Updated: 2026-06-16T20:49:51-06:00
+Status: active plan - Chunk 7 task complete; next recommended chunk is Chunk 8 Minimum Backend Test Suite
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -38,7 +38,6 @@ Preserve the current product while hardening it. The seven-tab workflow
 
 P0 - blocks hosted beta:
 
-- Caddy handles the frontend catch-all before `/api/*`, so hosted API routing can fail.
 - Backend tests now exist, but coverage is still partial until the remaining P0
   backend contracts are added.
 
@@ -88,6 +87,13 @@ Resolved in Chunk 6:
   selection, device tracking, and chat config/session metadata use the helper.
   Clean empty-state tests cover the persisted local file surfaces without
   calling network-backed Graphify or Ollama paths.
+
+Resolved in Chunk 7:
+
+- `config/Caddyfile` now handles `/api/*` before the frontend SPA catch-all and
+  strips `/api` before proxying to the backend. Deployment docs, README,
+  runbook, and demo checklist now document `VITE_API_URL=/api` for same-origin
+  Caddy hosting plus hosted smoke checks for `GET /api/health` and `GET /`.
 
 P1 - beta confidence:
 
@@ -157,8 +163,8 @@ Baseline evidence gathered on 2026-06-16:
 - Local state writes: `backend/state_store.py` owns atomic JSON replacement for
   the file backend, and `tests/test_clean_state.py` covers fresh empty-state
   writes for the main persisted surfaces.
-- Caddy route file: `config/Caddyfile`, currently handles frontend catch-all
-  before `/api/*`.
+- Caddy route file: `config/Caddyfile`, now handles `/api/*` before the
+  frontend catch-all and strips `/api` before proxying to the backend.
 - Supabase migration: `db/migrations/001_initial.sql`, missing newer optional
   JSON fields used in current records.
 - Existing tests: `tests/` now covers graph schema normalization, settings
@@ -647,6 +653,10 @@ and edit callers in batches with tests.
 
 ### Chunk 7: Caddy and Deployment Routing Fix
 
+Status: **task complete** — 2026-06-16T20:49:51-06:00
+
+Completion target: Task complete
+
 Goal: Make hosted `/api/*` routing reliable.
 
 Why this matters: Hosted frontend can appear healthy while backend API requests
@@ -673,12 +683,35 @@ docker compose --profile https config
 docker compose build frontend backend
 ```
 
+Implementation completed:
+
+- Moved the Caddy `/api/*` handler above the frontend catch-all and kept
+  `uri strip_prefix /api` before proxying to `backend:8000`.
+- Updated README and deployment guidance to recommend `VITE_API_URL=/api` for
+  same-origin Caddy deployments, while keeping absolute backend URLs for
+  separated frontend/API deployments.
+- Added hosted Caddy route smoke instructions to the deployment guide, runbook,
+  and demo path checklist.
+
+Validation completed:
+
+- Passed: `bash scripts/governance-preflight.sh` with 0 warnings.
+- Passed: `docker compose --profile https config`.
+- Passed: `docker compose build frontend backend`; frontend build still reports
+  the existing npm audit advisory count during `npm ci`.
+- Passed: isolated Caddy route smoke with the built backend/frontend images and
+  `config/Caddyfile`: `GET /api/health` reached backend JSON and `GET /`
+  returned frontend HTML.
+- Passed: `git diff --check`.
+- Passed: `graphify update . --no-cluster` rebuilt `graphify-out/graph.json`
+  with 1131 nodes and 30946 edges.
+
 Acceptance criteria:
 
-- `GET /api/health` routes to backend JSON.
-- `GET /` routes to frontend.
-- Deployment docs match actual Caddy behavior.
-- Runbook and demo checklist describe the hosted API-prefix smoke.
+- [x] `GET /api/health` routes to backend JSON.
+- [x] `GET /` routes to frontend.
+- [x] Deployment docs match actual Caddy behavior.
+- [x] Runbook and demo checklist describe the hosted API-prefix smoke.
 
 Rollback note: Revert Caddyfile and docs if hosted profile is not used, but keep
 the issue documented.
@@ -689,8 +722,9 @@ Token/context warning: Do not change unrelated nginx or Docker behavior.
 
 Goal: Add enough tests that release-critical paths cannot silently regress.
 
-Why this matters: The repo currently has no `tests/` directory, but the hosted
-beta blockers are mostly backend contracts and trust boundaries.
+Why this matters: Focused tests now exist from Chunks 1-6, but the hosted beta
+still needs remaining backend contract coverage and CI expansion so regressions
+cannot silently pass.
 
 Files to inspect first: `backend/main.py`, `backend/requirements.txt`, any local
 test guidance in docs, existing CI workflow.

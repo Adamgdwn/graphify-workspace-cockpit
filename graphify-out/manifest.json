@@ -120,8 +120,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1781657017.3425765,
-    "ast_hash": "dcd17d8344efa7759ae0881c59d235cf",
+    "mtime": 1781664456.9304001,
+    "ast_hash": "3c64d50d910e0670e3eff94c05b8c880",
     "semantic_hash": ""
   },
   "START_HERE.md": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "docs/deployment-guide.md": {
-    "mtime": 1781657017.3425765,
-    "ast_hash": "cc36e94ee31af1cd5700ccf7b9c2ce6b",
+    "mtime": 1781664456.9314003,
+    "ast_hash": "30e69de8d3aeae6e5cb786bc2a867ac0",
     "semantic_hash": ""
   },
   "docs/domain-language.md": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "docs/runbook.md": {
-    "mtime": 1781655386.9320714,
-    "ast_hash": "f038ca5d0267f5951119eddce68c23ab",
+    "mtime": 1781664456.9314003,
+    "ast_hash": "c632e0fcb8163be499b0bf47e4a15d7c",
     "semantic_hash": ""
   },
   "docs/standards/README.md": {
@@ -395,8 +395,8 @@
     "semantic_hash": ""
   },
   "docs/demo-path-checklist.md": {
-    "mtime": 1781562719.0323005,
-    "ast_hash": "0df406a18a9e689486ae056861a7cd70",
+    "mtime": 1781664456.9314003,
+    "ast_hash": "c38651a029545be82e577d4e53c81a46",
     "semantic_hash": ""
   },
   "backend/graph_schema.py": {
@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781660282.9351387,
-    "ast_hash": "179deeaaf60254de941d7cc56a7c709f",
+    "mtime": 1781660390.031436,
+    "ast_hash": "a6f59f1def7692ba09186b1022b584b3",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {

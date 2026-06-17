@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T19:37:26-06:00
-Status: stabilization Chunk 6 task complete; current-build pathway archived
+Last Updated: 2026-06-16T20:49:51-06:00
+Status: stabilization Chunk 7 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -43,8 +43,10 @@ candidates; uploaded graphs are normalized and written atomically before
 activation. Chunk 6 is task complete: local JSON state writes now use
 parent-safe atomic replacement through `backend/state_store.py`, clean empty
 state tests cover the main persisted file surfaces, and launcher-compatible
-smoke validation passed. The recommended next implementation chunk is Chunk 7:
-Caddy and Deployment Routing Fix.
+smoke validation passed. Chunk 7 is task complete: Caddy now routes `/api/*`
+before the frontend catch-all, strips `/api` before proxying to the backend, and
+hosted smoke instructions cover `GET /api/health` plus `GET /`. The recommended
+next implementation chunk is Chunk 8: Minimum Backend Test Suite.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is

@@ -166,6 +166,12 @@ VITE_API_URL=/api
 CORS_ORIGINS=https://cockpit.example.com
 ```
 
+Use `/api` for the Caddy profile because the browser talks to the same origin
+as the frontend. `config/Caddyfile` matches `/api/*` before the frontend
+catch-all, strips `/api`, and forwards the request to the backend. Use an
+absolute backend URL only when the frontend is not being served through this
+same-origin Caddy proxy.
+
 **4. Start with the `https` profile:**
 
 ```bash
@@ -223,6 +229,17 @@ curl http://localhost:8000/settings         # -> active graph name + node count
 curl http://localhost:8000/status/ollama    # -> {"connected":true/false,...}
 ```
 
+For the Caddy HTTPS profile, verify both route families through the public
+origin:
+
+```bash
+curl https://cockpit.example.com/api/health # -> backend JSON
+curl -I https://cockpit.example.com/        # -> frontend HTML route
+```
+
+For local self-signed Caddy checks, use `https://localhost` and add `-k` to the
+`curl` commands.
+
 The `/health` and `/settings` responses include `graphify.available`. If it is
 false, `graphify.code` is `GRAPHIFY_MISSING`.
 
@@ -230,6 +247,13 @@ If Node is available through nvm, run the live demo smoke gate:
 
 ```bash
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
+```
+
+For hosted Caddy, point the smoke gate at the API prefix and frontend origin. If
+`API_KEY` is set, provide it as `SMOKE_API_KEY` or `API_KEY`:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_URL=https://cockpit.example.com node scripts/demo-path-smoke.mjs
 ```
 
 Open `http://localhost:5173` → confirm all seven tabs render (`Command`, `Ask`, `Map`, `Decisions`, `Recommendations`, `Work Queue`, `Settings`) → confirm the AI assistant button appears in the bottom-right corner → confirm Settings tab shows active graph and Ollama status → confirm Map shows Explore / Trace / Overlap / Review modes and the Overlap Analysis panel when semantic edges are available.

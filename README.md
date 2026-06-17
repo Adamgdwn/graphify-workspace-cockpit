@@ -154,7 +154,7 @@ exist inside the container.
 | `STATE_DIR` | `workspace/state` | Persistent state directory |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed frontend origins; include the exact `localhost` or `127.0.0.1` URL you use |
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama server URL — `host.docker.internal` reaches the host machine |
-| `VITE_API_URL` | `http://localhost:8000` | Backend URL the browser sends requests to (build-time) |
+| `VITE_API_URL` | `http://localhost:8000` | Backend URL the browser sends requests to (build-time). Use `/api` for Caddy-hosted same-origin deployments; use an absolute backend URL when the frontend and API are served separately. |
 | `API_KEY` | unset | Required before exposing the backend beyond trusted localhost use |
 
 To use your own graph with Docker, either:
@@ -196,6 +196,10 @@ API_KEY         Optional API key for non-local deployments
 ```
 VITE_API_URL    Backend API URL (default: http://localhost:8000)
 ```
+
+For the optional Caddy HTTPS profile, build the frontend with
+`VITE_API_URL=/api`. Caddy routes `/api/*` to the backend after stripping the
+`/api` prefix, while `/` continues to serve the frontend.
 
 When `API_KEY` is set, the frontend can store the key in browser localStorage
 from Settings → API. Leave `API_KEY` unset only for fully trusted local

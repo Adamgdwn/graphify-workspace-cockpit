@@ -1,6 +1,6 @@
 # Demo Path Checklist
 
-Last Updated: 2026-06-15T16:30:47-06:00
+Last Updated: 2026-06-16T20:46:08-06:00
 Status: active
 Owner: Adam Goodwin
 
@@ -12,9 +12,10 @@ operator journey that still needs human judgement.
 
 ## Preconditions
 
-- Backend is running at `http://127.0.0.1:8000` or `API_URL` points to the active backend.
-- Frontend is running at `http://127.0.0.1:5173` or `FRONTEND_URL` points to the active frontend.
+- Backend is running at `http://127.0.0.1:8000` or `API_URL` points to the active backend. For hosted Caddy, use the API prefix, such as `https://cockpit.example.com/api`.
+- Frontend is running at `http://127.0.0.1:5173` or `FRONTEND_URL` points to the active frontend. For hosted Caddy, use the frontend origin, such as `https://cockpit.example.com`.
 - `curl http://127.0.0.1:8000/health` returns `{"status":"ok",...}`.
+- For hosted Caddy, `curl https://cockpit.example.com/api/health` returns backend JSON and `curl -I https://cockpit.example.com/` returns the frontend route.
 - If Ask, Chat, or Recommendations need synthesized language, Ollama is running.
 
 ## Automated Smoke Check
@@ -30,6 +31,15 @@ Optional overrides:
 ```bash
 source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs
 ```
+
+Hosted Caddy override:
+
+```bash
+source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_URL=https://cockpit.example.com node scripts/demo-path-smoke.mjs
+```
+
+If the hosted backend has `API_KEY` set, provide it as `SMOKE_API_KEY` or
+`API_KEY`.
 
 The smoke check verifies:
 
