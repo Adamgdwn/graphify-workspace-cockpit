@@ -171,6 +171,15 @@ typecheck/build, Graphify update, demo smoke, headless broad-graph Map gate
 smoke, and a controlled scoped generate smoke that restored the prior broad
 profile/active graph afterward.
 
+Owner UX correction for Chunk 8 is task complete as of
+2026-06-17T15:17:51-06:00: the Map startup gate now presents the directory
+checkbox tree as the primary visible control, converts root suggestions from a
+native dropdown into quick root buttons, keeps an always-present folder panel
+while inspection loads, and de-duplicates development-mode inspection requests.
+Headless browser verification confirmed the Map startup tree rendered with 60
+checkboxes, 47 enabled selectable folder rows, and no startup root-select
+dropdown.
+
 Continue with owner review / next polish for the knowledge-tool experience.
 
 Open owner-review flags before future implementation:

@@ -749,12 +749,12 @@ body {
 }
 
 .map-scope-gate .scope-picker-startup {
-  max-width: 1080px;
+  max-width: 1320px;
   margin: 0 auto;
 }
 
 .map-scope-existing {
-  max-width: 1080px;
+  max-width: 1320px;
   margin: 10px auto 0;
 }
 
@@ -3806,6 +3806,41 @@ body {
   flex: 1 1 360px;
 }
 
+.scope-root-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.scope-root-chip {
+  min-height: 28px;
+  max-width: 260px;
+  padding: 5px 9px;
+  border: 1px solid #1a2238;
+  border-radius: 6px;
+  background: #0b1020;
+  color: #8ea0c5;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.scope-root-chip:hover:not(:disabled),
+.scope-root-chip-active {
+  border-color: #335aa8;
+  background: #101a33;
+  color: #c7d7f5;
+}
+
+.scope-root-chip:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
 .scope-summary {
   display: flex;
   flex-wrap: wrap;
@@ -3865,16 +3900,70 @@ body {
   color: #8fa0c0;
 }
 
+.scope-tree-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 260px;
+  border: 1px solid #243151;
+  border-radius: 8px;
+  background: #070a13;
+  overflow: hidden;
+}
+
+.scope-tree-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 9px 11px;
+  border-bottom: 1px solid #1a2238;
+  color: #b8c8e8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .scope-tree {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 440px;
+  min-height: 220px;
+  max-height: min(54vh, 620px);
   overflow: auto;
   padding: 8px;
-  border: 1px solid #1a2238;
-  border-radius: 6px;
   background: #080b15;
+}
+
+.scope-empty-tree {
+  display: flex;
+  align-items: flex-start;
+  min-height: 220px;
+  padding: 9px;
+  background: #080b15;
+}
+
+.scope-empty-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 30px;
+  color: #6f7f9d;
+  font-size: 12px;
+}
+
+.scope-empty-row input {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.scope-empty-expander {
+  width: 20px;
+  flex: 0 0 20px;
+  color: #52607d;
+  font-size: 11px;
+  text-align: center;
 }
 
 .scope-node {

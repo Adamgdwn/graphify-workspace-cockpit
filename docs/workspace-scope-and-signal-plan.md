@@ -121,6 +121,14 @@ Observed on 2026-06-16:
   default low-signal noise. A controlled generate smoke selected this repo,
   rebuilt a 1,128-node scoped overview, then restored the broad smoke profile
   and active graph.
+- Chunk 8 owner UX correction is task complete as of
+  2026-06-17T15:17:51-06:00: the Map startup scope selector now makes the
+  directory checkbox tree the primary visible panel, replaces the startup
+  native root dropdown with root shortcut buttons plus exact path fallback,
+  keeps a visible folder panel while inspection loads, and de-duplicates
+  development-mode inspect requests. Headless browser verification confirmed
+  the startup tree rendered with 60 checkboxes, 47 enabled selectable folders,
+  and no startup root-select dropdown.
 
 ## Target Mental Model
 

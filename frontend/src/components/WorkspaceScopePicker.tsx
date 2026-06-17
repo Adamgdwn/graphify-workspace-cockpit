@@ -81,6 +81,8 @@ const DEFAULT_ROOT_OPTIONS = [
   "/media",
 ];
 
+const pendingScopeInspections = new Map<string, Promise<WorkspaceScopeInspect>>();
+
 function scopePathLabel(node: WorkspaceScopeNode): string {
   return node.relative_path || node.name || node.path;
 }
@@ -112,6 +114,28 @@ function uniqueOptions(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])];
 }
 
+function requestWorkspaceScopeInspection(root: string, maxDepth: number): Promise<WorkspaceScopeInspect> {
+  const key = `${root}::${maxDepth}`;
+  const pending = pendingScopeInspections.get(key);
+  if (pending) return pending;
+
+  const request = apiFetch(`/workspace-scope/inspect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ root, max_depth: maxDepth }),
+  })
+    .then(async (response) => {
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      return response.json() as Promise<WorkspaceScopeInspect>;
+    })
+    .finally(() => {
+      pendingScopeInspections.delete(key);
+    });
+
+  pendingScopeInspections.set(key, request);
+  return request;
+}
+
 export function WorkspaceScopePicker({
   mode = "settings",
   title = "Workspace Scope",
@@ -125,6 +149,7 @@ export function WorkspaceScopePicker({
 }: WorkspaceScopePickerProps) {
   const { addToast } = useToast();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const inspectRequestRef = useRef(0);
   const [rootInput, setRootInput] = useState("");
   const [selectedRootOption, setSelectedRootOption] = useState("");
   const [profileName, setProfileName] = useState("Workspace Scope");
@@ -171,25 +196,25 @@ export function WorkspaceScopePicker({
   const inspectRoot = useCallback(async (root: string, nextProfile: WorkspaceScopeProfile | null = null) => {
     const path = root.trim();
     if (!path) return;
+    const requestId = inspectRequestRef.current + 1;
+    inspectRequestRef.current = requestId;
     setInspecting(true);
     setError(null);
     setMessage(null);
     try {
-      const response = await apiFetch(`/workspace-scope/inspect`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ root: path, max_depth: 3 }),
-      });
-      if (!response.ok) throw new Error(await apiErrorMessage(response));
-      const data = await response.json() as WorkspaceScopeInspect;
+      const data = await requestWorkspaceScopeInspection(path, 3);
+      if (inspectRequestRef.current !== requestId) return;
       applyInspection(data, nextProfile);
     } catch (err: unknown) {
+      if (inspectRequestRef.current !== requestId) return;
       const text = err instanceof Error ? err.message : "Workspace inspection failed";
       setScope(null);
       setIncluded(new Set());
       setError(text);
     } finally {
-      setInspecting(false);
+      if (inspectRequestRef.current === requestId) {
+        setInspecting(false);
+      }
     }
   }, [applyInspection]);
 
@@ -231,6 +256,12 @@ export function WorkspaceScopePicker({
   function handleRootOption(value: string) {
     setSelectedRootOption(value);
     if (value) setRootInput(value);
+  }
+
+  function handleRootShortcut(value: string) {
+    setSelectedRootOption(value);
+    setRootInput(value);
+    void inspectRoot(value);
   }
 
   async function handleInspect(e: FormEvent) {
@@ -420,6 +451,37 @@ export function WorkspaceScopePicker({
     );
   }
 
+  const treePanel = (
+    <div className="scope-tree-panel">
+      <div className="scope-tree-panel-head">
+        <span>Workspace folders</span>
+        <span className="settings-mono">
+          {inspecting
+            ? "Loading tree..."
+            : scope
+            ? `${includedCount.toLocaleString()} selected`
+            : "No tree loaded"}
+        </span>
+      </div>
+      {scope ? (
+        <div className="scope-tree">
+          {renderNode(scope.tree)}
+        </div>
+      ) : (
+        <div className="scope-empty-tree">
+          <div className="scope-empty-row">
+            <span className="scope-empty-expander">v</span>
+            <input type="checkbox" disabled aria-label="Workspace folders loading" />
+            <span className="settings-mono">{rootInput || initialRoot}</span>
+            <span className="scope-state-badge scope-state-partial">
+              {inspecting ? "loading" : "choose root"}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <section className={mode === "startup" ? "scope-picker scope-picker-startup" : "settings-section scope-picker"}>
       <div className="settings-section-title">
@@ -428,18 +490,36 @@ export function WorkspaceScopePicker({
       </div>
       <p className="settings-dim" style={{ marginBottom: 10 }}>{intro}</p>
 
-      <form className="settings-upload-form scope-root-form" onSubmit={handleInspect}>
-        <select
-          className="settings-mono-input scope-root-select"
-          value={rootOptions.includes(selectedRootOption) ? selectedRootOption : ""}
-          onChange={(event) => handleRootOption(event.target.value)}
-          aria-label="Suggested workspace roots"
-        >
-          <option value="">Suggested roots</option>
+      {mode === "startup" && (
+        <div className="scope-root-shortcuts" aria-label="Workspace root shortcuts">
           {rootOptions.map((option) => (
-            <option key={option} value={option}>{option}</option>
+            <button
+              key={option}
+              type="button"
+              className={`scope-root-chip${option === selectedRootOption ? " scope-root-chip-active" : ""}`}
+              onClick={() => handleRootShortcut(option)}
+              disabled={inspecting && option === selectedRootOption}
+            >
+              {option}
+            </button>
           ))}
-        </select>
+        </div>
+      )}
+
+      <form className="settings-upload-form scope-root-form" onSubmit={handleInspect}>
+        {mode !== "startup" && (
+          <select
+            className="settings-mono-input scope-root-select"
+            value={rootOptions.includes(selectedRootOption) ? selectedRootOption : ""}
+            onChange={(event) => handleRootOption(event.target.value)}
+            aria-label="Suggested workspace roots"
+          >
+            <option value="">Suggested roots</option>
+            {rootOptions.map((option) => (
+              <option key={option} value={option}>{option}</option>
+            ))}
+          </select>
+        )}
         <input
           className="settings-mono-input scope-root-input"
           value={rootInput}
@@ -453,6 +533,17 @@ export function WorkspaceScopePicker({
         </button>
       </form>
 
+      {treePanel}
+
+      {profile && (
+        <div className="scope-summary">
+          <span className="settings-mono settings-break">{profile.root}</span>
+          <span>{profile.included_paths.length.toLocaleString()} selected paths</span>
+          <span>{profile.excluded_paths.length.toLocaleString()} ignored paths</span>
+          <span>low-signal hidden by default</span>
+        </div>
+      )}
+
       <div className="scope-profile-row">
         <label className="settings-label" htmlFor={`workspace-profile-name-${mode}`}>Profile</label>
         <input
@@ -463,15 +554,6 @@ export function WorkspaceScopePicker({
           placeholder="Workspace Scope"
         />
       </div>
-
-      {profile && (
-        <div className="scope-summary">
-          <span className="settings-mono settings-break">{profile.root}</span>
-          <span>{profile.included_paths.length.toLocaleString()} selected paths</span>
-          <span>{profile.excluded_paths.length.toLocaleString()} ignored paths</span>
-          <span>low-signal hidden by default</span>
-        </div>
-      )}
 
       {scope && (
         <>
@@ -514,9 +596,6 @@ export function WorkspaceScopePicker({
                 {generating ? "Generating..." : generateLabel}
               </button>
             </div>
-          </div>
-          <div className="scope-tree">
-            {renderNode(scope.tree)}
           </div>
           <div className="scope-patterns">
             <span className="settings-label">Default ignores</span>
