@@ -509,8 +509,9 @@ export function Settings() {
 
   async function handleActivate(name: string) {
     setActivating(name);
+    setUploadError(null);
     try {
-      const r = await fetch(`${API}/graphs/${encodeURIComponent(name)}`, { method: "POST" });
+      const r = await fetch(`${API}/graphs/${encodeURIComponent(name)}/activate`, { method: "POST" });
       if (!r.ok) {
         const data = await r.json().catch(() => ({})) as { detail?: string };
         throw new Error(data.detail ?? `HTTP ${r.status}`);

@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T16:18:15-06:00
-Status: active plan moved to stabilization plan; current-build pathway archived
+Last Updated: 2026-06-16T18:01:05-06:00
+Status: stabilization Chunk 2 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -25,11 +25,16 @@ overlay. The prior decision-tool polish path is integration complete and now
 archived in `docs/current-build-pathway.md`.
 
 The active next path is controlled hosted beta stabilization in
-`docs/stabilization-plan.md`. No runtime code has been changed for this path yet.
-The recommended first implementation chunk is graph schema normalization and
-backend contract tests for `links`/`edges` compatibility.
+`docs/stabilization-plan.md`. Chunk 1 is task complete: graph schema handling now
+normalizes `links` and legacy/internal `edges`, Settings counts both shapes
+correctly, connector ingest emits canonical `links`, and backend contract tests
+exist for this slice. Chunk 2 is task complete: Settings now calls
+`POST /graphs/{name}/activate`, backend activation tests cover demo/uploaded
+graphs plus useful failures, and launcher-compatible smoke validation passed.
+The recommended next implementation chunk is Chunk 3: Graphify runtime detection
+and service wrapper.
 
-Open owner-review flags before implementation:
+Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is
   low / level 1; do not auto-change governance, but use stronger review for
   hosted beta auth, uploads, deployment, Graphify execution, and Supabase mode.

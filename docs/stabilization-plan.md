@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T16:18:15-06:00
-Status: active plan - owner review pending before implementation
+Last Updated: 2026-06-16T18:01:05-06:00
+Status: active plan - Chunk 2 task complete; next recommended chunk is Chunk 3 Graphify runtime detection
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -41,16 +41,27 @@ P0 - blocks hosted beta:
 - Frontend cannot send the backend API key, so protected hosted mode breaks.
 - Graph upload accepts raw filenames and weak validation.
 - Caddy handles the frontend catch-all before `/api/*`, so hosted API routing can fail.
-- Graph schema mixes `links` and `edges`, causing false graph health and connector incompatibility.
 - Graphify CLI is required by Ask/Rebuild but is not verified in the runtime image.
 - Clean first-run JSON state writes are scattered and not uniformly parent-safe or atomic.
-- No `tests/` suite exists for these release-critical contracts.
+- Backend tests now exist, but coverage is still partial until the remaining P0
+  backend contracts are added.
+
+Resolved in Chunk 1:
+
+- Graph schema normalization now accepts `links` and legacy/internal `edges`,
+  emits canonical `links`, rejects malformed relationship records, and fixes
+  Settings relationship counts for both shapes.
+
+Resolved in Chunk 2:
+
+- Settings now activates listed graphs through `POST /graphs/{name}/activate`,
+  refreshes state after success, preserves backend failure details, and backend
+  tests cover demo/uploaded activation plus missing or invalid graph names.
 
 P1 - beta confidence:
 
 - Supabase migration does not include newer recommendation/action fields such as
   `action_plan`, `overlap`, and `overlap_dossier`.
-- Connector ingest writes `edges` while core Graphify/demo graph data uses `links`.
 - `backend/main.py` is large enough that behavior changes are hard to review.
 
 Governance flag: `project-control.yaml` classifies this as `AI agent with tools`
@@ -97,20 +108,23 @@ Baseline evidence gathered on 2026-06-16:
 - Backend entrypoint: `uvicorn backend.main:app`.
 - Frontend build command: `cd frontend && npm run build`.
 - Frontend typecheck command: `cd frontend && npm run typecheck`.
-- Backend dependencies: `backend/requirements.txt`; pytest is not present.
+- Backend dependencies: `backend/requirements.txt`; pytest was added in Chunk 1.
 - Graphify install docs say `pip install graphifyy`, but Docker installs only
   `backend/requirements.txt`, which does not include Graphify.
 - Current demo graph: `workspace/demo/graph.json`, using `links`.
-- Connector ingest: `backend/connectors/ingest.py`, currently emits `edges`.
+- Connector ingest: `backend/connectors/ingest.py`, now normalizes existing
+  graph data and emits canonical `links`.
 - Graph activation route: backend has `POST /graphs/{name}/activate`; Settings
-  currently calls `POST /graphs/{name}`.
+  now calls that route and backend validates activation names against demo or
+  uploaded graph files.
 - Graph upload route: `POST /graph/upload` in `backend/main.py`, currently uses
   `GRAPHS_DIR / file.filename` and writes bytes directly after minimal validation.
 - Caddy route file: `config/Caddyfile`, currently handles frontend catch-all
   before `/api/*`.
 - Supabase migration: `db/migrations/001_initial.sql`, missing newer optional
   JSON fields used in current records.
-- Existing tests: no `tests/` directory found.
+- Existing tests: `tests/` now covers graph schema normalization, settings
+  counts, and connector ingest compatibility.
 
 ## 5. Chunked Implementation Plan
 
@@ -159,6 +173,10 @@ generated graph data.
 
 ### Chunk 1: Graph Schema Normalization
 
+Status: **task complete** — 2026-06-16T17:47:37-06:00
+
+Completion target: Task complete
+
 Goal: Stop the app from mixing `links` and `edges`.
 
 Why this matters: Settings, graph health, connector ingest, and map behavior
@@ -192,12 +210,25 @@ python -m compileall -q backend
 graphify update . --no-cluster
 ```
 
+Validation completed:
+
+- Passed: `bash scripts/governance-preflight.sh` with 0 warnings.
+- Passed: `backend/.venv/bin/python -m pytest` — 9 tests passed.
+- Passed: `backend/.venv/bin/python -m compileall -q backend`.
+- Passed: `graphify update . --no-cluster` rebuilt `graphify-out/graph.json`
+  with 1050 nodes and 15947 edges.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`; Vite
+  still reports the existing large chunk warning.
+- Passed after starting local backend/frontend:
+  `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs` — 8 smoke
+  checks passed.
+
 Acceptance criteria:
 
-- Graphs with `links` and graphs with `edges` report correct relationship counts.
-- Settings no longer reports false zero-edge state for Graphify graphs.
-- Connector-created graph data works with core graph routes.
-- Existing Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings,
+- [x] Graphs with `links` and graphs with `edges` report correct relationship counts.
+- [x] Settings no longer reports false zero-edge state for Graphify graphs.
+- [x] Connector-created graph data works with core graph routes.
+- [x] Existing Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings,
   and AI assistant surfaces still load after the change.
 
 Rollback note: Revert `backend/graph_schema.py` and callers; keep tests if they
@@ -206,6 +237,10 @@ document the bug and are marked expected-failing only by owner decision.
 Token/context warning: Do not open full generated Graphify outputs; use fixtures.
 
 ### Chunk 2: Graph Activation Fix
+
+Status: **task complete** — 2026-06-16T18:01:05-06:00
+
+Completion target: Task complete
 
 Goal: Make Settings activate listed graphs through the backend's real route.
 
@@ -236,12 +271,27 @@ source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 ```
 
+Validation completed:
+
+- Passed: `bash scripts/governance-preflight.sh` with 0 warnings.
+- Passed: `backend/.venv/bin/python -m pytest tests/test_graph_activation.py`
+  — 4 tests passed.
+- Passed: `backend/.venv/bin/python -m pytest` — 13 tests passed.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`; Vite
+  still reports the existing large chunk warning.
+- Passed: `bash -n launcher/launch-cockpit.sh`.
+- Passed after starting with `bash scripts/start.sh`:
+  `source "$HOME/.nvm/nvm.sh" && FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs`
+  — 8 smoke checks passed. Note: this URL matches the launcher/start script;
+  the smoke script default `127.0.0.1:5173` did not reach this Vite session.
+
 Acceptance criteria:
 
-- User can activate a listed graph from Settings.
-- Failed activation gives a useful message.
-- Existing upload flow still activates uploaded graphs.
-- Seven-tab shell still renders after graph activation changes.
+- [x] User can activate a listed graph from Settings.
+- [x] Failed activation gives a useful message.
+- [x] Existing upload flow still activates uploaded graphs.
+- [x] Seven-tab shell still renders after graph activation changes.
 
 Rollback note: One-line frontend route rollback plus test update.
 

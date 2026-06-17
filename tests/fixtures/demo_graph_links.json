@@ -1,0 +1,27 @@
+{
+  "nodes": [
+    {
+      "id": "frontend:App",
+      "label": "App",
+      "source_file": "frontend/src/App.tsx",
+      "file_type": "code"
+    },
+    {
+      "id": "backend:main",
+      "label": "main",
+      "source_file": "backend/main.py",
+      "file_type": "code"
+    }
+  ],
+  "links": [
+    {
+      "source": "frontend:App",
+      "target": "backend:main",
+      "relation": "calls",
+      "weight": 1
+    }
+  ],
+  "meta": {
+    "fixture": "links"
+  }
+}

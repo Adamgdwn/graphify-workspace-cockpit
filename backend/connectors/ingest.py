@@ -1,7 +1,7 @@
 """Merge connector graph nodes into the active graph.
 
 Deduplicates by node id (source:item_id).
-Computes lightweight term-overlap edges between new and existing nodes.
+Computes lightweight term-overlap links between new and existing nodes.
 Writes a timestamped merged graph to graphs_dir and returns the new path.
 """
 from __future__ import annotations
@@ -11,6 +11,11 @@ import re
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+
+try:
+    from backend.graph_schema import normalize_graph
+except ModuleNotFoundError:
+    from graph_schema import normalize_graph
 
 _STOP = frozenset({
     "the", "and", "for", "this", "that", "with", "from", "are", "was",
@@ -45,12 +50,12 @@ def merge_nodes_into_graph(
     Returns path to the newly written merged graph file.
     """
     if active_graph_path.exists():
-        data = json.loads(active_graph_path.read_text())
+        data = normalize_graph(json.loads(active_graph_path.read_text()))
     else:
-        data = {"nodes": [], "edges": []}
+        data = {"nodes": [], "links": []}
 
     existing_nodes: list[dict] = data.get("nodes", [])
-    existing_edges: list[dict] = data.get("edges", [])
+    existing_links: list[dict] = data.get("links", [])
     existing_ids = {n["id"] for n in existing_nodes}
 
     to_add = [n for n in new_nodes if n["id"] not in existing_ids]
@@ -62,9 +67,9 @@ def merge_nodes_into_graph(
             term_index.setdefault(term, []).append(n["id"])
 
     seen_pairs: set[frozenset] = {
-        frozenset([e.get("source", ""), e.get("target", "")]) for e in existing_edges
+        frozenset([e.get("source", ""), e.get("target", "")]) for e in existing_links
     }
-    new_edges: list[dict] = []
+    new_links: list[dict] = []
 
     for n in to_add:
         terms = _tokenize(_node_text(n))
@@ -77,17 +82,17 @@ def merge_nodes_into_graph(
                 break
             pair = frozenset([n["id"], target_id])
             if pair not in seen_pairs:
-                new_edges.append({
+                new_links.append({
                     "source": n["id"],
                     "target": target_id,
-                    "label": "related",
+                    "relation": "related",
                     "weight": round(min(count / 10.0, 1.0), 3),
                 })
                 seen_pairs.add(pair)
 
     merged = {
         "nodes": existing_nodes + to_add,
-        "edges": existing_edges + new_edges,
+        "links": existing_links + new_links,
         "meta": data.get("meta", {}),
     }
 

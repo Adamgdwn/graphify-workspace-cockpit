@@ -24,6 +24,11 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
+try:
+    from backend.graph_schema import GraphValidationError, count_links, normalize_graph
+except ModuleNotFoundError:
+    from graph_schema import GraphValidationError, count_links, normalize_graph
+
 _STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
 WORKSPACE_STATE = (
     Path(_STATE_DIR_ENV) if _STATE_DIR_ENV
@@ -241,7 +246,7 @@ def _load_graph() -> dict:
         if not Path(path).exists():
             raise FileNotFoundError(path)
         with open(path) as f:
-            _graph_cache = json.load(f)
+            _graph_cache = normalize_graph(json.load(f))
     return _graph_cache
 
 
@@ -515,6 +520,8 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
             status_code=503,
             detail=f"Graph not found: {exc}. Run graphify update first.",
         ) from exc
+    except GraphValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid graph: {exc}") from exc
 
     nodes_raw: list[dict] = [
         n for n in graph["nodes"]
@@ -626,6 +633,8 @@ def graph_full() -> dict:
         g = _load_graph()
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=f"Graph not loaded: {exc}")
+    except GraphValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid graph: {exc}") from exc
 
     def _cluster(source_file: str) -> str:
         parts = [p for p in source_file.replace("\\", "/").split("/") if p]
@@ -1830,7 +1839,7 @@ def get_settings() -> dict:
     try:
         data = _load_graph()
         node_count = len(data.get("nodes", []))
-        edge_count = len(data.get("edges", []))
+        edge_count = count_links(data)
     except Exception:
         pass
     return {
@@ -1941,17 +1950,29 @@ def list_graphs() -> list[dict]:
     return graphs
 
 
+def _graph_activation_candidate(name: str) -> Path:
+    if not name or name in {".", ".."} or Path(name).name != name or "\\" in name:
+        raise HTTPException(
+            status_code=400,
+            detail="Graph name must match a file name from the graph list.",
+        )
+
+    candidate = GRAPHS_DIR / name
+    if candidate.is_file():
+        return candidate
+
+    demo = Path(_DEMO_GRAPH)
+    if demo.name == name and demo.is_file():
+        return demo
+
+    raise HTTPException(status_code=404, detail=f"Graph '{name}' not found.")
+
+
 @app.post("/graphs/{name}/activate")
 def activate_graph(name: str) -> dict:
     """Switch the active graph by name. Must exist in GRAPHS_DIR or be the demo graph."""
     global _graph_cache, _summary_cache
-    candidate = GRAPHS_DIR / name
-    if not candidate.exists():
-        demo = Path(_DEMO_GRAPH)
-        if demo.name == name and demo.exists():
-            candidate = demo
-        else:
-            raise HTTPException(status_code=404, detail=f"Graph '{name}' not found.")
+    candidate = _graph_activation_candidate(name)
     settings: dict = {}
     if SETTINGS_FILE.exists():
         try:

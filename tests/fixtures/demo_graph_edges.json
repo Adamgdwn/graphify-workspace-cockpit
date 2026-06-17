@@ -1,0 +1,27 @@
+{
+  "nodes": [
+    {
+      "id": "frontend:Settings",
+      "label": "Settings",
+      "source_file": "frontend/src/tabs/Settings.tsx",
+      "file_type": "code"
+    },
+    {
+      "id": "backend:settings",
+      "label": "get_settings",
+      "source_file": "backend/main.py",
+      "file_type": "code"
+    }
+  ],
+  "edges": [
+    {
+      "source": "frontend:Settings",
+      "target": "backend:settings",
+      "label": "uses",
+      "weight": 1
+    }
+  ],
+  "meta": {
+    "fixture": "edges"
+  }
+}
