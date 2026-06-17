@@ -7,6 +7,7 @@ import os
 import re
 import uuid
 from collections import Counter, defaultdict
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal, Optional
@@ -29,6 +30,7 @@ try:
     from backend.routes import connectors as _connector_routes
     from backend.routes import decisions as _decision_routes
     from backend.routes import runtime as _runtime_routes
+    from backend.routes import workspace_scope as _workspace_scope_routes
     from backend.services.graphify_service import (
         GRAPHIFY_MISSING,
         GraphifyServiceError,
@@ -39,6 +41,15 @@ try:
     )
     from backend.state_store import write_json_atomic
     from backend.storage_status import StorageStatusProvider, safe_error_message
+    from backend.workspace_scope import (
+        WorkspaceScopeError,
+        apply_signal_tiers_to_graph,
+        filter_workspace_scope_graph,
+        is_visible_signal_node,
+        load_workspace_scope_profile,
+        signal_counts,
+        workspace_scope_scan_roots,
+    )
 except ModuleNotFoundError:
     import config as _config
     from app import create_app
@@ -50,6 +61,7 @@ except ModuleNotFoundError:
     from routes import connectors as _connector_routes
     from routes import decisions as _decision_routes
     from routes import runtime as _runtime_routes
+    from routes import workspace_scope as _workspace_scope_routes
     from services.graphify_service import (
         GRAPHIFY_MISSING,
         GraphifyServiceError,
@@ -60,6 +72,15 @@ except ModuleNotFoundError:
     )
     from state_store import write_json_atomic
     from storage_status import StorageStatusProvider, safe_error_message
+    from workspace_scope import (
+        WorkspaceScopeError,
+        apply_signal_tiers_to_graph,
+        filter_workspace_scope_graph,
+        is_visible_signal_node,
+        load_workspace_scope_profile,
+        signal_counts,
+        workspace_scope_scan_roots,
+    )
 
 AskDeps = _ask_routes.AskDeps
 AskRequest = _ask_routes.AskRequest
@@ -121,6 +142,10 @@ create_runtime_router = _runtime_routes.create_runtime_router
 runtime_action = _runtime_routes.runtime_action
 runtime_warning = _runtime_routes.runtime_warning
 
+WorkspaceScopeDeps = _workspace_scope_routes.WorkspaceScopeDeps
+create_workspace_scope_router = _workspace_scope_routes.create_workspace_scope_router
+inspect_workspace_scope = _workspace_scope_routes.inspect_workspace_scope
+
 _STATE_DIR_ENV = _config.STATE_DIR_ENV
 WORKSPACE_STATE = _config.WORKSPACE_STATE
 SESSIONS_DIR = _config.SESSIONS_DIR
@@ -133,6 +158,7 @@ CLUSTER_SELECTION_FILE = _config.CLUSTER_SELECTION_FILE
 CHAT_CONFIG_FILE = _config.CHAT_CONFIG_FILE
 CHAT_SESSIONS_DIR = _config.CHAT_SESSIONS_DIR
 SCAN_DIRS_FILE = _config.SCAN_DIRS_FILE
+WORKSPACE_SCOPE_FILE = _config.WORKSPACE_SCOPE_FILE
 SEMANTIC_EDGES_FILE = _config.SEMANTIC_EDGES_FILE
 OVERLAP_STATUS_FILE = _config.OVERLAP_STATUS_FILE
 _CHAT_DEFAULT_SYSTEM_PROMPT = _config.CHAT_DEFAULT_SYSTEM_PROMPT
@@ -286,6 +312,13 @@ def _track_device(user_id: str) -> None:
         pass
 
 
+@asynccontextmanager
+async def _lifespan(_app):
+    _prune_sessions()
+    _prune_chat_sessions()
+    yield
+
+
 app, _limiter = create_app(
     title="Graphify Workspace Cockpit",
     version="0.1.0",
@@ -294,13 +327,8 @@ app, _limiter = create_app(
     api_key_getter=lambda: API_KEY,
     resolve_user=_resolve_user,
     rate_limit_handler=_rate_limit_handler,
+    lifespan=_lifespan,
 )
-
-
-@app.on_event("startup")
-async def _startup() -> None:
-    _prune_sessions()
-    _prune_chat_sessions()
 
 
 def _load_graph() -> dict:
@@ -322,6 +350,69 @@ def _graph_path() -> str:
         except Exception:
             pass
     return DEFAULT_GRAPH
+
+
+def _load_settings_dict() -> dict:
+    if SETTINGS_FILE.exists():
+        try:
+            settings = json.loads(SETTINGS_FILE.read_text())
+            if isinstance(settings, dict):
+                return settings
+        except Exception:
+            pass
+    return {}
+
+
+def _activate_rebuild_graph(path: Path) -> None:
+    previous_graph_path = _graph_path()
+    settings = _load_settings_dict()
+    settings["graph_path"] = str(path)
+    write_json_atomic(SETTINGS_FILE, settings)
+    if previous_graph_path != str(path) and SEMANTIC_EDGES_FILE.exists():
+        try:
+            SEMANTIC_EDGES_FILE.unlink()
+        except OSError:
+            pass
+
+
+def _load_saved_workspace_scope() -> dict | None:
+    try:
+        return load_workspace_scope_profile(WORKSPACE_SCOPE_FILE)
+    except WorkspaceScopeError:
+        return None
+
+
+def _configured_source_roots() -> list[Path]:
+    roots = [_REPO_ROOT]
+    profile = _load_saved_workspace_scope()
+    if profile is not None:
+        scoped_roots = workspace_scope_scan_roots(profile) or [Path(profile["root"])]
+        for root in scoped_roots:
+            if root not in roots:
+                roots.append(root)
+        return roots
+
+    for raw in _load_scan_dirs():
+        try:
+            root = Path(raw).expanduser().resolve()
+        except Exception:
+            continue
+        if root not in roots:
+            roots.append(root)
+    return roots
+
+
+def _workspace_scope_removed_node_count(graph: dict) -> int:
+    meta = graph.get("_meta")
+    if not isinstance(meta, dict):
+        return 0
+    scope = meta.get("workspace_scope")
+    if not isinstance(scope, dict):
+        return 0
+    try:
+        return max(0, int(scope.get("removed_node_count", 0)))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _safe_graph_upload_name(filename: str | None) -> str:
@@ -362,17 +453,134 @@ def _save_cluster_selection(sel: dict) -> None:
     write_json_atomic(CLUSTER_SELECTION_FILE, sel)
 
 
+def _node_source_parts(node: dict) -> list[str]:
+    source_file = str(
+        node.get("source_file") or node.get("file_path") or node.get("path") or ""
+    ).replace("\\", "/")
+    return [part for part in source_file.split("/") if part]
+
+
+def _node_workspace_key(node: dict) -> str:
+    source_root = str(node.get("source_root") or "").strip()
+    if source_root:
+        return source_root
+    repo_name = str(
+        node.get("repo_project_name") or node.get("source_root_name") or ""
+    ).strip()
+    if repo_name:
+        return repo_name
+    parts = _node_source_parts(node)
+    return parts[0] if parts else "(root)"
+
+
+def _node_workspace_label(node: dict, key: str | None = None) -> str:
+    label = str(
+        node.get("repo_project_name") or node.get("source_root_name") or ""
+    ).strip()
+    if label:
+        return label
+    workspace_key = key or _node_workspace_key(node)
+    if workspace_key == "(root)":
+        return workspace_key
+    return Path(workspace_key).name or workspace_key
+
+
+def _node_cluster_id(node: dict) -> str:
+    return _node_workspace_label(node)
+
+
+def _node_project_relative_parts(node: dict, workspace_key: str) -> list[str]:
+    parts = _node_source_parts(node)
+    if not parts:
+        return []
+
+    has_scope_metadata = any(
+        str(node.get(key) or "").strip()
+        for key in ("source_root", "repo_project_name", "source_root_name")
+    )
+    if not has_scope_metadata and parts[0] == workspace_key:
+        return parts[1:]
+    return parts
+
+
+def _node_module_group(node: dict, workspace_key: str) -> tuple[str, str]:
+    parts = _node_project_relative_parts(node, workspace_key)
+    if len(parts) <= 1:
+        module = "(root)"
+    else:
+        module = parts[0]
+    return f"{workspace_key}::{module}", module
+
+
 def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] | None) -> bool:
     """Return True if node passes the active source/cluster filter."""
     node_source = n.get("source", "local")
     if node_source not in sel_sources:
         return False
     if sel_clusters is not None:
-        sf = n.get("source_file", "")
-        cluster = sf.split("/")[0] if sf else ""
+        cluster = _node_cluster_id(n)
         if cluster and cluster not in sel_clusters:
             return False
     return True
+
+
+def _source_matches_evidence(node_source: str, evidence_source: str) -> bool:
+    node_source = node_source.replace("\\", "/").strip()
+    evidence_source = evidence_source.replace("\\", "/").strip()
+    if not node_source or not evidence_source:
+        return False
+    return (
+        node_source == evidence_source
+        or node_source.endswith(f"/{evidence_source}")
+        or evidence_source.endswith(f"/{node_source}")
+    )
+
+
+def _scope_ask_evidence(evidence: list[dict]) -> list[dict]:
+    """Attach scope metadata to Ask evidence and hide excluded/low-signal hits."""
+    if not evidence:
+        return []
+    try:
+        graph = apply_signal_tiers_to_graph(_load_graph())
+    except Exception:
+        return evidence
+
+    selection = _load_cluster_selection()
+    sel_sources = selection.get("sources", ["local", "sharepoint", "onenote"])
+    sel_clusters = selection.get("clusters")
+    nodes = [
+        n for n in graph.get("nodes", [])
+        if isinstance(n, dict)
+        and _is_node_selected(n, sel_sources, sel_clusters)
+        and is_visible_signal_node(n)
+    ]
+    by_id = {str(n.get("id", "")): n for n in nodes}
+    by_label = {str(n.get("label", "")): n for n in nodes}
+
+    scoped: list[dict] = []
+    for item in evidence:
+        ev = dict(item)
+        label = str(ev.get("label") or "")
+        source = str(ev.get("src") or "")
+        match = by_id.get(label) or by_label.get(label)
+        if match is None and source:
+            for node in nodes:
+                if _source_matches_evidence(str(node.get("source_file") or ""), source):
+                    match = node
+                    break
+        if match is None:
+            if source:
+                continue
+            scoped.append(ev)
+            continue
+        ev.setdefault("src", match.get("source_file", ""))
+        ev["community"] = _node_workspace_label(match)
+        ev["repo"] = _node_workspace_label(match)
+        ev["source_root"] = match.get("source_root", "")
+        ev["signal_tier"] = match.get("signal_tier", "important")
+        ev["signal_reason"] = match.get("signal_reason", "")
+        scoped.append(ev)
+    return scoped
 
 
 # ---------------------------------------------------------------------------
@@ -430,11 +638,23 @@ app.include_router(create_runtime_router(
 ))
 
 
+def _workspace_scope_deps() -> WorkspaceScopeDeps:
+    return WorkspaceScopeDeps(
+        inspect_scope=inspect_workspace_scope,
+        scope_file=lambda: WORKSPACE_SCOPE_FILE,
+        write_json_atomic=write_json_atomic,
+    )
+
+
+app.include_router(create_workspace_scope_router(_workspace_scope_deps))
+
+
 def _ask_deps() -> AskDeps:
     return AskDeps(
         graph_path=_graph_path,
         run_graphify_ask=lambda **kwargs: run_graphify_ask(**kwargs),
         load_cluster_selection=_load_cluster_selection,
+        scope_evidence=_scope_ask_evidence,
         sessions_dir=lambda: SESSIONS_DIR,
         write_json_atomic=write_json_atomic,
         prune_sessions=_prune_sessions,
@@ -473,23 +693,35 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
     except GraphValidationError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid graph: {exc}") from exc
 
-    nodes_raw: list[dict] = [
-        n for n in graph["nodes"]
+    signal_graph = apply_signal_tiers_to_graph(graph)
+    excluded_node_count = _workspace_scope_removed_node_count(signal_graph)
+    selected_nodes = [
+        n for n in signal_graph["nodes"]
         if _is_node_selected(n, sel_sources, sel_clusters)
     ]
-    links_raw: list[dict] = graph["links"]
+    counts_by_signal = signal_counts(selected_nodes)
+    nodes_raw: list[dict] = [
+        n for n in selected_nodes
+        if is_visible_signal_node(n)
+    ]
+    links_raw: list[dict] = signal_graph["links"]
     node_map: dict[str, dict] = {n["id"]: n for n in nodes_raw}
 
+    cluster_labels: dict[str, str] = {}
+    cluster_group_types: dict[str, str] = {}
+
     def get_cluster(n: dict) -> str | None:
-        sf = n.get("source_file", "")
-        if not sf:
-            return "(root)" if project is None else None
-        parts = sf.split("/")
+        workspace_key = _node_workspace_key(n)
         if project is None:
-            return parts[0] or "(root)"
-        if parts[0] != project:
+            cluster_labels.setdefault(workspace_key, _node_workspace_label(n, workspace_key))
+            cluster_group_types.setdefault(workspace_key, "repo")
+            return workspace_key
+        if workspace_key != project:
             return None
-        return f"{parts[0]}/{parts[1]}" if len(parts) > 1 else parts[0]
+        module_key, module_label = _node_module_group(n, workspace_key)
+        cluster_labels.setdefault(module_key, module_label)
+        cluster_group_types.setdefault(module_key, "module")
+        return module_key
 
     # Aggregate node counts per cluster
     cluster_stats: dict[str, dict] = defaultdict(
@@ -504,8 +736,8 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         cluster_stats[key][ftype] = cluster_stats[key].get(ftype, 0) + 1
 
     # Build summary node list — filter tiny clusters and the synthetic (root) group
-    EXCLUDED_CLUSTERS = {"(root)"}
-    min_nodes = 2 if project else 20
+    EXCLUDED_CLUSTERS: set[str] = set()
+    min_nodes = 1
     summary_nodes: list[dict] = []
     valid_ids: set[str] = set()
     for cluster_id, stats in sorted(
@@ -513,7 +745,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
     ):
         if stats["total"] < min_nodes or cluster_id in EXCLUDED_CLUSTERS:
             continue
-        label = cluster_id.split("/")[-1] if "/" in cluster_id else cluster_id
+        label = cluster_labels.get(cluster_id) or (cluster_id.split("/")[-1] if "/" in cluster_id else cluster_id)
         code = stats.get("code", 0)
         doc = stats.get("document", 0)
         dominant = "code" if code >= doc else "document"
@@ -521,6 +753,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
             {
                 "id": cluster_id,
                 "label": label,
+                "group_type": cluster_group_types.get(cluster_id, "group"),
                 "node_count": stats["total"],
                 "code_count": code,
                 "doc_count": doc,
@@ -569,6 +802,9 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         "level": "top" if project is None else "project",
         "project": project,
         "total_nodes": sum(s["total"] for s in cluster_stats.values()),
+        "signal_counts": counts_by_signal,
+        "hidden_node_count": counts_by_signal.get("evidence", 0) + counts_by_signal.get("hidden", 0),
+        "excluded_node_count": excluded_node_count,
         "nodes": summary_nodes,
         "edges": summary_edges,
     }
@@ -577,18 +813,19 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
 
 
 @app.get("/graph/full")
-def graph_full() -> dict:
+def graph_full(include_low_signal: bool = False) -> dict:
     """Return all raw nodes and links for full-graph rendering in the Map."""
     try:
-        g = _load_graph()
+        g = apply_signal_tiers_to_graph(_load_graph())
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=f"Graph not loaded: {exc}")
     except GraphValidationError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid graph: {exc}") from exc
 
-    def _cluster(source_file: str) -> str:
-        parts = [p for p in source_file.replace("\\", "/").split("/") if p]
-        return parts[0] if parts else "other"
+    def _container(node: dict) -> str:
+        workspace_key = _node_workspace_key(node)
+        _, module_label = _node_module_group(node, workspace_key)
+        return module_label if module_label != "(root)" else "root"
 
     def _safe_relative_path(path: Path, root: Path) -> str:
         try:
@@ -597,15 +834,7 @@ def graph_full() -> dict:
             return ""
 
     def _source_roots() -> list[Path]:
-        roots = [_REPO_ROOT]
-        for raw in _load_scan_dirs():
-            try:
-                root = Path(raw).expanduser().resolve()
-            except Exception:
-                continue
-            if root not in roots:
-                roots.append(root)
-        return roots
+        return _configured_source_roots()
 
     def _path_is_secret_like(source_file: str) -> bool:
         path = source_file.replace("\\", "/").lower()
@@ -731,8 +960,19 @@ def graph_full() -> dict:
             base += f"; the source nearby starts with: {clue}"
         return base + "."
 
+    all_nodes = [n for n in g.get("nodes", []) if isinstance(n, dict)]
+    counts_by_signal = signal_counts(all_nodes)
+    excluded_node_count = _workspace_scope_removed_node_count(g)
+    visible_node_ids = {
+        n["id"]
+        for n in all_nodes
+        if is_visible_signal_node(n, include_low_signal=include_low_signal)
+    }
+
     nodes = []
-    for n in g.get("nodes", []):
+    for n in all_nodes:
+        if n.get("id") not in visible_node_ids:
+            continue
         source_file = n.get("source_file", "")
         source_location = n.get("source_location", "")
         _, source_root, relative_path = _resolve_source(source_file)
@@ -741,36 +981,54 @@ def graph_full() -> dict:
             "id": n["id"],
             "label": n.get("label", n["id"]),
             "type": n.get("file_type", "code"),
-            "cluster": _cluster(source_file),
+            "cluster": _node_cluster_id(n),
             "source_file": source_file,
             "source_location": source_location,
             "source_root": str(source_root) if source_root else "",
             "source_root_name": source_root.name if source_root else "",
-            "repo": source_root.name if source_root else "",
-            "container": _cluster(source_file),
+            "repo": _node_workspace_label(n),
+            "container": _container(n),
             "relative_path": relative_path or source_file,
             "origin": n.get("_origin", ""),
             "metadata": n.get("metadata") or {},
             "symbol": n.get("label", n["id"]),
             "purpose": _node_purpose(n, excerpt),
             "source_excerpt": excerpt,
+            "signal_tier": n.get("signal_tier", "evidence"),
+            "signal_reason": n.get("signal_reason", "supporting evidence"),
         })
 
     seen: set[str] = set()
     edges = []
     for lnk in g.get("links", []):
-        key = f"{lnk['source']}::{lnk['target']}"
+        source = str(lnk.get("source", ""))
+        target = str(lnk.get("target", ""))
+        if source not in visible_node_ids or target not in visible_node_ids:
+            continue
+        key = f"{source}::{target}"
         if key in seen:
             continue
         seen.add(key)
         edges.append({
-            "source": lnk["source"],
-            "target": lnk["target"],
+            "source": source,
+            "target": target,
             "relation": lnk.get("relation", ""),
             "weight": float(lnk.get("weight", 1.0)),
         })
 
-    return {"node_count": len(nodes), "edge_count": len(edges), "nodes": nodes, "edges": edges}
+    low_signal_hidden = counts_by_signal.get("evidence", 0) + counts_by_signal.get("hidden", 0)
+    return {
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "total_node_count": len(all_nodes),
+        "visible_node_count": len(nodes),
+        "hidden_node_count": 0 if include_low_signal else low_signal_hidden,
+        "excluded_node_count": excluded_node_count,
+        "signal_counts": counts_by_signal,
+        "include_low_signal": include_low_signal,
+        "nodes": nodes,
+        "edges": edges,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -1091,18 +1349,106 @@ def get_recommendation_decision_packet(rec_id: str) -> dict:
     return packet
 
 
+def _safe_load_workspace_scope_profile() -> dict | None:
+    try:
+        return load_workspace_scope_profile(WORKSPACE_SCOPE_FILE)
+    except Exception:
+        return None
+
+
+def _build_scope_context(summary: dict) -> dict:
+    nodes = summary.get("nodes", []) if isinstance(summary.get("nodes"), list) else []
+    signal = summary.get("signal_counts", {}) if isinstance(summary.get("signal_counts"), dict) else {}
+    profile = _safe_load_workspace_scope_profile()
+    included = [
+        {
+            "id": str(node.get("id", "")),
+            "label": str(node.get("label") or node.get("id") or ""),
+            "group_type": str(node.get("group_type") or "group"),
+            "node_count": int(node.get("node_count") or 0),
+        }
+        for node in nodes[:12]
+    ]
+    excluded_paths: list[str] = []
+    exclude_patterns: list[str] = []
+    if profile:
+        root = Path(str(profile.get("root") or ""))
+        for raw_path in profile.get("excluded_paths", [])[:8]:
+            path = Path(str(raw_path))
+            try:
+                excluded_paths.append(path.relative_to(root).as_posix())
+            except Exception:
+                excluded_paths.append(path.name or str(path))
+        exclude_patterns = [
+            str(pattern)
+            for pattern in profile.get("exclude_patterns", [])
+            if isinstance(pattern, str)
+        ][:12]
+
+    hidden_count = int(summary.get("hidden_node_count") or 0)
+    scoped_excluded_count = int(summary.get("excluded_node_count") or 0)
+    visible_nodes = int(summary.get("total_nodes") or 0)
+    raw_estimate = visible_nodes + hidden_count + scoped_excluded_count
+    estimated_hidden_tokens = max(0, (hidden_count + scoped_excluded_count) * 80)
+
+    return {
+        "scope_name": str(profile.get("profile_name")) if profile else "Active Graph",
+        "root": str(profile.get("root")) if profile else "",
+        "included_context": included,
+        "major_exclusions": {
+            "excluded_paths": excluded_paths,
+            "default_patterns": exclude_patterns,
+            "hidden_low_signal_nodes": hidden_count,
+            "scoped_excluded_nodes": scoped_excluded_count,
+            "signal_counts": signal,
+        },
+        "token_savings": {
+            "visible_nodes": visible_nodes,
+            "estimated_raw_nodes": raw_estimate,
+            "estimated_hidden_tokens_per_query": estimated_hidden_tokens,
+            "basis": "Hidden low-signal and scoped-excluded graph nodes are kept out of default insight prompts.",
+        },
+    }
+
+
 def _build_graph_context(summary: dict) -> str:
     nodes = summary.get("nodes", [])
     edges = summary.get("edges", [])
+    scope_context = _build_scope_context(summary)
+    major_exclusions = scope_context["major_exclusions"]
+    token_savings = scope_context["token_savings"]
     lines = [
-        f"Workspace: {len(nodes)} project areas, {summary.get('total_nodes', '?')} total nodes.",
+        f"Workspace scope: {scope_context['scope_name']}",
+        f"Included context: {len(nodes)} project/module groups, {summary.get('total_nodes', '?')} visible signal nodes.",
+        (
+            "Major exclusions: "
+            f"{major_exclusions['hidden_low_signal_nodes']} hidden low-signal nodes, "
+            f"{major_exclusions['scoped_excluded_nodes']} scoped-out nodes."
+        ),
+        (
+            "Token-saving frame: "
+            f"roughly {token_savings['estimated_hidden_tokens_per_query']} tokens of low-signal context "
+            "are excluded from default insight prompts."
+        ),
         "",
-        "Project areas (largest first):",
+        "Included project areas (largest first):",
     ]
     for n in nodes[:20]:
         lines.append(
-            f"  - {n['id']}: {n.get('node_count', 0)} nodes, type={n.get('dominant_type', 'code')}"
+            f"  - {n.get('label') or n['id']} ({n['id']}): "
+            f"{n.get('node_count', 0)} nodes, "
+            f"group={n.get('group_type', 'group')}, type={n.get('dominant_type', 'code')}"
         )
+    excluded_paths = major_exclusions.get("excluded_paths", [])
+    if excluded_paths:
+        lines.append("")
+        lines.append("Explicitly excluded paths:")
+        for path in excluded_paths[:8]:
+            lines.append(f"  - {path}")
+    default_patterns = major_exclusions.get("default_patterns", [])
+    if default_patterns:
+        lines.append("")
+        lines.append(f"Default noisy path filters include: {', '.join(default_patterns[:10])}")
     if edges:
         lines.append("")
         lines.append(f"Top connections ({min(len(edges), 10)} of {len(edges)}):")
@@ -1175,6 +1521,7 @@ def generate_recommendation(req: GenerateRecommendationRequest, request: Request
     decisions = _load_decisions()
 
     graph_ctx = _build_graph_context(summary)
+    scope_context = _build_scope_context(summary)
     dec_ctx = _build_decisions_context(decisions)
 
     prompt_file = Path(__file__).parent / "prompts" / MODE_PROMPT_FILES[req.mode]
@@ -1210,6 +1557,7 @@ def generate_recommendation(req: GenerateRecommendationRequest, request: Request
         "updated_at": now,
         "model": model_used,
         "created_by": getattr(request.state, "user_id", "local"),
+        "context": scope_context,
     }
     if isinstance(parsed.get("action_plan"), dict):
         rec["action_plan"] = parsed["action_plan"]
@@ -1285,6 +1633,7 @@ def _run_mission(mission_id: str, mission_type: str) -> None:
 
         decisions = _load_decisions()
         graph_ctx = _build_graph_context(summary)
+        scope_context = _build_scope_context(summary)
         dec_ctx   = _build_decisions_context(decisions)
         log(f"Context loaded: {summary.get('total_nodes', 0)} nodes, {len(decisions)} decisions.")
 
@@ -1335,6 +1684,7 @@ def _run_mission(mission_id: str, mission_type: str) -> None:
             "updated_at":      now,
             "model":           model_used,
             "created_by":      "mission-agent",
+            "context":         scope_context,
         }
         _save_recommendation(rec)
 
@@ -1965,14 +2315,129 @@ def _set_rebuild_error(exc: GraphifyServiceError, ts: str | None = None) -> None
     })
 
 
+def _load_workspace_scope_for_rebuild() -> dict | None:
+    try:
+        return load_workspace_scope_profile(WORKSPACE_SCOPE_FILE)
+    except WorkspaceScopeError as exc:
+        raise GraphifyServiceError(
+            "WORKSPACE_SCOPE_INVALID",
+            str(exc),
+            status_code=422,
+        ) from exc
+
+
+def _filtered_scoped_graph_path(
+    *,
+    source_graph_path: Path,
+    destination_path: Path,
+    profile: dict,
+    scan_root: Path,
+) -> tuple[Path, dict]:
+    graph = normalize_graph(json.loads(source_graph_path.read_text()))
+    filtered_graph, stats = filter_workspace_scope_graph(graph, profile, scan_root)
+    normalized = normalize_graph(filtered_graph, require_link_targets=True)
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    write_json_atomic(destination_path, normalized)
+    return destination_path, stats
+
+
+def _write_scoped_graph_metadata(
+    graph_path: Path,
+    *,
+    profile: dict,
+    scanned_root_count: int,
+    removed_node_count: int,
+) -> None:
+    graph = normalize_graph(json.loads(graph_path.read_text()), require_link_targets=True)
+    meta = graph.get("_meta")
+    if not isinstance(meta, dict):
+        meta = {}
+    meta["workspace_scope"] = {
+        "profile_name": profile.get("profile_name") or "Workspace Scope",
+        "root": profile["root"],
+        "scanned_root_count": scanned_root_count,
+        "removed_node_count": removed_node_count,
+        "generated_at": datetime.now(tz=timezone.utc).isoformat(),
+    }
+    graph["_meta"] = meta
+    write_json_atomic(graph_path, graph)
+
+
+def _merge_graph_outputs(graph_paths: list[str], out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    if len(graph_paths) == 1:
+        import shutil
+        shutil.copy(graph_paths[0], str(out_path))
+        return
+    merge_result = run_graphify_merge(graph_paths, out_path=out_path, timeout=300)
+    if merge_result.returncode != 0:
+        raise GraphifyServiceError(
+            "GRAPHIFY_MERGE_FAILED",
+            merge_result.stderr[:500] or "Graphify merge failed.",
+            status_code=503,
+            stderr=merge_result.stderr,
+        )
+
+
+def _run_scoped_rebuild(profile: dict, repo_root: Path) -> None:
+    scan_roots = workspace_scope_scan_roots(profile)
+    if not scan_roots:
+        raise GraphifyServiceError(
+            "WORKSPACE_SCOPE_EMPTY",
+            "Saved workspace scope has no included directories to scan.",
+            status_code=422,
+        )
+
+    scoped_graph_dir = repo_root / "graphify-out" / "scoped"
+    graph_paths: list[str] = []
+    scan_errors: list[str] = []
+    removed_node_count = 0
+    for index, scan_root in enumerate(scan_roots, start=1):
+        try:
+            run_graphify_update(str(scan_root), cwd=scan_root, timeout=300)
+            source_graph_path = scan_root / "graphify-out" / "graph.json"
+            if not source_graph_path.exists():
+                scan_errors.append(f"{scan_root.name}: no graph.json produced")
+                continue
+            filtered_path, stats = _filtered_scoped_graph_path(
+                source_graph_path=source_graph_path,
+                destination_path=scoped_graph_dir / f"{index:03d}-{scan_root.name}.json",
+                profile=profile,
+                scan_root=scan_root,
+            )
+            removed_node_count += int(stats["removed_node_count"])
+            graph_paths.append(str(filtered_path))
+        except GraphifyServiceError as exc:
+            scan_errors.append(f"{scan_root.name}: {exc.code}: {exc.message}")
+        except Exception as exc:
+            scan_errors.append(f"{scan_root.name}: {exc}")
+
+    if not graph_paths:
+        reason = scan_errors[0] if scan_errors else "No graphs produced by saved workspace scope"
+        raise GraphifyServiceError("WORKSPACE_SCOPE_REBUILD_EMPTY", reason, status_code=503)
+
+    out_path = repo_root / "graphify-out" / "merged-graph.json"
+    _merge_graph_outputs(graph_paths, out_path)
+    _write_scoped_graph_metadata(
+        out_path,
+        profile=profile,
+        scanned_root_count=len(graph_paths),
+        removed_node_count=removed_node_count,
+    )
+    _activate_rebuild_graph(out_path)
+
+
 def _run_rebuild() -> None:
     global _graph_cache, _summary_cache
     _REBUILD_STATUS.update({"status": "running", "error": None, "code": None, "detail": None})
     try:
-        repo_root = Path(__file__).parent.parent
+        repo_root = _REPO_ROOT
+        workspace_scope_profile = _load_workspace_scope_for_rebuild()
         scan_dirs = _load_scan_dirs()
 
-        if not scan_dirs:
+        if workspace_scope_profile is not None:
+            _run_scoped_rebuild(workspace_scope_profile, repo_root)
+        elif not scan_dirs:
             # Default: scan just this repo
             result = run_graphify_update(".", cwd=repo_root, timeout=300)
             ts = datetime.now(tz=timezone.utc).isoformat()
@@ -2009,30 +2474,19 @@ def _run_rebuild() -> None:
                 })
                 return
             out_path = repo_root / "graphify-out" / "merged-graph.json"
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            if len(graph_paths) == 1:
-                import shutil
-                shutil.copy(graph_paths[0], str(out_path))
-            else:
-                merge_result = run_graphify_merge(graph_paths, out_path=out_path, timeout=300)
-                if merge_result.returncode != 0:
-                    _REBUILD_STATUS.update({
-                        "status": "error",
-                        "last_run": ts,
-                        "error": merge_result.stderr[:500],
-                        "code": None,
-                        "detail": None,
-                    })
-                    return
+            try:
+                _merge_graph_outputs(graph_paths, out_path)
+            except GraphifyServiceError as exc:
+                _REBUILD_STATUS.update({
+                    "status": "error",
+                    "last_run": ts,
+                    "error": exc.message,
+                    "code": exc.code,
+                    "detail": exc.to_detail(),
+                })
+                return
             # Activate the merged graph
-            settings: dict = {}
-            if SETTINGS_FILE.exists():
-                try:
-                    settings = json.loads(SETTINGS_FILE.read_text())
-                except Exception:
-                    pass
-            settings["graph_path"] = str(out_path)
-            write_json_atomic(SETTINGS_FILE, settings)
+            _activate_rebuild_graph(out_path)
 
         _graph_cache = None
         _summary_cache = {}
@@ -2141,7 +2595,7 @@ def _read_source_window(source_file: str, n_lines: int = 35) -> str:
     """Read up to n_lines from a node's source file, checking all known repo roots."""
     if not source_file:
         return ""
-    roots = [Path(__file__).parent.parent] + [Path(d) for d in _load_scan_dirs()]
+    roots = _configured_source_roots()
     for root in roots:
         p = root / source_file
         if p.exists():
@@ -2298,16 +2752,18 @@ def get_overlap_report() -> dict:
         return {"groups": [], "total_cross_edges": 0, "created_at": sem_data.get("created_at")}
 
     try:
-        g = _load_graph()
+        g = apply_signal_tiers_to_graph(_load_graph())
     except Exception:
         return {"groups": [], "total_cross_edges": 0, "created_at": sem_data.get("created_at")}
 
-    def _cl(sf: str) -> str:
-        return sf.replace("\\", "/").split("/")[0] if sf else "other"
-
     node_meta: dict[str, dict] = {
-        n["id"]: {"label": n.get("label", n["id"]), "cluster": _cl(n.get("source_file", "")), "source_file": n.get("source_file", "")}
+        n["id"]: {
+            "label": n.get("label", n["id"]),
+            "cluster": _node_cluster_id(n),
+            "source_file": n.get("source_file", ""),
+        }
         for n in g.get("nodes", [])
+        if isinstance(n, dict) and is_visible_signal_node(n)
     }
 
     groups: dict[str, dict] = {}
@@ -2795,6 +3251,10 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
     confidence = round(req.triage_confidence or min(0.95, req.avg_similarity), 2)
 
     action_plan = _overlap_action_plan(req, verdict, proposed_action)
+    try:
+        scope_context = _build_scope_context(graph_summary())
+    except Exception:
+        scope_context = _build_scope_context({"nodes": [], "edges": [], "total_nodes": 0})
 
     rec: dict = {
         "id": str(uuid.uuid4()),
@@ -2828,6 +3288,7 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
         "updated_at": now,
         "model": "overlap-analysis" if not req.triage_verdict else f"overlap-analysis+triage",
         "created_by": getattr(request.state, "user_id", "local"),
+        "context": scope_context,
     }
     _save_recommendation(rec)
     return rec

@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T23:02:47-06:00
-Status: stabilization complete; workspace scope and signal plan is next; current-build pathway archived
+Last Updated: 2026-06-17T11:09:43-06:00
+Status: workspace scope Chunk 6 task complete; Chunk 7 next; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,7 +12,7 @@ default.
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
 3. Read `docs/workspace-scope-and-signal-plan.md`.
-4. Start with Chunk 1 unless Adam redirects.
+4. Start with Chunk 7 unless Adam redirects.
 5. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 6. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
@@ -84,6 +84,54 @@ low-signal files by default, and keep the cockpit focused on token-saving build
 intelligence: overlaps, gaps, important insights, and compact future-build
 context.
 
+Workspace scope Chunk 1 is task complete as of 2026-06-17T08:55:48-06:00:
+`POST /workspace-scope/inspect` now returns a safe read-only tree summary,
+applies default exclusion reasons for noisy/generated/state paths, reports
+secret-like paths by presence only, and stops expansion at child repo/project
+boundaries. Validation passed with backend tests, backend compile checks,
+frontend typecheck, and frontend production build. Chunk 2 followed this
+backend slice with the Settings Workspace Scope UI.
+
+Workspace scope Chunk 2 is task complete as of 2026-06-17T09:08:55-06:00:
+Settings now includes a Workspace Scope panel for parent-folder inspection,
+bounded tree counts, include/exclude toggles, visible default-exclusion reasons,
+and saved scope profiles through `GET/PUT /workspace-scope`. Validation passed
+with governance preflight, backend tests, backend compile checks, frontend
+typecheck/build, live workspace-scope API checks, and a Chromium Settings smoke.
+
+Workspace scope Chunk 3 is task complete as of 2026-06-17T10:28:17-06:00:
+`POST /graph/rebuild` now prefers a saved workspace scope profile, scans only
+de-duplicated included roots, skips explicitly excluded roots, filters noisy,
+generated, state, media, and secret-like graph nodes out of the activated
+cockpit graph, annotates kept nodes with source-root/scope metadata, activates
+the scoped merged graph, and clears stale semantic edges when graph identity
+changes. With no saved scope, the existing local repo fallback remains in
+place.
+
+Workspace scope Chunk 4 is task complete as of 2026-06-17T10:42:36-06:00:
+nodes now receive explicit signal tiers and reasons, default Map graph
+responses hide low-signal evidence/hidden nodes, Map shows hidden/excluded
+counts, and the operator can temporarily enable the Low Signal layer for
+inspection. Post-Chunk 4 warning cleanup is task complete as of
+2026-06-17T10:48:34-06:00: FastAPI lifespan, `httpx2` TestClient support, and
+Vite manual chunks removed the previously noted backend deprecation and
+frontend chunk-size warnings.
+
+Workspace scope Chunk 5 is task complete as of 2026-06-17T11:04:05-06:00:
+Map now opens in Overview mode by default, `/graph/summary` uses scoped
+repo/project metadata for the parent-folder overview, selected repo/project
+drilldown returns root/module summary groups instead of tiny file nodes, and
+full graph clustering plus semantic overlap grouping use repo/project identity
+for cross-repo readability.
+
+Workspace scope Chunk 6 is task complete as of 2026-06-17T11:09:43-06:00:
+Ask evidence is enriched and filtered against the active scoped/signal-aware
+graph, chat and recommendation workflows receive compact scope context with
+included groups plus hidden/excluded evidence, overlap analysis ignores
+low-signal hidden nodes by default, and Recommendation cards show context and
+rough token-saving evidence.
+Continue with Chunk 7: Video-Readiness Smoke Pass.
+
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
   low / level 1; do not auto-change governance, but use stronger review for
@@ -115,7 +163,7 @@ Open owner-review flags before future implementation:
 
 1. `git status --short` — preserve unrelated work.
 2. Read `docs/workspace-scope-and-signal-plan.md`.
-3. Start with Chunk 1 unless Adam redirects.
+3. Start with Chunk 7 unless Adam redirects.
 4. Load only the files named in that chunk.
 5. Use `docs/context-map.md` if routing is still unclear.
 

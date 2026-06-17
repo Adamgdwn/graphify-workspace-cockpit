@@ -32,8 +32,10 @@ def get_cluster_selection(deps: ClusterSelectionDeps) -> dict:
         data = deps.load_graph()
         counts: dict[str, int] = {}
         for node in data.get("nodes", []):
-            source_file = node.get("source_file", "")
-            cluster = source_file.split("/")[0] if source_file else ""
+            cluster = (
+                str(node.get("repo_project_name") or node.get("source_root_name") or "").strip()
+                or _cluster_from_source_file(str(node.get("source_file") or ""))
+            )
             if cluster:
                 counts[cluster] = counts.get(cluster, 0) + 1
         available_clusters = [
@@ -59,6 +61,11 @@ def update_cluster_selection(req: ClusterSelectionBody, deps: ClusterSelectionDe
     deps.save_cluster_selection(selection)
     deps.clear_summary_cache()
     return selection
+
+
+def _cluster_from_source_file(source_file: str) -> str:
+    parts = [part for part in source_file.replace("\\", "/").split("/") if part]
+    return parts[0] if parts else ""
 
 
 def create_cluster_selection_router(

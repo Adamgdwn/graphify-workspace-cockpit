@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,8 +23,9 @@ def create_app(
     api_key_getter: Callable[[], str],
     resolve_user: Callable[[str], str],
     rate_limit_handler: Callable[[Request, RateLimitExceeded], JSONResponse],
+    lifespan: Callable[[FastAPI], Any] | None = None,
 ) -> tuple[FastAPI, Limiter]:
-    app = FastAPI(title=title, version=version)
+    app = FastAPI(title=title, version=version, lifespan=lifespan)
 
     limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
     app.state.limiter = limiter

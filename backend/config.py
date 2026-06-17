@@ -24,6 +24,7 @@ CLUSTER_SELECTION_FILE = WORKSPACE_STATE / "cluster-selection.json"
 CHAT_CONFIG_FILE = WORKSPACE_STATE / "chat-config.json"
 CHAT_SESSIONS_DIR = WORKSPACE_STATE / "chat-sessions"
 SCAN_DIRS_FILE = WORKSPACE_STATE / "scan-dirs.json"
+WORKSPACE_SCOPE_FILE = WORKSPACE_STATE / "workspace-scope.json"
 SEMANTIC_EDGES_FILE = WORKSPACE_STATE / "semantic-edges.json"
 OVERLAP_STATUS_FILE = WORKSPACE_STATE / "overlap-status.json"
 

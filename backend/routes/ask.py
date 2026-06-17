@@ -46,6 +46,7 @@ class AskDeps:
     graph_path: Callable[[], str]
     run_graphify_ask: Callable[..., object]
     load_cluster_selection: Callable[[], dict]
+    scope_evidence: Callable[[list[dict]], list[dict]]
     sessions_dir: Callable[[], Path]
     write_json_atomic: Callable[[Path, dict], None]
     prune_sessions: Callable[[], None]
@@ -151,14 +152,7 @@ def answer_question(req: AskRequest, deps: AskDeps) -> AskResponse:
     else:
         answer, evidence = parse_path_output(raw)
 
-    selection = deps.load_cluster_selection()
-    selected_clusters = selection.get("clusters")
-    if selected_clusters is not None:
-        evidence = [
-            ev for ev in evidence
-            if not ev.get("src", "").split("/")[0]
-            or ev["src"].split("/")[0] in selected_clusters
-        ]
+    evidence = deps.scope_evidence(evidence)
 
     suggestion_list = suggestions(req.question, req.mode, evidence)
     session_id = str(uuid.uuid4())

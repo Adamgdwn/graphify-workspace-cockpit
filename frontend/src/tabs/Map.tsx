@@ -26,6 +26,7 @@ function ensureExtensions() {
 interface SummaryNode {
   id: string;
   label: string;
+  group_type?: "repo" | "module" | "group";
   node_count: number;
   code_count: number;
   doc_count: number;
@@ -45,6 +46,9 @@ interface GraphSummary {
   level: "top" | "project";
   project: string | null;
   total_nodes: number;
+  hidden_node_count?: number;
+  excluded_node_count?: number;
+  signal_counts?: Record<string, number>;
   nodes: SummaryNode[];
   edges: SummaryEdge[];
 }
@@ -66,6 +70,8 @@ interface FullNode {
   metadata?: Record<string, unknown>;
   symbol?: string;
   purpose?: string;
+  signal_tier?: "overview" | "important" | "evidence" | "hidden" | "excluded";
+  signal_reason?: string;
   source_excerpt?: {
     start_line: number | null;
     lines: string[];
@@ -83,6 +89,12 @@ interface FullEdge {
 interface FullGraph {
   node_count: number;
   edge_count: number;
+  total_node_count?: number;
+  visible_node_count?: number;
+  hidden_node_count?: number;
+  excluded_node_count?: number;
+  signal_counts?: Record<string, number>;
+  include_low_signal?: boolean;
   nodes: FullNode[];
   edges: FullEdge[];
 }
@@ -145,6 +157,20 @@ function metadataEntries(node: FullNode) {
     .filter(([, value]) => value !== null && value !== undefined && String(value).trim() !== "")
     .filter(([key]) => !["kind", "language"].includes(key))
     .sort(([a], [b]) => a.localeCompare(b));
+}
+
+function lowSignalCount(graph: FullGraph | null, summary: GraphSummary | null): number {
+  const counts = graph?.signal_counts ?? summary?.signal_counts ?? {};
+  return (counts.evidence ?? 0) + (counts.hidden ?? 0);
+}
+
+function excludedNodeCount(graph: FullGraph | null, summary: GraphSummary | null): number {
+  return graph?.excluded_node_count ?? summary?.excluded_node_count ?? 0;
+}
+
+function signalTierLabel(tier?: string): string {
+  if (!tier) return "Evidence";
+  return tier.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 // ── Overlap analysis ──────────────────────────────────────────────────────
@@ -524,6 +550,7 @@ function buildElements(
         code_count: n.code_count,
         doc_count: n.doc_count,
         dominant_type: n.dominant_type,
+        group_type: n.group_type ?? "group",
         is_drillable: n.is_drillable,
         // log₂ scaling: 1→36px, 100→66px, 10k→108px, 23k→126px
         size: Math.max(36, Math.min(126, Math.log2(n.node_count + 2) * 15)),
@@ -738,7 +765,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   const pathSourceRef = useRef<string | null>(null);
   const summaryRef = useRef<GraphSummary | null>(null);
 
-  const [viewMode, setViewMode] = useState<ViewMode>("full");
+  const [viewMode, setViewMode] = useState<ViewMode>("summary");
   const [summary, setSummary] = useState<GraphSummary | null>(null);
   const [fullGraph, setFullGraph] = useState<FullGraph | null>(null);
   const [fullLoading, setFullLoading] = useState(false);
@@ -766,6 +793,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   } | null>(null);
   const [showSourcePanel, setShowSourcePanel] = useState(false);
   const [selectedClusters, setSelectedClusters] = useState<Set<string> | null>(null);
+  const [showLowSignal, setShowLowSignal] = useState(false);
   // edge layer toggles
   const [showStructural, setShowStructural] = useState(true);
   // semantic similarity overlay
@@ -1089,7 +1117,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     setGodNodeEdgeCounts(Object.fromEntries(sorted.slice(0, 5)));
   }, [summary]);
 
-  const fetchSummary = useCallback(async (project?: string) => {
+  const fetchSummary = useCallback(async (project?: string, label?: string) => {
     setLoading(true);
     setError(null);
     setSelected(null);
@@ -1105,7 +1133,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
       }
       const data: GraphSummary = await res.json();
       setSummary(data);
-      setBreadcrumb(project ? [project] : []);
+      setBreadcrumb(project ? [label || project] : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1116,10 +1144,11 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   useEffect(() => { fetchSummary(); }, [fetchSummary]);
 
   const fetchFullGraph = useCallback(async () => {
-    if (fullGraph) return; // already loaded
+    if (fullGraph && Boolean(fullGraph.include_low_signal) === showLowSignal) return; // already loaded
     setFullLoading(true);
     try {
-      const res = await apiFetch(`/graph/full`);
+      const qs = showLowSignal ? "?include_low_signal=true" : "";
+      const res = await apiFetch(`/graph/full${qs}`);
       if (!res.ok) throw new Error(await apiErrorMessage(res));
       const data: FullGraph = await res.json();
       setFullGraph(data);
@@ -1128,7 +1157,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     } finally {
       setFullLoading(false);
     }
-  }, [fullGraph]);
+  }, [fullGraph, showLowSignal]);
 
   // When switching to full mode, load the full graph once
   useEffect(() => {
@@ -1660,7 +1689,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
 
   function handleDrillDown(node: SummaryNode) {
     if (!node.is_drillable) return;
-    fetchSummary(node.id);
+    fetchSummary(node.id, node.label);
   }
 
   async function toggleCluster(clusterId: string) {
@@ -1708,6 +1737,8 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     : 0;
 
   const activeMapMode = MAP_MODES.find((mode) => mode.id === mapMode) ?? MAP_MODES[0];
+  const hiddenLowSignalCount = lowSignalCount(fullGraph, summary);
+  const excludedFromScopeCount = excludedNodeCount(fullGraph, summary);
 
   const sourceSelector = clusterData && clusterData.available_clusters.length > 0 ? (
     <div className="map-source-control">
@@ -1773,10 +1804,34 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
           }}
           type="button"
         >
-          {m === "summary" ? "Summary" : fullLoading ? "Loading..." : "Full"}
+          {m === "summary" ? "Overview" : fullLoading ? "Loading..." : "Evidence"}
         </button>
       ))}
     </div>
+  );
+
+  const signalControls = (
+    <button
+      className={`map-path-btn${showLowSignal ? " map-signal-active" : ""}`}
+      onClick={() => {
+        setSelectedFull(null);
+        setFullGraph(null);
+        setShowLowSignal((value) => !value);
+        if (viewMode !== "full") {
+          setViewMode("full");
+          setPathMode(false);
+          setPathNoRoute(false);
+        }
+      }}
+      title={
+        showLowSignal
+          ? "Hide evidence and hidden signal tiers from the default Map"
+          : `Temporarily show ${hiddenLowSignalCount.toLocaleString()} evidence and hidden low-signal nodes`
+      }
+      type="button"
+    >
+      Low Signal{hiddenLowSignalCount ? ` (${hiddenLowSignalCount.toLocaleString()})` : ""}
+    </button>
   );
 
   const edgeLayerControls = (
@@ -1920,7 +1975,9 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
             {summary && !loading && (
               <span className="map-meta-pill">
                 {summary.nodes.length}&thinsp;groups&thinsp;·&thinsp;
-                {summary.total_nodes.toLocaleString()}&thinsp;nodes
+                {summary.total_nodes.toLocaleString()}&thinsp;visible
+                {hiddenLowSignalCount ? <>&thinsp;·&thinsp;{hiddenLowSignalCount.toLocaleString()}&thinsp;hidden</> : null}
+                {excludedFromScopeCount ? <>&thinsp;·&thinsp;{excludedFromScopeCount.toLocaleString()}&thinsp;excluded</> : null}
               </span>
             )}
           </div>
@@ -1953,6 +2010,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
             {viewModeControls}
             {typeFilterControls}
             {sourceSelector}
+            {signalControls}
             {edgeLayerControls}
             {pathControl}
             {overlapControl}
@@ -2345,6 +2403,12 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
               >
                 {selectedFull.cluster}
               </span>
+              <span
+                className={`map-type-badge map-signal-badge map-signal-${selectedFull.signal_tier ?? "evidence"}`}
+                title={selectedFull.signal_reason || "Signal tier"}
+              >
+                {signalTierLabel(selectedFull.signal_tier)}
+              </span>
             </div>
 
             <div className="map-inspector-block">
@@ -2386,6 +2450,10 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
               <div className="map-provenance-row">
                 <span>Origin</span>
                 <strong>{presentValue(selectedFull.origin)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Signal</span>
+                <strong>{presentValue(selectedFull.signal_reason)}</strong>
               </div>
               <div className="map-provenance-row map-provenance-wide">
                 <span>Source root</span>
@@ -2453,6 +2521,9 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                 className={`map-type-badge map-type-${selected.dominant_type}`}
               >
                 {selected.dominant_type}
+              </span>
+              <span className="map-type-badge map-group-badge">
+                {selected.group_type === "repo" ? "Repo / Project" : selected.group_type === "module" ? "Module" : "Group"}
               </span>
               {godNodeIds.has(selected.id) && (
                 <span className="map-god-badge" title={`High-traffic node (${godNodeEdgeCounts[selected.id] ?? 0} edge weight)`}>

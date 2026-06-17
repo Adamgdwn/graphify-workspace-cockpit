@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
   API_AUTH_ERROR_MESSAGE,
   apiErrorMessage,
@@ -110,6 +110,80 @@ interface ClusterSelectionData {
   available_clusters: ClusterOption[];
 }
 
+type WorkspaceScopeState = "included" | "excluded" | "partial";
+
+interface WorkspaceScopeNode {
+  name: string;
+  path: string;
+  relative_path: string;
+  kind: "directory" | "file" | "symlink" | "other";
+  state: WorkspaceScopeState;
+  project_type: string | null;
+  is_repo: boolean;
+  reasons: string[];
+  warnings: string[];
+  estimated_file_count: number;
+  estimated_included_count: number;
+  estimated_excluded_count: number;
+  children: WorkspaceScopeNode[];
+}
+
+interface WorkspaceScopeProfile {
+  root: string;
+  profile_name: string;
+  included_paths: string[];
+  excluded_paths: string[];
+  exclude_patterns: string[];
+  signal: {
+    hide_low_signal: boolean;
+    show_generated: boolean;
+    min_visible_signal: string;
+  };
+}
+
+interface WorkspaceScopeInspect {
+  root: {
+    name: string;
+    path: string;
+    exists: boolean;
+    kind: string;
+    state: WorkspaceScopeState;
+    project_type: string | null;
+    estimated_file_count: number;
+    estimated_included_count: number;
+    estimated_excluded_count: number;
+  };
+  max_depth: number;
+  exclude_patterns: string[];
+  tree: WorkspaceScopeNode;
+}
+
+function scopePathLabel(node: WorkspaceScopeNode): string {
+  return node.relative_path || node.name || node.path;
+}
+
+function collectScopePaths(
+  node: WorkspaceScopeNode,
+  predicate: (node: WorkspaceScopeNode) => boolean,
+  includeRoot = false,
+): string[] {
+  const paths: string[] = [];
+  if (includeRoot || node.relative_path) {
+    if (predicate(node)) paths.push(node.path);
+  }
+  for (const child of node.children) {
+    paths.push(...collectScopePaths(child, predicate));
+  }
+  return paths;
+}
+
+function defaultIncludedScopePaths(tree: WorkspaceScopeNode): string[] {
+  const topLevel = tree.children
+    .filter((child) => child.kind === "directory" && child.state !== "excluded")
+    .map((child) => child.path);
+  return topLevel.length > 0 ? topLevel : [tree.path];
+}
+
 export function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
@@ -149,6 +223,18 @@ export function Settings() {
   const [scanDirInput, setScanDirInput] = useState("");
   const [addingDir, setAddingDir] = useState(false);
 
+  // Workspace scope
+  const [workspaceRootInput, setWorkspaceRootInput] = useState("");
+  const [workspaceProfileName, setWorkspaceProfileName] = useState("All Code");
+  const [workspaceScope, setWorkspaceScope] = useState<WorkspaceScopeInspect | null>(null);
+  const [workspaceProfile, setWorkspaceProfile] = useState<WorkspaceScopeProfile | null>(null);
+  const [workspaceIncluded, setWorkspaceIncluded] = useState<Set<string>>(() => new Set());
+  const [workspaceExcluded, setWorkspaceExcluded] = useState<Set<string>>(() => new Set());
+  const [inspectingWorkspace, setInspectingWorkspace] = useState(false);
+  const [savingWorkspace, setSavingWorkspace] = useState(false);
+  const [workspaceScopeMsg, setWorkspaceScopeMsg] = useState<string | null>(null);
+  const [workspaceScopeError, setWorkspaceScopeError] = useState<string | null>(null);
+
   // Semantic similarity pass
   const [semanticStatus, setSemanticStatus] = useState<{
     status: string; progress: number; total: number;
@@ -175,6 +261,61 @@ export function Settings() {
       .then(setConnectors)
       .catch(() => setConnectors([]));
   }, []);
+
+  function applyWorkspaceScopeSelection(
+    data: WorkspaceScopeInspect,
+    profile: WorkspaceScopeProfile | null,
+  ) {
+    setWorkspaceScope(data);
+    if (profile && profile.root === data.root.path) {
+      setWorkspaceIncluded(new Set(profile.included_paths));
+      setWorkspaceExcluded(new Set(profile.excluded_paths));
+      return;
+    }
+    setWorkspaceIncluded(new Set(defaultIncludedScopePaths(data.tree)));
+    setWorkspaceExcluded(new Set(collectScopePaths(data.tree, (node) => node.state === "excluded")));
+  }
+
+  async function inspectWorkspaceRoot(root: string, profile: WorkspaceScopeProfile | null = workspaceProfile) {
+    const path = root.trim();
+    if (!path) return;
+    setInspectingWorkspace(true);
+    setWorkspaceScopeError(null);
+    setWorkspaceScopeMsg(null);
+    try {
+      const response = await apiFetch(`/workspace-scope/inspect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ root: path, max_depth: 3 }),
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      const data = await response.json() as WorkspaceScopeInspect;
+      applyWorkspaceScopeSelection(data, profile);
+      setWorkspaceRootInput(data.root.path);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Workspace inspection failed";
+      setWorkspaceScope(null);
+      setWorkspaceScopeError(message);
+    } finally {
+      setInspectingWorkspace(false);
+    }
+  }
+
+  function loadWorkspaceScope() {
+    loadJson<{ profile: WorkspaceScopeProfile | null }>(`/workspace-scope`)
+      .then((data) => {
+        setWorkspaceProfile(data.profile);
+        if (!data.profile) return;
+        setWorkspaceRootInput(data.profile.root);
+        setWorkspaceProfileName(data.profile.profile_name);
+        setWorkspaceIncluded(new Set(data.profile.included_paths));
+        setWorkspaceExcluded(new Set(data.profile.excluded_paths));
+        void inspectWorkspaceRoot(data.profile.root, data.profile);
+      })
+      .catch(() => {
+        setWorkspaceProfile(null);
+      });
+  }
 
   function loadAll() {
     loadJson<AppSettings>(`/settings`)
@@ -207,6 +348,7 @@ export function Settings() {
     loadJson<{ dirs: string[] }>(`/graph/scan-dirs`)
       .then((d: { dirs: string[] }) => setScanDirs(d.dirs))
       .catch(() => setScanDirs([]));
+    loadWorkspaceScope();
     loadJson<typeof semanticStatus>(`/graph/semantic-pass/status`)
       .then(setSemanticStatus)
       .catch(() => setSemanticStatus(null));
@@ -352,6 +494,72 @@ export function Settings() {
   async function handleDeselectAll() {
     if (!clusterSel) return;
     await applyClusterSel({ sources: clusterSel.available_sources, clusters: [] });
+  }
+
+  async function handleInspectWorkspaceScope(e: FormEvent) {
+    e.preventDefault();
+    await inspectWorkspaceRoot(workspaceRootInput);
+  }
+
+  function effectiveWorkspaceState(node: WorkspaceScopeNode): WorkspaceScopeState {
+    if (workspaceExcluded.has(node.path)) return "excluded";
+    if (workspaceIncluded.has(node.path)) return "included";
+    return node.state;
+  }
+
+  function toggleWorkspaceScopePath(path: string, include: boolean) {
+    setWorkspaceIncluded((prev) => {
+      const next = new Set(prev);
+      if (include) next.add(path);
+      else next.delete(path);
+      return next;
+    });
+    setWorkspaceExcluded((prev) => {
+      const next = new Set(prev);
+      if (include) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  async function handleSaveWorkspaceScope() {
+    const root = workspaceScope?.root.path ?? workspaceRootInput.trim();
+    if (!root) return;
+    setSavingWorkspace(true);
+    setWorkspaceScopeError(null);
+    setWorkspaceScopeMsg(null);
+    try {
+      const response = await apiFetch(`/workspace-scope`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          root,
+          profile_name: workspaceProfileName.trim() || "Workspace Scope",
+          included_paths: Array.from(workspaceIncluded),
+          excluded_paths: Array.from(workspaceExcluded),
+          exclude_patterns: workspaceScope?.exclude_patterns,
+          signal: workspaceProfile?.signal ?? {
+            hide_low_signal: true,
+            show_generated: false,
+            min_visible_signal: "important",
+          },
+        }),
+      });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      const data = await response.json() as { profile: WorkspaceScopeProfile };
+      setWorkspaceProfile(data.profile);
+      setWorkspaceProfileName(data.profile.profile_name);
+      setWorkspaceIncluded(new Set(data.profile.included_paths));
+      setWorkspaceExcluded(new Set(data.profile.excluded_paths));
+      setWorkspaceScopeMsg("Workspace scope saved.");
+      addToast("Workspace scope saved", "success");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to save workspace scope";
+      setWorkspaceScopeError(message);
+      addToast(message, "error");
+    } finally {
+      setSavingWorkspace(false);
+    }
   }
 
   async function handleAddScanDir(e: FormEvent) {
@@ -612,8 +820,55 @@ export function Settings() {
     });
   }
 
+  function renderWorkspaceScopeNode(node: WorkspaceScopeNode, depth = 0) {
+    const state = effectiveWorkspaceState(node);
+    const isExcluded = state === "excluded";
+    const label = scopePathLabel(node);
+    const meta = [
+      node.project_type,
+      `${node.estimated_file_count.toLocaleString()} files`,
+      node.estimated_excluded_count > 0 ? `${node.estimated_excluded_count.toLocaleString()} excluded` : null,
+    ].filter(Boolean).join(" · ");
+
+    return (
+      <div key={node.path} className={`scope-node scope-node-${state}`} style={{ "--scope-depth": depth } as CSSProperties}>
+        <div className="scope-node-main">
+          <label className="scope-node-toggle">
+            <input
+              type="checkbox"
+              checked={!isExcluded}
+              onChange={(event) => toggleWorkspaceScopePath(node.path, event.target.checked)}
+            />
+            <span className="scope-node-label">{label}</span>
+          </label>
+          <span className={`scope-state-badge scope-state-${state}`}>{state}</span>
+        </div>
+        <div className="scope-node-meta">
+          {meta || node.kind}
+          {node.warnings.map((warning) => (
+            <span key={warning} className="scope-node-warning">{warning}</span>
+          ))}
+        </div>
+        {node.reasons.length > 0 && (
+          <div className="scope-node-reasons">
+            {node.reasons.map((reason) => (
+              <span key={reason}>{reason}</span>
+            ))}
+          </div>
+        )}
+        {node.children.length > 0 && (
+          <div className="scope-node-children">
+            {node.children.map((child) => renderWorkspaceScopeNode(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const edgesZero = settings !== null && settings.edge_count === 0;
   const graphifyMissing = settings?.graphify.available === false;
+  const workspaceSelectedCount = workspaceIncluded.size;
+  const workspaceExcludedCount = workspaceExcluded.size;
 
   return (
     <div className="settings-pane">
@@ -723,12 +978,97 @@ export function Settings() {
         {uploadMsg && <p className="settings-ok">{uploadMsg}</p>}
       </section>
 
+      {/* Workspace Scope */}
+      <section className="settings-section">
+        <div className="settings-section-title">
+          Workspace Scope
+          {workspaceProfile && <span className="scope-saved-pill">Saved</span>}
+        </div>
+        <p className="settings-dim" style={{ marginBottom: 10 }}>
+          Choose a parent folder, inspect the bounded repo tree, and save the scope profile for the next scoped rebuild pass.
+        </p>
+        <form className="settings-upload-form" onSubmit={handleInspectWorkspaceScope} style={{ gap: 8 }}>
+          <input
+            className="settings-mono-input"
+            style={{ flex: 1 }}
+            value={workspaceRootInput}
+            onChange={(event) => setWorkspaceRootInput(event.target.value)}
+            placeholder="/home/adamgoodwin/code"
+            type="text"
+          />
+          <button type="submit" className="settings-upload-btn" disabled={inspectingWorkspace || !workspaceRootInput.trim()}>
+            {inspectingWorkspace ? "Inspecting..." : "Inspect Folder"}
+          </button>
+        </form>
+        <div className="scope-profile-row">
+          <label className="settings-label" htmlFor="workspace-profile-name">Profile</label>
+          <input
+            id="workspace-profile-name"
+            className="settings-mono-input"
+            value={workspaceProfileName}
+            onChange={(event) => setWorkspaceProfileName(event.target.value)}
+            placeholder="All Code"
+          />
+        </div>
+        {workspaceProfile && (
+          <div className="scope-summary">
+            <span className="settings-mono settings-break">{workspaceProfile.root}</span>
+            <span>{workspaceProfile.included_paths.length.toLocaleString()} included paths</span>
+            <span>{workspaceProfile.excluded_paths.length.toLocaleString()} excluded paths</span>
+            <span>low-signal hidden by default</span>
+          </div>
+        )}
+        {workspaceScope && (
+          <>
+            <div className="scope-count-grid">
+              <div>
+                <span className="scope-count-value">{workspaceScope.root.estimated_file_count.toLocaleString()}</span>
+                <span className="scope-count-label">estimated files</span>
+              </div>
+              <div>
+                <span className="scope-count-value">{workspaceScope.root.estimated_included_count.toLocaleString()}</span>
+                <span className="scope-count-label">included by defaults</span>
+              </div>
+              <div>
+                <span className="scope-count-value">{workspaceScope.root.estimated_excluded_count.toLocaleString()}</span>
+                <span className="scope-count-label">excluded by defaults</span>
+              </div>
+            </div>
+            <div className="scope-toolbar">
+              <span className="settings-dim">
+                Current selection: {workspaceSelectedCount.toLocaleString()} included, {workspaceExcludedCount.toLocaleString()} excluded
+              </span>
+              <button
+                type="button"
+                className="settings-upload-btn"
+                onClick={handleSaveWorkspaceScope}
+                disabled={savingWorkspace || workspaceSelectedCount === 0}
+              >
+                {savingWorkspace ? "Saving..." : "Save Scope"}
+              </button>
+            </div>
+            <div className="scope-tree">
+              {renderWorkspaceScopeNode(workspaceScope.tree)}
+            </div>
+            <div className="scope-patterns">
+              <span className="settings-label">Default excludes</span>
+              <span>{workspaceScope.exclude_patterns.join(", ")}</span>
+            </div>
+          </>
+        )}
+        {!workspaceScope && !workspaceScopeError && (
+          <p className="settings-dim">No folder inspected yet.</p>
+        )}
+        {workspaceScopeMsg && <p className="settings-ok">{workspaceScopeMsg}</p>}
+        {workspaceScopeError && <p className="settings-err">{workspaceScopeError}</p>}
+      </section>
+
       {/* Rebuild Graph */}
       <section className="settings-section">
         <div className="settings-section-title">Rebuild Graph</div>
         <p className="settings-dim" style={{ marginBottom: 10 }}>
-          Run <code>graphify update . --no-cluster</code> on the current repo to refresh graph data.
-          The active graph reloads automatically when the rebuild completes.
+          Run <code>graphify update . --no-cluster</code> on the current repo for now.
+          The saved workspace scope above is ready for the scoped rebuild engine in the next chunk.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button

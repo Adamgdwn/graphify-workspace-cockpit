@@ -26,6 +26,27 @@ interface Recommendation {
   created_by?: string;
   action_plan?: ActionPlan;
   overlap_dossier?: OverlapDossier | null;
+  context?: RecommendationContext;
+}
+
+interface RecommendationContext {
+  scope_name?: string;
+  included_context?: Array<{
+    id: string;
+    label: string;
+    group_type?: string;
+    node_count?: number;
+  }>;
+  major_exclusions?: {
+    excluded_paths?: string[];
+    default_patterns?: string[];
+    hidden_low_signal_nodes?: number;
+    scoped_excluded_nodes?: number;
+  };
+  token_savings?: {
+    estimated_hidden_tokens_per_query?: number;
+    basis?: string;
+  };
 }
 
 interface ActionPlan {
@@ -472,6 +493,24 @@ function RecCard({
 
       {/* Summary */}
       <p className="rec-card-summary">{rec.summary}</p>
+
+      {rec.context && (
+        <div className="rec-context-strip">
+          <span>{rec.context.scope_name || "Active scope"}</span>
+          <span>
+            {(rec.context.included_context?.length ?? 0)} groups included
+          </span>
+          <span>
+            {((rec.context.major_exclusions?.hidden_low_signal_nodes ?? 0) +
+              (rec.context.major_exclusions?.scoped_excluded_nodes ?? 0)).toLocaleString()} hidden/excluded
+          </span>
+          {(rec.context.token_savings?.estimated_hidden_tokens_per_query ?? 0) > 0 && (
+            <span>
+              ~{rec.context.token_savings?.estimated_hidden_tokens_per_query?.toLocaleString()} tokens saved
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Evidence chips */}
       {rec.evidence.length > 0 && (
