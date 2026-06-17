@@ -91,11 +91,35 @@ type Filter = "all" | "code" | "document";
 type ViewMode = "summary" | "full";
 type MapMode = "explore" | "trace" | "overlap" | "review";
 
-const MAP_MODES: Array<{ id: MapMode; label: string; hint: string }> = [
-  { id: "explore", label: "Explore", hint: "Browse the graph and inspect connected context." },
-  { id: "trace", label: "Trace", hint: "Choose a source and target to see the shortest summary path." },
-  { id: "overlap", label: "Overlap", hint: "Review cross-repo semantic overlap and consolidation candidates." },
-  { id: "review", label: "Review", hint: "Filter repositories, layers, and node types for evidence review." },
+const MAP_MODES: Array<{ id: MapMode; label: string; subLabel: string; hint: string; tooltip: string }> = [
+  {
+    id: "explore",
+    label: "Explore",
+    subLabel: "physical map",
+    hint: "Browse the physical/structural graph and inspect connected context.",
+    tooltip: "Physical map: browse structural workspace connections such as files, imports, dependencies, and graph neighborhoods.",
+  },
+  {
+    id: "trace",
+    label: "Trace",
+    subLabel: "path",
+    hint: "Choose a source and target to see the shortest summary path.",
+    tooltip: "Path tracing: pick two nodes and show the shortest route through the summary graph.",
+  },
+  {
+    id: "overlap",
+    label: "Overlap",
+    subLabel: "semantic",
+    hint: "Review semantic connections, cross-repo overlap, and consolidation candidates.",
+    tooltip: "Semantic overlap: show similarity edges, group cross-repo connections, and triage duplicate or related work.",
+  },
+  {
+    id: "review",
+    label: "Review",
+    subLabel: "evidence",
+    hint: "Use all filters, sources, and edge layers for evidence review.",
+    tooltip: "Evidence review: combine filters, sources, physical edges, and semantic edges while inspecting nodes.",
+  },
 ];
 
 const UNKNOWN_VALUE = "unknown";
@@ -1755,32 +1779,47 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     </div>
   );
 
-  const summaryViewLock = <span className="map-view-lock">Summary view</span>;
-  const fullViewLock = <span className="map-view-lock">Full graph</span>;
-
   const edgeLayerControls = (
     <>
       <button
         className="map-path-btn"
-        onClick={() => { if (viewMode === "full") setShowStructural((s) => !s); }}
-        title={viewMode === "full" ? "Toggle structural (import/dependency) edges" : "Switch to Full graph to toggle structural edges"}
+        onClick={() => {
+          if (viewMode !== "full") {
+            setViewMode("full");
+            setPathMode(false);
+            setPathNoRoute(false);
+            setShowStructural(true);
+            return;
+          }
+          setShowStructural((s) => !s);
+        }}
+        title={viewMode === "full" ? "Toggle physical/structural edges" : "Switch to Full graph and show physical/structural edges"}
         style={
           viewMode !== "full"
-            ? { opacity: 0.3, cursor: "default" }
+            ? { opacity: 0.75 }
             : !showStructural
             ? { borderColor: "#2a2a3a", color: "#3a4060", background: "transparent" }
             : { borderColor: "#4a7abf", color: "#4a7abf" }
         }
         type="button"
       >
-        Structural
+        Physical
       </button>
       <button
         className="map-path-btn"
-        onClick={() => { if (viewMode === "full") setShowSemantic((s) => !s); }}
+        onClick={() => {
+          if (viewMode !== "full") {
+            setViewMode("full");
+            setPathMode(false);
+            setPathNoRoute(false);
+            setShowSemantic(true);
+            return;
+          }
+          setShowSemantic((s) => !s);
+        }}
         title={
           viewMode !== "full"
-            ? "Switch to Full graph to toggle semantic edges"
+            ? "Switch to Full graph and show semantic similarity edges"
             : crossSemanticEdges.length
             ? `${showSemantic ? "Hide" : "Show"} ${crossSemanticEdges.length} cross-repo similarity edges (${semanticMeta?.edge_count ?? 0} total)`
             : semanticMeta?.edge_count
@@ -1805,7 +1844,10 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     <button
       className="map-path-btn"
       onClick={() => {
-        if (viewMode !== "full") return;
+        if (viewMode !== "full" || mapMode !== "overlap") {
+          switchMapMode("overlap");
+          return;
+        }
         setShowOverlap((s) => !s);
         if (showOverlap) {
           setHighlightedPair(null);
@@ -1814,7 +1856,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
       }}
       title={
         viewMode !== "full"
-          ? "Switch to Full graph for overlap analysis"
+          ? "Switch to Full graph and open semantic overlap analysis"
           : !crossSemanticEdges.length
           ? "Enable Semantic overlay to run overlap analysis"
           : `${showOverlap ? "Close" : "Open"} overlap analysis - ${overlapGroups.length} cluster pairs detected`
@@ -1838,8 +1880,8 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     <button
       className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
       onClick={() => {
-        if (viewMode !== "summary") {
-          setViewMode("summary");
+        if (viewMode !== "summary" || mapMode !== "trace") {
+          switchMapMode("trace");
           return;
         }
         setPathMode((p) => !p);
@@ -1889,51 +1931,32 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
                 key={mode.id}
                 className={`map-mode-tab${mapMode === mode.id ? " map-mode-tab-active" : ""}`}
                 onClick={() => switchMapMode(mode.id)}
-                title={mode.hint}
+                data-tooltip={mode.tooltip}
+                aria-label={`${mode.label}: ${mode.tooltip}`}
+                title={mode.tooltip}
                 type="button"
               >
-                {mode.label}
+                <span className="map-mode-tab-label">{mode.label}</span>
+                <span className="map-mode-tab-sub">{mode.subLabel}</span>
               </button>
             ))}
           </div>
         </div>
 
         <div className="map-mode-controls">
-          <span className="map-mode-label">{activeMapMode.label}</span>
-          <span className="map-mode-hint">{activeMapMode.hint}</span>
+          <div className="map-mode-copy">
+            <span className="map-mode-label">{activeMapMode.label}</span>
+            <span className="map-mode-hint">{activeMapMode.hint}</span>
+          </div>
 
-          {mapMode === "explore" && (
-            <div className="map-toolbar-right">
-              {viewModeControls}
-              {typeFilterControls}
-              {sourceSelector}
-            </div>
-          )}
-
-          {mapMode === "trace" && (
-            <div className="map-toolbar-right">
-              {summaryViewLock}
-              {pathControl}
-              {typeFilterControls}
-            </div>
-          )}
-
-          {mapMode === "overlap" && (
-            <div className="map-toolbar-right">
-              {fullViewLock}
-              {edgeLayerControls}
-              {overlapControl}
-            </div>
-          )}
-
-          {mapMode === "review" && (
-            <div className="map-toolbar-right">
-              {viewModeControls}
-              {typeFilterControls}
-              {sourceSelector}
-              {edgeLayerControls}
-            </div>
-          )}
+          <div className="map-toolbar-right map-toolbar-all" aria-label="Map controls">
+            {viewModeControls}
+            {typeFilterControls}
+            {sourceSelector}
+            {edgeLayerControls}
+            {pathControl}
+            {overlapControl}
+          </div>
 
           <button
             className="map-fit-btn"

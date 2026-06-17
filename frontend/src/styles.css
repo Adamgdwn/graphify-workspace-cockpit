@@ -840,7 +840,12 @@ body {
 
 .map-mode-tab {
   min-width: 72px;
-  padding: 4px 10px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 4px 10px 5px;
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
@@ -851,9 +856,59 @@ body {
   transition: color 0.12s, background 0.12s, border-color 0.12s;
 }
 
+.map-mode-tab-label,
+.map-mode-tab-sub {
+  display: block;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.map-mode-tab-sub {
+  color: #3d4a66;
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: lowercase;
+}
+
 .map-mode-tab:hover {
   color: #9ab0d8;
   border-color: #263657;
+}
+
+.map-mode-tab:hover .map-mode-tab-sub,
+.map-mode-tab:focus-visible .map-mode-tab-sub {
+  color: #6f819f;
+}
+
+.map-mode-tab::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  z-index: 40;
+  width: min(270px, 78vw);
+  padding: 8px 10px;
+  border: 1px solid #263657;
+  border-radius: 6px;
+  background: #101522;
+  color: #c2cce5;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: normal;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -4px);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.map-mode-tab:hover::after,
+.map-mode-tab:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .map-mode-tab-active {
@@ -862,12 +917,25 @@ body {
   background: #1a2848;
 }
 
+.map-mode-tab-active .map-mode-tab-sub {
+  color: #8aa8ff;
+}
+
 .map-mode-controls {
-  display: grid;
-  grid-template-columns: auto minmax(160px, 1fr) auto auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
+}
+
+.map-mode-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 220px;
+  flex: 1 1 280px;
 }
 
 .map-mode-label {
@@ -885,6 +953,13 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+
+.map-toolbar-all {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  flex: 999 1 560px;
 }
 
 .map-source-control {
@@ -3677,15 +3752,24 @@ body {
     padding: 8px 10px;
   }
 
-  .map-toolbar-main,
-  .map-mode-controls {
-    grid-template-columns: 1fr;
-  }
-
   .map-toolbar-main {
     flex-direction: column;
     align-items: stretch;
     gap: 7px;
+  }
+
+  .map-mode-controls {
+    align-items: stretch;
+  }
+
+  .map-mode-copy,
+  .map-toolbar-all {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+
+  .map-toolbar-all {
+    justify-content: flex-start;
   }
 
   .map-mode-switch {
