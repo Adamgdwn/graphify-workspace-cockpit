@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-17T16:44:43-06:00
-Status: workspace scope dedicated tab polish task complete; owner review / next polish next; current-build pathway archived
+Last Updated: 2026-06-17T17:25:00-06:00
+Status: concise relationship-map plan split out; start with docs/relationship-map-plan.md
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -11,10 +11,11 @@ default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/workspace-scope-and-signal-plan.md`.
-4. Start with owner review / next polish unless Adam redirects.
-5. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
-6. Open `docs/current-build-pathway.md` only when investigating old chunk
+3. Read `docs/relationship-map-plan.md`.
+4. Start with Slice 1 unless Adam redirects.
+5. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
+6. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
+7. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
@@ -77,12 +78,16 @@ controls are now visible together, while the top mode presets carry clearer
 sublabels and hover/focus explanations. The UI polish commit is
 `c27d433 Expose map connection controls`.
 
-The next active plan is
+The active plan is now `docs/relationship-map-plan.md`: make the Map tab a
+decision-grade relationship map that shows physical structure, meaningful
+connections, overlaps, gaps, and decisions without requiring a full broad graph
+payload in the browser.
+
+The completed scope/signal history is retained in
 `docs/workspace-scope-and-signal-plan.md`: select a parent folder, represent
 repos/projects as a tree, exclude noisy/generated/secret-like paths, hide
 low-signal files by default, and keep the cockpit focused on token-saving build
-intelligence: overlaps, gaps, important insights, and compact future-build
-context.
+intelligence.
 
 Workspace scope Chunk 1 is task complete as of 2026-06-17T08:55:48-06:00:
 `POST /workspace-scope/inspect` now returns a safe read-only tree summary,
@@ -198,7 +203,35 @@ now links to Workspace Scope instead of duplicating the picker. Validation
 passed with frontend typecheck/build, headless Chromium tab-flow smoke,
 `git diff --check`, and `graphify update . --no-cluster`.
 
-Continue with owner review / next polish for the knowledge-tool experience.
+Relationship-map broad-root correction is task complete as of
+2026-06-17T17:05:29-06:00: `/graph/summary` now detects when saved scope
+metadata would collapse a broad selected folder such as `/home/adamgoodwin/code`
+into one `code` node, then derives Overview groups from relative source paths
+instead. The current active graph now opens as multiple decision groups
+including `agents`, `Applications`, and `Tools`, with root-level files grouped
+as `Workspace Docs`. Summary nodes also report visible physical connection
+counts and mark zero-link groups as gaps so the map can show connected areas
+and disconnected areas in the same view. Validation passed with focused graph
+service tests, full backend tests, frontend typecheck/build, active graph
+summary inspection, `git diff --check`, and `graphify update . --no-cluster`.
+
+Documentation routing cleanup is task complete as of
+2026-06-17T17:12:02-06:00: `AGENTS.md`, `README.md`,
+`docs/current-build-pathway.md`, `docs/handover.md`, `docs/FILE_SUMMARIES.md`,
+`docs/KNOWN_ISSUES.md`, `docs/vision.md`, and
+`docs/standards/context-hygiene-standard.md` now point active continuation to
+`docs/workspace-scope-and-signal-plan.md`. `docs/stabilization-plan.md` remains
+completed stabilization evidence, and `docs/current-build-pathway.md` plus
+`docs/handover.md` remain historical 0-to-1 build evidence unless Adam
+explicitly reopens them.
+
+Relationship-map plan split is task complete as of
+2026-06-17T17:25:00-06:00: the active next-work document is now the concise
+`docs/relationship-map-plan.md`. The long
+`docs/workspace-scope-and-signal-plan.md` is marked completed history and should
+only be opened for scope/signal evidence or regressions.
+
+Continue with `docs/relationship-map-plan.md`, Slice 1 unless Adam redirects.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -217,7 +250,8 @@ Open owner-review flags before future implementation:
 
 | What | Where |
 |------|-------|
-| Active workspace scope + signal plan | `docs/workspace-scope-and-signal-plan.md` |
+| Active relationship map plan | `docs/relationship-map-plan.md` |
+| Completed workspace scope + signal history | `docs/workspace-scope-and-signal-plan.md` |
 | Completed stabilization plan | `docs/stabilization-plan.md` |
 | Archived build history | `docs/current-build-pathway.md` — superseded for startup |
 | Architecture + ADRs | `docs/architecture.md` |
@@ -230,8 +264,8 @@ Open owner-review flags before future implementation:
 ## To Resume
 
 1. `git status --short` — preserve unrelated work.
-2. Read `docs/workspace-scope-and-signal-plan.md`.
-3. Start with owner review / next polish unless Adam redirects.
+2. Read `docs/relationship-map-plan.md`.
+3. Start with Slice 1 unless Adam redirects.
 4. Load only the files named in that chunk.
 5. Use `docs/context-map.md` if routing is still unclear.
 
@@ -258,6 +292,7 @@ tool use, governance changes, release readiness.
 ## Agent Handoff
 
 Update this file only when the top-level plan or pause state changes. Put
-workspace scope and signal progress in `docs/workspace-scope-and-signal-plan.md`.
-Treat `docs/stabilization-plan.md` and `docs/current-build-pathway.md` as
-historical records unless Adam explicitly asks to reopen them.
+relationship-map progress in `docs/relationship-map-plan.md`. Treat
+`docs/workspace-scope-and-signal-plan.md`, `docs/stabilization-plan.md`, and
+`docs/current-build-pathway.md` as historical records unless Adam explicitly
+asks to reopen them.

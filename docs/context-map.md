@@ -25,7 +25,8 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 
 | Task | Load First |
 |---|---|
-| Current plan, chunking, validation, or handoff | `docs/workspace-scope-and-signal-plan.md`; use `docs/stabilization-plan.md` only for completed stabilization evidence; use `docs/current-build-pathway.md` only for archived build history |
+| Current plan, chunking, validation, or handoff | `docs/relationship-map-plan.md`; use `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence; use `docs/stabilization-plan.md` only for completed stabilization evidence; use `docs/current-build-pathway.md` only for archived build history |
+| Relationship map, physical connections, overlap, gaps, and decision overlay | `docs/relationship-map-plan.md` |
 | Workspace scope, folder tree selection, repo inclusion/exclusion, low-signal filtering, token-saving graph context | `docs/workspace-scope-and-signal-plan.md` |
 | Fast restart after clearing or compaction | `AGENT_QUICKSTART.md` |
 | Source routing without generated output | `docs/ARCHITECTURE_MAP.md`, then `docs/FILE_SUMMARIES.md` |

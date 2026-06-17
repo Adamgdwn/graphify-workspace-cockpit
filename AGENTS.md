@@ -21,7 +21,7 @@ Do not turn `START_HERE.md`, pathway docs, governance standards, Graphify, plugi
 Before making material or risk-triggering code or configuration changes in this repository:
 
 1. read `START_HERE.md`
-2. review the active plan named in `START_HERE.md` (currently `docs/stabilization-plan.md`; `docs/current-build-pathway.md` is archived)
+2. review the active plan named in `START_HERE.md` (currently `docs/relationship-map-plan.md`; `docs/workspace-scope-and-signal-plan.md`, `docs/stabilization-plan.md`, and `docs/current-build-pathway.md` are archived)
 3. review `docs/standards/README.md`
 4. review `docs/standards/engineering-governance-by-use-case.md`
 5. review `docs/policy/durable-development-engineering-policy.md`

@@ -33,11 +33,23 @@ interface SummaryNode {
   rationale_count: number;
   dominant_type: "code" | "document" | "rationale";
   is_drillable: boolean;
+  connection_count?: number;
+  connection_weight?: number;
+  is_gap?: boolean;
+  gap_reason?: string;
+  connections?: SummaryConnection[];
 }
 
 interface SummaryEdge {
   source: string;
   target: string;
+  weight: number;
+  relations: string[];
+}
+
+interface SummaryConnection {
+  id: string;
+  label: string;
   weight: number;
   relations: string[];
 }
@@ -249,6 +261,11 @@ function dossierList(items?: string[]): string[] {
   return (items ?? []).map((item) => item.trim()).filter(Boolean).slice(0, 5);
 }
 
+function relationList(relations?: string[]): string {
+  const cleaned = (relations ?? []).map((relation) => relation.trim()).filter(Boolean);
+  return cleaned.length ? cleaned.slice(0, 3).join(", ") : "physical links";
+}
+
 const DECISION_META = Object.fromEntries(
   DECISION_CLASSIFICATIONS.map((c) => [c.id, { label: c.label, color: c.color }]),
 ) as Record<string, { label: string; color: string }>;
@@ -301,6 +318,14 @@ const CY_STYLE: object[] = [
       "shadow-opacity": 0.75,
       "shadow-offset-x": 0,
       "shadow-offset-y": 0,
+    },
+  },
+  {
+    selector: 'node[?is_gap]',
+    style: {
+      "border-color": "#f97316",
+      "border-width": 2.5,
+      "border-style": "dashed",
     },
   },
   {
@@ -554,6 +579,9 @@ function buildElements(
         dominant_type: n.dominant_type,
         group_type: n.group_type ?? "group",
         is_drillable: n.is_drillable,
+        connection_count: n.connection_count ?? 0,
+        connection_weight: n.connection_weight ?? 0,
+        is_gap: Boolean(n.is_gap),
         // log₂ scaling: 1→36px, 100→66px, 10k→108px, 23k→126px
         size: Math.max(36, Math.min(126, Math.log2(n.node_count + 2) * 15)),
         god_node: godNodeIds.has(n.id),
@@ -1735,6 +1763,21 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     fetchSummary(node.id, node.label);
   }
 
+  function focusSummaryGroup(nodeId: string) {
+    const match = summaryRef.current?.nodes.find((node) => node.id === nodeId);
+    if (!match) return;
+    focusVisibleNode(nodeId, `Focused ${match.label}.`);
+    setSelected(match);
+    onActiveContextChange?.({
+      kind: "node",
+      source: "map",
+      nodeId: match.id,
+      label: match.label,
+      nodeType: match.dominant_type,
+      viewMode: "summary",
+    });
+  }
+
   async function toggleCluster(clusterId: string) {
     if (!clusterData) return;
     let next: Set<string> | null;
@@ -1778,6 +1821,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const pctCode = selected
     ? Math.round((selected.code_count / Math.max(1, selected.node_count)) * 100)
     : 0;
+  const selectedConnections = selected?.connections ?? [];
 
   const activeMapMode = MAP_MODES.find((mode) => mode.id === mapMode) ?? MAP_MODES[0];
   const hiddenLowSignalCount = lowSignalCount(fullGraph, summary);
@@ -2624,6 +2668,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                   ⚡ High-traffic node ({godNodeEdgeCounts[selected.id] ?? 0} edges)
                 </span>
               )}
+              {selected.is_gap && (
+                <span className="map-gap-badge" title="No visible physical links connect this group to the current map.">
+                  Gap
+                </span>
+              )}
               {decisions[selected.id] && (() => {
                 const meta = DECISION_META[decisions[selected.id]];
                 return meta ? (
@@ -2660,6 +2709,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 <span className="map-stat-label">Code %</span>
                 <span className="map-stat-value">{pctCode}%</span>
               </div>
+              <div className="map-stat">
+                <span className="map-stat-label">Links</span>
+                <span className="map-stat-value">{selected.connection_count ?? 0}</span>
+              </div>
+              <div className="map-stat">
+                <span className="map-stat-label">Weight</span>
+                <span className="map-stat-value">{selected.connection_weight ?? 0}</span>
+              </div>
             </div>
 
             <div className="map-panel-bar-wrap">
@@ -2673,6 +2730,34 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 <span>Code</span>
                 <span>Docs</span>
               </div>
+            </div>
+
+            <div className="map-relationships">
+              <div className="map-relationships-head">
+                <span>Connected Groups</span>
+                <strong>{selectedConnections.length}</strong>
+              </div>
+              {selectedConnections.length > 0 ? (
+                <div className="map-relationship-list">
+                  {selectedConnections.map((connection) => (
+                    <button
+                      className="map-relationship-row"
+                      key={connection.id}
+                      onClick={() => focusSummaryGroup(connection.id)}
+                    >
+                      <span className="map-relationship-main">
+                        <span className="map-relationship-label">{connection.label}</span>
+                        <span className="map-relationship-relations">{relationList(connection.relations)}</span>
+                      </span>
+                      <span className="map-relationship-weight">{connection.weight}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="map-relationship-empty">
+                  {selected.gap_reason || "No visible group-to-group physical links at the current filters."}
+                </div>
+              )}
             </div>
 
             <div className="map-panel-actions">

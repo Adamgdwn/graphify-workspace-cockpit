@@ -1,8 +1,13 @@
 # Workspace Scope and Signal Plan
 
-Last Updated: 2026-06-17T16:44:43-06:00
-Status: active plan - Workspace Scope dedicated tab polish task complete; owner review / next polish next
+Last Updated: 2026-06-17T17:25:00-06:00
+Status: completed history - superseded for active work by docs/relationship-map-plan.md
 Owner: Adam Goodwin
+
+> This document is now historical evidence for the workspace scope and signal
+> work. The active concise continuation plan is
+> `docs/relationship-map-plan.md`. Open this file only when investigating scope
+> history, validation evidence, or regressions from this build path.
 
 ## Purpose
 
@@ -145,6 +150,24 @@ Observed on 2026-06-16:
   scope exists. Settings also links to Workspace Scope instead of duplicating
   the picker. Validation passed with frontend typecheck/build, headless Chromium
   tab-flow smoke, `git diff --check`, and `graphify update . --no-cluster`.
+- Relationship-map broad-root correction is task complete as of
+  2026-06-17T17:05:29-06:00: owner review showed that broad scope Overview
+  rendered as one oversized `code` node. `/graph/summary` now detects when scope
+  metadata would collapse a broad selected folder and derives Overview groups
+  from relative source paths instead. The current active graph now produces
+  connected top-level groups such as `agents`, `Applications`, and `Tools`,
+  groups root-level files as `Workspace Docs`, and marks zero-link visible
+  groups as gaps with connection counts exposed to Map. Validation passed with
+  focused graph service tests, full backend tests, frontend typecheck/build,
+  active graph summary inspection, `git diff --check`, and
+  `graphify update . --no-cluster`.
+- Documentation routing cleanup is task complete as of
+  2026-06-17T17:12:02-06:00: active continuation now consistently routes
+  through this plan. `AGENTS.md`, `README.md`, `docs/current-build-pathway.md`,
+  `docs/handover.md`, `docs/FILE_SUMMARIES.md`, `docs/KNOWN_ISSUES.md`,
+  `docs/vision.md`, and `docs/standards/context-hygiene-standard.md` were
+  updated so stabilization and 0-to-1 pathway material is marked as historical
+  evidence unless Adam explicitly reopens it.
 
 ## Target Mental Model
 
@@ -935,8 +958,9 @@ To continue tomorrow:
 1. `git status --short`
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md`.
-4. Read this document only: `docs/workspace-scope-and-signal-plan.md`.
-5. Start with Chunk 8: Zero-Start Folder Picker and Generate Flow.
+4. Read `docs/relationship-map-plan.md`.
+5. Start with the next slice named there unless Adam redirects.
 
-Avoid loading `docs/current-build-pathway.md` and long historical sections of
-`docs/stabilization-plan.md` unless investigating a regression.
+Avoid loading this document, `docs/current-build-pathway.md`, and long
+historical sections of `docs/stabilization-plan.md` unless investigating a
+regression.

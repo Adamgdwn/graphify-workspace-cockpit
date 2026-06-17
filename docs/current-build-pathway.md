@@ -1,14 +1,16 @@
 # Current Build Pathway - Superseded Archive
 
-Last Updated: 2026-06-16T16:18:15-06:00
-Status: superseded for active startup — use `docs/stabilization-plan.md`
+Last Updated: 2026-06-17T17:12:02-06:00
+Status: superseded archive - use `docs/relationship-map-plan.md` for active work
 Owner: Adam Goodwin
 
 > **Superseded for active work:** This file is now an archived build-history
 > record for the first 30 chunks and earlier validation evidence. The active
-> implementation plan is `docs/stabilization-plan.md`. For normal startup,
+> implementation plan is `docs/relationship-map-plan.md`. For normal startup,
 > read only this notice and then use `START_HERE.md` plus
-> `docs/stabilization-plan.md`. Open the rest of this file only when old chunk
+> `docs/relationship-map-plan.md`. `docs/workspace-scope-and-signal-plan.md` and
+> `docs/stabilization-plan.md` are also complete and retained only for
+> historical evidence. Open the rest of this file only when old chunk
 > history, prior validation evidence, or regression context is specifically
 > needed.
 

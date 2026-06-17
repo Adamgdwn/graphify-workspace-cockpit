@@ -1,7 +1,7 @@
 # Handover — Graphify Workspace Cockpit
 
-Status: integration complete — decision-flow polish closed
-Date: 2026-06-15
+Status: superseded archive — 0-to-1 decision-flow polish evidence
+Date: 2026-06-17
 Owner: Adam Goodwin
 
 ---
@@ -96,8 +96,8 @@ decisions remain Adam's call after hands-on testing.
 
 1. Open this repo: `cd /home/adamgoodwin/code/agents/graphify-workspace-cockpit`
 2. Run `git status --short` and read `AGENTS.md` plus `START_HERE.md`.
-3. Read `docs/current-build-pathway.md` to confirm the close-out packet and any new owner-reported UI issue.
-4. Any new work should be defined as a new chunk with: objective, acceptance criteria, validation, and stop condition.
+3. Read `docs/relationship-map-plan.md` for the active continuation path.
+4. Open this handover, `docs/workspace-scope-and-signal-plan.md`, `docs/current-build-pathway.md`, or `docs/stabilization-plan.md` only for historical evidence or regression context.
 5. Use `docs/context-map.md` to select which docs to load for the task.
 
 ---
@@ -106,7 +106,10 @@ decisions remain Adam's call after hands-on testing.
 
 | What | Where |
 |------|-------|
-| Active build plan | `docs/current-build-pathway.md` |
+| Active relationship map plan | `docs/relationship-map-plan.md` |
+| Completed workspace scope + signal history | `docs/workspace-scope-and-signal-plan.md` |
+| Completed stabilization evidence | `docs/stabilization-plan.md` |
+| Archived build history | `docs/current-build-pathway.md` |
 | Architecture + ADRs | `docs/architecture.md` |
 | All domain terms | `docs/domain-language.md` |
 | Agent boundaries | `docs/agent-inventory.md` |

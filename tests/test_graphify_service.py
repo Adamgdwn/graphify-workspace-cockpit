@@ -497,6 +497,107 @@ def test_graph_summary_uses_workspace_projects_then_modules(monkeypatch, tmp_pat
     assert {node["group_type"] for node in app_a_detail["nodes"]} == {"module"}
 
 
+def test_graph_summary_expands_broad_scope_from_relative_paths(monkeypatch, tmp_path: Path) -> None:
+    code_root = tmp_path / "code"
+    graph = tmp_path / "broad-workspace-graph.json"
+    shared_meta = {
+        "source_root": str(code_root),
+        "source_root_name": "code",
+        "repo_project_name": "code",
+        "file_type": "document",
+    }
+    graph.write_text(json.dumps({
+        "nodes": [
+            {
+                **shared_meta,
+                "id": "clean-readme",
+                "label": "Clean PDF README",
+                "source_file": "Applications/Clean_pdf_build/README.md",
+            },
+            {
+                **shared_meta,
+                "id": "timeshare-readme",
+                "label": "Timeshare README",
+                "source_file": "Applications/Timeshare-Connect/README.md",
+            },
+            {
+                **shared_meta,
+                "id": "cockpit-readme",
+                "label": "Cockpit README",
+                "source_file": "agents/graphify-workspace-cockpit/README.md",
+            },
+            {
+                **shared_meta,
+                "id": "graphify-readme",
+                "label": "Graphify README",
+                "source_file": "Tools/graphify/README.md",
+            },
+            {
+                **shared_meta,
+                "id": "agents-md",
+                "label": "AGENTS",
+                "source_file": "AGENTS.md",
+            },
+        ],
+        "links": [
+            {"source": "clean-readme", "target": "cockpit-readme", "relation": "references"},
+            {"source": "cockpit-readme", "target": "timeshare-readme", "relation": "references"},
+            {"source": "timeshare-readme", "target": "graphify-readme", "relation": "references"},
+        ],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+    client = TestClient(main.app)
+
+    overview = client.get("/graph/summary", params={"min_weight": 1}).json()
+
+    assert overview["level"] == "top"
+    assert {node["label"] for node in overview["nodes"]} == {
+        "Applications",
+        "agents",
+        "Tools",
+        "Workspace Docs",
+    }
+    assert len(overview["nodes"]) == 4
+    by_label = {node["label"]: node for node in overview["nodes"]}
+    assert by_label["Applications"]["connection_count"] == 2
+    assert by_label["Applications"]["connection_weight"] == 3
+    assert by_label["Applications"]["connections"] == [
+        {"id": "agents", "label": "agents", "weight": 2, "relations": ["references"]},
+        {"id": "Tools", "label": "Tools", "weight": 1, "relations": ["references"]},
+    ]
+    assert by_label["Workspace Docs"]["is_gap"] is True
+    assert by_label["Workspace Docs"]["gap_reason"]
+    assert by_label["Workspace Docs"]["connections"] == []
+    assert {
+        (edge["source"], edge["target"], edge["weight"])
+        for edge in overview["edges"]
+    } == {
+        ("Applications", "agents", 2),
+        ("Applications", "Tools", 1),
+    }
+
+    applications_detail = client.get(
+        "/graph/summary",
+        params={"project": "Applications", "min_weight": 1},
+    ).json()
+
+    assert applications_detail["level"] == "project"
+    assert applications_detail["project"] == "Applications"
+    assert {node["label"] for node in applications_detail["nodes"]} == {
+        "Clean_pdf_build",
+        "Timeshare-Connect",
+    }
+    assert {node["group_type"] for node in applications_detail["nodes"]} == {"module"}
+
+
 def test_graph_full_clusters_nodes_by_workspace_project(monkeypatch, tmp_path: Path) -> None:
     app_a = tmp_path / "code" / "app-a"
     app_b = tmp_path / "code" / "app-b"

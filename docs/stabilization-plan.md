@@ -1,14 +1,13 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
 Last Updated: 2026-06-16T23:02:47-06:00
-Status: complete - Chunks 1-13 task complete; superseded for next work by docs/workspace-scope-and-signal-plan.md
+Status: complete - Chunks 1-13 task complete; superseded for next work by docs/relationship-map-plan.md
 Owner: Adam Goodwin
 
 ## Startup Routing
 
 This stabilization plan is complete. It is retained as historical stabilization
-evidence. The next active planning surface is
-`docs/workspace-scope-and-signal-plan.md`.
+evidence. The next active planning surface is `docs/relationship-map-plan.md`.
 
 `docs/current-build-pathway.md` is retained as historical 0-to-1 build and
 validation evidence only.
@@ -18,7 +17,7 @@ For normal continuation:
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md`.
-4. Read `docs/workspace-scope-and-signal-plan.md` for the next work path.
+4. Read `docs/relationship-map-plan.md` for the next work path.
 5. Do not open the archived current-build pathway unless investigating prior
    chunk history, validation evidence, or a regression from the original build.
 

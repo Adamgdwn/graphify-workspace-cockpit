@@ -223,7 +223,10 @@ development.
 ## Documentation
 
 - [docs/architecture.md](docs/architecture.md) — component map, data flow, state layout
-- [docs/current-build-pathway.md](docs/current-build-pathway.md) — live build route and chunk status
+- [docs/relationship-map-plan.md](docs/relationship-map-plan.md) — active relationship-map plan
+- [docs/workspace-scope-and-signal-plan.md](docs/workspace-scope-and-signal-plan.md) — completed workspace scope and signal history
+- [docs/stabilization-plan.md](docs/stabilization-plan.md) — completed hosted-beta stabilization evidence
+- [docs/current-build-pathway.md](docs/current-build-pathway.md) — archived 0-to-1 build history and old validation evidence
 - [docs/manual.md](docs/manual.md) — operator and developer manual
 - [docs/runbook.md](docs/runbook.md) — operational startup, failure, and recovery notes
 - [docs/demo-path-checklist.md](docs/demo-path-checklist.md) — demo-readiness smoke and manual walkthrough

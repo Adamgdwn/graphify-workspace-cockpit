@@ -79,7 +79,9 @@ target file only when the current task needs its details.
 | Path | Summary |
 |---|---|
 | `docs/context-map.md` | Context routing by task type. |
-| `docs/stabilization-plan.md` | Active hosted-beta stabilization plan and chunk evidence. |
+| `docs/relationship-map-plan.md` | Active concise plan for relationship-map behavior, physical links, overlaps, gaps, and decision overlay. |
+| `docs/workspace-scope-and-signal-plan.md` | Completed workspace scope and signal plan; load only for scope/filter history or regressions. |
+| `docs/stabilization-plan.md` | Completed hosted-beta stabilization plan and chunk evidence; load only for stabilization history or regressions. |
 | `docs/current-build-pathway.md` | Archived 0-to-1 build history; load only for old evidence or regressions. |
 | `docs/architecture.md` | Full architecture overview and data flow narrative. |
 | `docs/ARCHITECTURE_MAP.md` | Concise source routing map for implementation work. |

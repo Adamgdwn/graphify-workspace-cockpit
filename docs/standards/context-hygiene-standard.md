@@ -18,7 +18,7 @@ Context hygiene must not be used as an excuse to skip required governance, secur
 
 Use this standard alongside:
 
-- `docs/current-build-pathway.md`
+- the active plan named in `START_HERE.md`
 - `docs/policy/durable-development-engineering-policy.md`
 - `docs/standards/engineering-governance-by-use-case.md`
 - `docs/standards/ship-ready-engineering-standard.md`
@@ -136,7 +136,7 @@ Integration note: `/home/adamgoodwin/Downloads/cost_effective_agentic_coding_con
 
 Divide substantial work into clear phases such as discovery, planning, implementation, testing, cleanup, and handoff.
 
-At phase boundaries, write or update a short durable summary instead of relying on transcript history. For governed builds, `docs/current-build-pathway.md` is the preferred live handoff location.
+At phase boundaries, write or update a short durable summary instead of relying on transcript history. For governed builds, the active plan named in `START_HERE.md` is the preferred live handoff location.
 
 For meaningful tasks, separate discovery from implementation from review when
 the cost or risk justifies it. Tiny tasks may combine phases, but the agent

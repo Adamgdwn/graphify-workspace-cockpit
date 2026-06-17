@@ -458,6 +458,16 @@ def _node_source_parts(node: dict) -> list[str]:
     return [part for part in source_file.split("/") if part]
 
 
+def _node_relative_source_parts(node: dict) -> list[str]:
+    source_file = str(
+        node.get("source_file") or node.get("file_path") or node.get("path") or ""
+    ).replace("\\", "/")
+    source_root = str(node.get("source_root") or "").strip().replace("\\", "/")
+    if source_file and source_root and source_file.startswith(source_root.rstrip("/") + "/"):
+        source_file = source_file[len(source_root.rstrip("/")) + 1:]
+    return [part for part in source_file.split("/") if part]
+
+
 def _node_workspace_key(node: dict) -> str:
     source_root = str(node.get("source_root") or "").strip()
     if source_root:
@@ -496,7 +506,7 @@ def _node_overlap_cluster_id(node: dict) -> str:
 
 
 def _node_project_relative_parts(node: dict, workspace_key: str) -> list[str]:
-    parts = _node_source_parts(node)
+    parts = _node_relative_source_parts(node)
     if not parts:
         return []
 
@@ -516,6 +526,37 @@ def _node_module_group(node: dict, workspace_key: str) -> tuple[str, str]:
     else:
         module = parts[0]
     return f"{workspace_key}::{module}", module
+
+
+def _node_path_area(node: dict) -> tuple[str, str] | None:
+    parts = _node_relative_source_parts(node)
+    if not parts:
+        return None
+    area = parts[0]
+    if len(parts) == 1 and Path(area).suffix:
+        return "__workspace_docs__", "Workspace Docs"
+    return area, area
+
+
+def _should_group_summary_by_path(nodes: list[dict]) -> bool:
+    """Use path-derived groups when broad scope metadata would collapse the map."""
+    if len({_node_workspace_key(node) for node in nodes}) > 1:
+        return False
+    path_groups = {
+        area_label[0]
+        for node in nodes
+        for area_label in [_node_path_area(node)]
+        if area_label is not None
+    }
+    return len(path_groups) > 1
+
+
+def _node_path_module_group(node: dict, area: str) -> tuple[str, str] | None:
+    parts = _node_relative_source_parts(node)
+    if not parts or parts[0] != area:
+        return None
+    module = parts[1] if len(parts) > 1 else "(root)"
+    return f"{area}::{module}", module
 
 
 def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] | None) -> bool:
@@ -715,8 +756,29 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
 
     cluster_labels: dict[str, str] = {}
     cluster_group_types: dict[str, str] = {}
+    group_by_path = _should_group_summary_by_path(nodes_raw)
+    project_is_path_area = bool(
+        project is not None
+        and any((area := _node_path_area(n)) is not None and area[0] == project for n in nodes_raw)
+    )
 
     def get_cluster(n: dict) -> str | None:
+        if project is None and group_by_path:
+            area = _node_path_area(n)
+            if area is None:
+                return None
+            cluster_id, label = area
+            cluster_labels.setdefault(cluster_id, label)
+            cluster_group_types.setdefault(cluster_id, "repo")
+            return cluster_id
+        if project_is_path_area and project is not None:
+            module = _node_path_module_group(n, project)
+            if module is None:
+                return None
+            module_key, module_label = module
+            cluster_labels.setdefault(module_key, module_label)
+            cluster_group_types.setdefault(module_key, "module")
+            return module_key
         workspace_key = _node_workspace_key(n)
         if project is None:
             cluster_labels.setdefault(workspace_key, _node_workspace_label(n, workspace_key))
@@ -770,7 +832,9 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         )
         valid_ids.add(cluster_id)
 
-    # Aggregate inter-cluster edge weights
+    # Aggregate inter-cluster edge weights. Summary relationships are undirected:
+    # a broad map should show that two visible areas touch, not split the same
+    # relationship by source/target direction.
     edge_weights: Counter[tuple[str, str]] = Counter()
     edge_relations: dict[tuple[str, str], set[str]] = defaultdict(set)
     for link in links_raw:
@@ -787,7 +851,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
             and src_cluster in valid_ids
             and tgt_cluster in valid_ids
         ):
-            pair = (src_cluster, tgt_cluster)
+            pair = tuple(sorted((src_cluster, tgt_cluster)))
             edge_weights[pair] += 1
             rel = link.get("relation", "")
             if rel:
@@ -803,6 +867,49 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         for (src, tgt), w in edge_weights.most_common()
         if w >= min_weight
     ]
+    connection_counts: Counter[str] = Counter()
+    connection_weights: Counter[str] = Counter()
+    connection_details: dict[str, list[dict]] = defaultdict(list)
+    summary_labels = {str(node["id"]): str(node["label"]) for node in summary_nodes}
+    for edge in summary_edges:
+        source = str(edge["source"])
+        target = str(edge["target"])
+        weight = int(edge.get("weight") or 0)
+        relations = list(edge.get("relations") or [])
+        connection_counts[source] += 1
+        connection_counts[target] += 1
+        connection_weights[source] += weight
+        connection_weights[target] += weight
+        connection_details[source].append(
+            {
+                "id": target,
+                "label": summary_labels.get(target, target),
+                "weight": weight,
+                "relations": relations,
+            }
+        )
+        connection_details[target].append(
+            {
+                "id": source,
+                "label": summary_labels.get(source, source),
+                "weight": weight,
+                "relations": relations,
+            }
+        )
+    for node in summary_nodes:
+        node_id = str(node["id"])
+        node["connection_count"] = connection_counts[node_id]
+        node["connection_weight"] = connection_weights[node_id]
+        node["is_gap"] = len(summary_nodes) > 1 and connection_counts[node_id] == 0
+        node["gap_reason"] = (
+            "No visible physical links connect this group to another visible group at the current filters."
+            if node["is_gap"]
+            else ""
+        )
+        node["connections"] = sorted(
+            connection_details[node_id],
+            key=lambda item: (-int(item.get("weight") or 0), str(item.get("label") or "")),
+        )[:6]
 
     result = {
         "level": "top" if project is None else "project",

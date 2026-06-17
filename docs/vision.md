@@ -146,7 +146,10 @@ while keeping release and project-completion decisions with Adam.
 
 ## Related Documents
 
-- `docs/current-build-pathway.md` — the active build plan
+- `docs/relationship-map-plan.md` — the active relationship-map plan
+- `docs/workspace-scope-and-signal-plan.md` — completed workspace scope and signal history
+- `docs/stabilization-plan.md` — completed hosted-beta stabilization evidence
+- `docs/current-build-pathway.md` — archived 0-to-1 build history
 - `docs/roadmap.md` — the full feature progression
 - `docs/architecture.md` — component and data flow detail
 - `docs/integration-guide.md` — Graphify → UAOS handoff contract (created in Chunk Eleven)

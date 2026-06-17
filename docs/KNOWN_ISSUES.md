@@ -5,7 +5,10 @@ Status: current
 Owner: Adam Goodwin
 
 This file summarizes the live issues agents should notice before widening scope.
-The detailed implementation history lives in `docs/stabilization-plan.md`.
+The active continuation plan lives in `docs/relationship-map-plan.md`.
+Completed workspace scope and signal evidence lives in
+`docs/workspace-scope-and-signal-plan.md`.
+Completed stabilization evidence lives in `docs/stabilization-plan.md`.
 
 ## Active Technical Debt
 
@@ -35,6 +38,7 @@ The detailed implementation history lives in `docs/stabilization-plan.md`.
 
 ## Current Next Work
 
-- No next implementation chunk is queued in `docs/stabilization-plan.md`.
+- Continue from `START_HERE.md` and
+  `docs/relationship-map-plan.md`.
 - Future follow-up scope should be owner-selected, bounded, and recorded in
-  `START_HERE.md` plus the active plan or a new plan.
+  the active plan or a new plan.
