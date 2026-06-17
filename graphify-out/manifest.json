@@ -1,7 +1,7 @@
 {
   "backend/main.py": {
-    "mtime": 1781660323.659632,
-    "ast_hash": "d389def1c782fe4624c3eecf22d1bb2e",
+    "mtime": 1781665974.6447232,
+    "ast_hash": "e87f6528f88ea9824294c613c183c50d",
     "semantic_hash": ""
   },
   "db/migrations/001_initial.sql": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "START_HERE.md": {
-    "mtime": 1781665267.4595804,
-    "ast_hash": "e842cafcb56b224ebd7b53738ce48f7a",
+    "mtime": 1781666111.6831074,
+    "ast_hash": "1b696882f453302066dd0197afeacb75",
     "semantic_hash": ""
   },
   "backend/prompts/recommend_archive.txt": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "docs/deployment-guide.md": {
-    "mtime": 1781664456.9314003,
-    "ast_hash": "30e69de8d3aeae6e5cb786bc2a867ac0",
+    "mtime": 1781666031.2692952,
+    "ast_hash": "702fbf2dee2b94495e262081a4b45aa3",
     "semantic_hash": ""
   },
   "docs/domain-language.md": {
@@ -210,8 +210,8 @@
     "semantic_hash": ""
   },
   "docs/integration-guide.md": {
-    "mtime": 1781554633.5967515,
-    "ast_hash": "516fdf4de3667f3737adf754aa804065",
+    "mtime": 1781666019.7901793,
+    "ast_hash": "8b2cf18a218e73931373f700c7b383ee",
     "semantic_hash": ""
   },
   "docs/manual.md": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "docs/runbook.md": {
-    "mtime": 1781664456.9314003,
-    "ast_hash": "c632e0fcb8163be499b0bf47e4a15d7c",
+    "mtime": 1781666041.3113966,
+    "ast_hash": "eaf2f4262d2a1843af4eedbf2a234748",
     "semantic_hash": ""
   },
   "docs/standards/README.md": {
@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781665267.4585803,
-    "ast_hash": "1a837912bbd941536eddb07bb0d9ffee",
+    "mtime": 1781666100.5109944,
+    "ast_hash": "ae140c673a9950c7dc7996db5d49eeca",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {
@@ -482,6 +482,16 @@
   "tests/test_api_key_auth.py": {
     "mtime": 1781665185.705802,
     "ast_hash": "c1a003e400202891d732a47b644537ab",
+    "semantic_hash": ""
+  },
+  "db/migrations/002_recommendation_action_plans.sql": {
+    "mtime": 1781665941.8343918,
+    "ast_hash": "a23716b8152bf26ec7657519617983da",
+    "semantic_hash": ""
+  },
+  "tests/test_supabase_schema_contract.py": {
+    "mtime": 1781665993.0749094,
+    "ast_hash": "e9207acc616c2857819b7f178352cd77",
     "semantic_hash": ""
   }
 }

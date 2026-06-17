@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T21:00:23-06:00
-Status: active plan - Chunk 8 task complete; next recommended chunk is Chunk 9 Supabase Schema Alignment
+Last Updated: 2026-06-16T21:14:29-06:00
+Status: active plan - Chunk 9 task complete; next recommended chunk is Chunk 10 Workspace Readiness Panel
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -39,8 +39,9 @@ Preserve the current product while hardening it. The seven-tab workflow
 P0 - blocks hosted beta:
 
 - No active P0 blockers remain for the file-backed hosted beta path covered by
-  Chunks 1-8. Supabase mode remains a beta-confidence gate until schema
-  alignment is completed.
+  Chunks 1-9. Supabase mode now has source-controlled schema alignment and a
+  visible readiness warning, but applying live Supabase migrations remains a
+  separate owner-approved operation.
 
 Resolved in Chunk 1:
 
@@ -106,10 +107,18 @@ Resolved in Chunk 8:
   `pytest`, backend compile checks, frontend TypeScript typecheck, and frontend
   production build.
 
+Resolved in Chunk 9:
+
+- Supabase schema alignment now has additive migration
+  `db/migrations/002_recommendation_action_plans.sql` for
+  `recommendations.action_plan`, `recommendations.overlap`,
+  `recommendations.overlap_dossier`, and `actions.action_plan`. Backend health,
+  settings, and organisation settings expose `storage.ready` plus the required
+  migration when Supabase mode cannot verify those columns. Operator docs now
+  document migration order, readiness interpretation, and rollback limits.
+
 P1 - beta confidence:
 
-- Supabase migration does not include newer recommendation/action fields such as
-  `action_plan`, `overlap`, and `overlap_dossier`.
 - `backend/main.py` is large enough that behavior changes are hard to review.
 
 Governance flag: `project-control.yaml` classifies this as `AI agent with tools`
@@ -132,8 +141,8 @@ the relevant implementation chunk proceeds:
 - API-key browser storage: localStorage accepted for this beta pass through
   Chunk 4 implementation; select a stronger hosted auth/session pattern before
   broader or untrusted production exposure.
-- Supabase migration policy: allow a new migration file only, or approve live
-  migration application separately.
+- Supabase migration policy: resolved for source-controlled migration file only;
+  live migration application remains separately owner-approved.
 - CI expansion: resolved in Chunk 8; GitHub Actions now runs backend `pytest`,
   backend compile checks, frontend typecheck, and frontend production build.
 
@@ -176,8 +185,9 @@ Baseline evidence gathered on 2026-06-16:
   writes for the main persisted surfaces.
 - Caddy route file: `config/Caddyfile`, now handles `/api/*` before the
   frontend catch-all and strips `/api` before proxying to the backend.
-- Supabase migration: `db/migrations/001_initial.sql`, missing newer optional
-  JSON fields used in current records.
+- Supabase migrations: `db/migrations/001_initial.sql` creates base tables;
+  `db/migrations/002_recommendation_action_plans.sql` adds newer optional JSONB
+  fields used in current recommendation/action records.
 - Existing tests: `tests/` now covers graph schema normalization, Settings
   counts, graph upload, graph activation, API-key middleware, Graphify service
   errors, connector ingest compatibility, and clean empty-state file writes.
@@ -814,6 +824,8 @@ Token/context warning: Do not overbuild test harness abstractions.
 
 ### Chunk 9: Supabase Schema Alignment
 
+Status: **task complete** — 2026-06-16T21:14:29-06:00
+
 Goal: Prevent Supabase mode from pretending to be ready when migrations are stale.
 
 Why this matters: Current recommendation/action records use fields not present in
@@ -844,9 +856,42 @@ python -m compileall -q backend
 
 Acceptance criteria:
 
-- Supabase docs match actual record shapes.
-- Supabase mode either works with the new migration or visibly reports a schema gap.
-- Any live migration remains separately owner-approved.
+- [x] Supabase docs match actual record shapes.
+- [x] Supabase mode either works with the new migration or visibly reports a schema gap.
+- [x] Any live migration remains separately owner-approved.
+
+Implementation notes:
+
+- Added additive, idempotent migration
+  `db/migrations/002_recommendation_action_plans.sql`.
+- Added backend storage readiness status for Supabase schema columns required by
+  current recommendation/action records. `/health`, `/settings`, and
+  `/settings/org` now include `storage.ready`, `storage.required_migration`,
+  and missing/unverified columns when Supabase mode cannot verify the expected
+  shape.
+- Added `tests/test_supabase_schema_contract.py` using a fake Supabase client,
+  so no live Supabase project or credentials are needed for validation.
+- Updated integration, deployment, and runbook docs with migration order,
+  readiness interpretation, and database rollback limits.
+
+Validation evidence:
+
+```bash
+backend/.venv/bin/python -m pytest tests/test_supabase_schema_contract.py
+# 3 passed, 2 warnings
+
+backend/.venv/bin/python -m pytest
+# 41 passed, 3 warnings
+
+backend/.venv/bin/python -m compileall -q backend
+# passed
+
+graphify update . --no-cluster
+# rebuilt graphify-out with 1159 nodes and 34440 edges
+```
+
+Known warnings: existing FastAPI `on_event` deprecation and TestClient/httpx
+deprecation warnings remain.
 
 Rollback note: Database migration rollback requires owner review; do not remove
 columns once applied unless explicitly approved.

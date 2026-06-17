@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T21:00:23-06:00
-Status: stabilization Chunk 8 task complete; current-build pathway archived
+Last Updated: 2026-06-16T21:14:29-06:00
+Status: stabilization Chunk 9 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -49,8 +49,13 @@ hosted smoke instructions cover `GET /api/health` plus `GET /`. Chunk 8 is task
 complete: backend contract coverage now includes API-key middleware behavior
 alongside the graph schema, Settings counts, upload, activation, Graphify
 service, connector ingest, and clean-state tests; CI now runs backend pytest,
-backend compile checks, frontend typecheck, and frontend production build. The
-recommended next implementation chunk is Chunk 9: Supabase Schema Alignment.
+backend compile checks, frontend typecheck, and frontend production build. Chunk
+9 is task complete: Supabase schema alignment now has additive migration
+`db/migrations/002_recommendation_action_plans.sql`, backend health/settings
+surface `storage.ready` and the required migration when schema columns cannot
+be verified, and operator docs document migration order plus live-migration
+approval boundaries. The recommended next implementation chunk is Chunk 10:
+Workspace Readiness Panel.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -59,7 +64,8 @@ Open owner-review flags before remaining implementation:
 - Graphify runtime decision is resolved for this pass: Docker/runtime installs
   `graphifyy`, while missing custom runtimes report `GRAPHIFY_MISSING` without
   breaking the rest of the cockpit UI.
-- Do not run live Supabase migrations without explicit owner approval.
+- Do not run live Supabase migrations without explicit owner approval; Chunk 9
+  added the migration file only.
 - API-key browser storage is implemented with localStorage for this beta pass;
   select a stronger hosted auth/session pattern before broader or untrusted
   production exposure.

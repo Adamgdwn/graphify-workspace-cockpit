@@ -35,9 +35,12 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and Caddy
 curl http://localhost:8000/health
 ```
 
-Response includes `status`, `graph_loaded`, `demo_mode`, and `graphify`. If
-`graph_loaded` is false, check `GRAPH_PATH` in `backend/.env`. Check Ollama
-separately with `curl http://localhost:8000/status/ollama`.
+Response includes `status`, `graph_loaded`, `demo_mode`, `graphify`, and
+`storage`. If `graph_loaded` is false, check `GRAPH_PATH` in `backend/.env`.
+If `STORAGE_BACKEND=supabase` and `storage.ready` is false, apply the migration
+named in `storage.required_migration` after owner approval before using
+Supabase mode for hosted beta. Check Ollama separately with
+`curl http://localhost:8000/status/ollama`.
 
 ## Demo Readiness Check
 
@@ -82,7 +85,7 @@ source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_U
 | 429 Too Many Requests | Rate limit hit (60 req/min per IP) | Wait 60 seconds; `/health` is exempt |
 | CORS errors in browser | `CORS_ORIGINS` doesn't match the frontend URL | Update `CORS_ORIGINS` in `backend/.env` to match exact scheme+host+port |
 | AI panel off-screen | `localStorage` position persisted off-screen | Clear `copilot_pos` from DevTools → Application → Local Storage |
-| Supabase sync failing | `SUPABASE_URL` or `SUPABASE_KEY` wrong | Check `.env`; test with `curl $SUPABASE_URL/rest/v1/decisions -H "apikey: $SUPABASE_KEY"` |
+| Supabase sync failing | `SUPABASE_URL` or `SUPABASE_KEY` wrong, or migration 002 not applied | Check `.env`; inspect `storage` in `/health`; apply `db/migrations/002_recommendation_action_plans.sql` only with owner approval |
 | Cloud sync failing | MSAL token expired or wrong tenant | Re-run `POST /connectors/{connector_id}/sync` or re-authenticate from Settings |
 | Frontend won't load | Port 5173 in use or Vite didn't start | Check `launcher/frontend.log`; kill stale process on that port |
 | `GRAPHIFY_MISSING` in Ask or rebuild | Graphify CLI is not installed or not on `PATH` | Run `pip install graphifyy`, rebuild Docker if applicable, then confirm `graphify --version` |
@@ -97,7 +100,7 @@ source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_U
 | Node.js 18+ | Yes | `node --version` |
 | Ollama | For Ask/Chat/Recommendations | `curl http://localhost:11434` |
 | Graphify CLI | For Ask and graph rebuild | `graphify --version` |
-| Supabase | Only if `STORAGE_BACKEND=supabase` | Check env vars; see `docs/integration-guide.md` |
+| Supabase | Only if `STORAGE_BACKEND=supabase` | Check env vars and `storage.ready`; see `docs/integration-guide.md` |
 | Microsoft 365 OAuth | Only if using Cloud Connectors | MSAL device code; see `docs/integration-guide.md` |
 
 ## Stopping the Cockpit

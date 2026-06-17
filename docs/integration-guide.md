@@ -1,6 +1,6 @@
 # Integration Guide
 
-Last Updated: 2026-06-15
+Last Updated: 2026-06-16
 
 This guide covers how external systems — particularly the User AI Operating
 System (UAOS) — consume the Graphify Workspace Cockpit API, the shape of the
@@ -41,6 +41,10 @@ as all other non-health endpoints when `API_KEY` is configured.
       "confidence": 0.75,
       "risk": "low | medium | high | unknown",
       "proposed_action_text": "concrete proposed action from the recommendation",
+      "action_plan": {
+        "canonical_target": "optional structured target",
+        "concrete_steps": ["optional structured steps"]
+      },
       "result": {
         "success": true,
         "file_created": "workspace/state/notes/...",
@@ -153,8 +157,13 @@ identical — no frontend changes are required.
 ### Setup
 
 1. Create a Supabase project at [supabase.com](https://supabase.com).
-2. Run the migration: `psql $DATABASE_URL < db/migrations/001_initial.sql`
-   or use `supabase db push` if you have the CLI installed.
+2. Run migrations in order:
+   ```bash
+   psql "$DATABASE_URL" < db/migrations/001_initial.sql
+   psql "$DATABASE_URL" < db/migrations/002_recommendation_action_plans.sql
+   ```
+   You may also use `supabase db push` if your local Supabase project is
+   already configured to apply the repo migrations in lexical order.
 3. Set env vars:
    ```
    STORAGE_BACKEND=supabase
@@ -163,6 +172,21 @@ identical — no frontend changes are required.
    ```
 4. Start the backend. All existing data remains in the file backend until
    manually migrated.
+
+### Required schema shape
+
+`001_initial.sql` creates the base tables. `002_recommendation_action_plans.sql`
+adds the JSONB columns used by current recommendation and action records:
+
+| Table | Required current columns |
+|---|---|
+| `recommendations` | `action_plan`, `overlap`, `overlap_dossier` |
+| `actions` | `action_plan` |
+
+When `STORAGE_BACKEND=supabase`, `/health`, `/settings`, and `/settings/org`
+include a `storage` object. If `storage.ready` is `false`, Supabase mode is not
+hosted-beta-ready; apply `db/migrations/002_recommendation_action_plans.sql`
+before creating recommendations, overlap recommendations, or queued actions.
 
 ### Data migration (file → Supabase)
 
@@ -179,6 +203,7 @@ No automatic migration tool is provided. To migrate existing state:
 The Supabase schema has RLS disabled by default. The cockpit's API key
 middleware is the auth boundary. Before any public or multi-tenant deployment,
 enable RLS and add policies (commented lines in `db/migrations/001_initial.sql`).
+Do not expose service-role keys to browser clients.
 
 ---
 

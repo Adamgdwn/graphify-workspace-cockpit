@@ -90,6 +90,95 @@ if STORAGE_BACKEND == "supabase":
     except ImportError as _e:
         raise RuntimeError(f"STORAGE_BACKEND=supabase requires the 'supabase' package: {_e}")
 
+SUPABASE_SCHEMA_MIGRATION = "db/migrations/002_recommendation_action_plans.sql"
+SUPABASE_SCHEMA_REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
+    "recommendations": ("action_plan", "overlap", "overlap_dossier"),
+    "actions": ("action_plan",),
+}
+_supabase_schema_status_cache: dict | None = None
+
+
+def _safe_error_message(exc: Exception) -> str:
+    return f"{exc.__class__.__name__}: {str(exc)[:240]}"
+
+
+def _check_supabase_schema() -> dict:
+    """Verify the optional Supabase columns required by current app records."""
+    if STORAGE_BACKEND != "supabase":
+        return {
+            "backend": STORAGE_BACKEND,
+            "ready": True,
+            "schema_checked": False,
+            "required_migration": None,
+            "required_columns": {},
+            "missing_or_unverified_columns": {},
+            "warning": None,
+            "errors": [],
+        }
+    if _supabase_client is None:
+        return {
+            "backend": STORAGE_BACKEND,
+            "ready": False,
+            "schema_checked": False,
+            "required_migration": SUPABASE_SCHEMA_MIGRATION,
+            "required_columns": {
+                table: list(columns)
+                for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items()
+            },
+            "missing_or_unverified_columns": {
+                table: list(columns)
+                for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items()
+            },
+            "warning": (
+                "Supabase schema could not be checked because the client is not initialized. "
+                f"Apply {SUPABASE_SCHEMA_MIGRATION} before using Supabase mode for hosted beta."
+            ),
+            "errors": ["Supabase client is not initialized."],
+        }
+
+    missing_or_unverified: dict[str, list[str]] = {}
+    errors: list[str] = []
+    for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items():
+        try:
+            (
+                _supabase_client
+                .table(table)
+                .select(",".join(columns))
+                .limit(0)
+                .execute()
+            )
+        except Exception as exc:
+            missing_or_unverified[table] = list(columns)
+            errors.append(f"{table}: {_safe_error_message(exc)}")
+
+    ready = not missing_or_unverified
+    return {
+        "backend": STORAGE_BACKEND,
+        "ready": ready,
+        "schema_checked": True,
+        "required_migration": SUPABASE_SCHEMA_MIGRATION,
+        "required_columns": {
+            table: list(columns)
+            for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items()
+        },
+        "missing_or_unverified_columns": missing_or_unverified,
+        "warning": None if ready else (
+            "Supabase schema is missing or cannot verify current recommendation/action "
+            f"columns. Apply {SUPABASE_SCHEMA_MIGRATION} before using Supabase mode "
+            "for hosted beta."
+        ),
+        "errors": errors,
+    }
+
+
+def _storage_status(force_check: bool = False) -> dict:
+    global _supabase_schema_status_cache
+    if STORAGE_BACKEND != "supabase":
+        return _check_supabase_schema()
+    if force_check or _supabase_schema_status_cache is None:
+        _supabase_schema_status_cache = _check_supabase_schema()
+    return _supabase_schema_status_cache
+
 # In-memory cache — loaded once per server lifetime
 _graph_cache: dict | None = None
 _summary_cache: dict[str, dict] = {}
@@ -450,6 +539,7 @@ def health() -> dict:
         "graph_loaded": graph_loaded,
         "graph_error": graph_error,
         "graphify": get_graphify_status(include_version=False),
+        "storage": _storage_status(),
     }
 
 
@@ -1884,6 +1974,7 @@ def get_settings() -> dict:
         "state_dir": str(WORKSPACE_STATE),
         "api_key_required": bool(API_KEY),
         "graphify": get_graphify_status(),
+        "storage": _storage_status(),
     }
 
 
@@ -2057,6 +2148,7 @@ def get_org_settings() -> dict:
         },
         "ollama_url": os.environ.get("OLLAMA_URL", "http://localhost:11434"),
         "storage_backend": STORAGE_BACKEND,
+        "storage": _storage_status(),
         "last_seen_devices": [
             {"user": user, "last_seen": ts}
             for user, ts in sorted(devices.items(), key=lambda x: x[1], reverse=True)

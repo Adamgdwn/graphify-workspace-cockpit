@@ -209,15 +209,40 @@ No Caddy or DNS required for LAN access.
 
 ---
 
+## Optional Supabase Storage
+
+The default hosted beta path uses file-backed state in `workspace/state/`.
+Supabase is opt-in through `STORAGE_BACKEND=supabase`.
+
+Before starting a Supabase-backed backend, apply migrations in order:
+
+```bash
+psql "$DATABASE_URL" < db/migrations/001_initial.sql
+psql "$DATABASE_URL" < db/migrations/002_recommendation_action_plans.sql
+```
+
+Do not run live Supabase migrations without owner approval. After startup, check
+`/health` or `/settings/org`; `storage.ready` must be `true` before treating
+Supabase mode as hosted-beta-ready. If it is `false`, the response names the
+required migration.
+
+---
+
 ## Rollback
 
-The cockpit has no migrations in this release. Rollback is:
+For file-backed deployments, rollback is:
+
 1. `docker-compose down`
 2. `git checkout <previous-tag>`
 3. `docker-compose up --build`
 
 State in `workspace/state/` is JSON files. Back them up before upgrading if
 decisions or recommendations are important to preserve.
+
+Supabase deployments include additive database migrations. Once
+`db/migrations/002_recommendation_action_plans.sql` has been applied, do not
+drop those columns as part of a routine app rollback. Database rollback requires
+separate owner review and a data-preservation plan.
 
 ---
 
@@ -242,6 +267,10 @@ For local self-signed Caddy checks, use `https://localhost` and add `-k` to the
 
 The `/health` and `/settings` responses include `graphify.available`. If it is
 false, `graphify.code` is `GRAPHIFY_MISSING`.
+
+For Supabase-backed deployments, `/health`, `/settings`, and `/settings/org`
+also include `storage.ready`. Treat `storage.ready: false` as a hold on hosted
+beta use until the named migration has been applied.
 
 If Node is available through nvm, run the live demo smoke gate:
 
