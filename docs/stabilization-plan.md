@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T18:46:30-06:00
-Status: active plan - Chunk 4 task complete; next recommended chunk is Chunk 5 Graph Upload Hardening
+Last Updated: 2026-06-16T19:21:41-06:00
+Status: active plan - Chunk 5 task complete; next recommended chunk is Chunk 6 Atomic State Writes and Clean-State Safety
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -38,7 +38,6 @@ Preserve the current product while hardening it. The seven-tab workflow
 
 P0 - blocks hosted beta:
 
-- Graph upload accepts raw filenames and weak validation.
 - Caddy handles the frontend catch-all before `/api/*`, so hosted API routing can fail.
 - Clean first-run JSON state writes are scattered and not uniformly parent-safe or atomic.
 - Backend tests now exist, but coverage is still partial until the remaining P0
@@ -71,6 +70,15 @@ Resolved in Chunk 4:
   preserves `FormData` multipart handling, and normalizes 401/403 copy to
   "API key required or invalid." Settings now lets beta users save, test, and
   clear the key locally even when protected `/settings` calls are unauthorized.
+
+Resolved in Chunk 5:
+
+- Graph upload now sanitizes filenames, rejects traversal, non-JSON names,
+  oversized files, invalid JSON, missing nodes, malformed links, and strict
+  upload-only link target errors. Uploaded graphs are normalized to canonical
+  `links`, written atomically inside `GRAPHS_DIR`, and only activated after
+  validation. Existing graph activation now rejects invalid graph files before
+  switching Settings state.
 
 P1 - beta confidence:
 
@@ -134,8 +142,9 @@ Baseline evidence gathered on 2026-06-16:
 - Graph activation route: backend has `POST /graphs/{name}/activate`; Settings
   now calls that route and backend validates activation names against demo or
   uploaded graph files.
-- Graph upload route: `POST /graph/upload` in `backend/main.py`, currently uses
-  `GRAPHS_DIR / file.filename` and writes bytes directly after minimal validation.
+- Graph upload route: `POST /graph/upload` in `backend/main.py`, now sanitizes
+  file names, validates and normalizes graph JSON, writes atomically under
+  `GRAPHS_DIR`, and activates only after successful validation.
 - Caddy route file: `config/Caddyfile`, currently handles frontend catch-all
   before `/api/*`.
 - Supabase migration: `db/migrations/001_initial.sql`, missing newer optional
@@ -474,6 +483,10 @@ and avoid visual redesign.
 
 ### Chunk 5: Graph Upload Hardening
 
+Status: **task complete** — 2026-06-16T19:21:41-06:00
+
+Completion target: Task complete
+
 Goal: Make graph upload safe and schema-aware.
 
 Why this matters: Upload is a trust boundary. Raw filenames and weak validation
@@ -503,12 +516,42 @@ python -m compileall -q backend
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 ```
 
+Implementation completed:
+
+- Added upload filename normalization and rejection for empty names, path
+  separators, and non-`.json` names.
+- Added a 10 MiB upload limit and safe `400` / `413` / `422` error details.
+- Extended graph normalization so upload/activation paths can require node IDs,
+  unique node IDs, and links that reference known nodes while preserving legacy
+  normalization tolerance for existing generated graphs.
+- Normalized uploaded graph JSON before writing and returned safe filename,
+  node count, and link count.
+- Wrote uploaded graph JSON atomically under `GRAPHS_DIR`.
+- Validated existing graph files before activation so invalid uploaded files do
+  not replace the active graph path.
+- Added `tests/test_graph_upload.py` and schema coverage for strict link-target
+  validation.
+
+Validation completed:
+
+- Passed: `bash scripts/governance-preflight.sh` with 0 warnings.
+- Passed: `backend/.venv/bin/python -m pytest tests/test_graph_upload.py tests/test_graph_schema.py`
+  — 17 tests passed.
+- Passed: `backend/.venv/bin/python -m pytest` — 33 tests passed.
+- Passed: `backend/.venv/bin/python -m compileall -q backend`.
+- Passed after starting with `bash scripts/start.sh`:
+  `source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs`
+  — 8 smoke checks passed.
+- Verified: `curl http://localhost:8000/health` returned `graph_loaded: true`
+  and no graph error after preserving compatibility with the existing generated
+  graph's duplicate node ID.
+
 Acceptance criteria:
 
-- Valid graph upload succeeds and activates.
-- Invalid JSON, missing nodes, malformed links, traversal names, non-json names,
-  and oversized files are rejected.
-- Upload/activation failures preserve a usable Settings tab error state.
+- [x] Valid graph upload succeeds and activates.
+- [x] Invalid JSON, missing nodes, malformed links, traversal names, non-json
+  names, and oversized files are rejected.
+- [x] Upload/activation failures preserve a usable Settings tab error state.
 
 Rollback note: Revert upload route only; do not remove graph schema tests.
 

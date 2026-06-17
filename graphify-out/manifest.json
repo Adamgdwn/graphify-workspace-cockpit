@@ -1,7 +1,7 @@
 {
   "backend/main.py": {
-    "mtime": 1781655665.446339,
-    "ast_hash": "6130bafbc4d0122956ae460c602cb1e8",
+    "mtime": 1781659194.035947,
+    "ast_hash": "dd70b410a37291a1c6b7283e986e6a13",
     "semantic_hash": ""
   },
   "db/migrations/001_initial.sql": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "START_HERE.md": {
-    "mtime": 1781657239.2372794,
-    "ast_hash": "fbc234c8d7838411cc18cb696e770071",
+    "mtime": 1781659342.493747,
+    "ast_hash": "ead75b86ef40e71c26d1a0973b5dceb1",
     "semantic_hash": ""
   },
   "backend/prompts/recommend_archive.txt": {
@@ -400,8 +400,8 @@
     "semantic_hash": ""
   },
   "backend/graph_schema.py": {
-    "mtime": 1781653571.9510398,
-    "ast_hash": "120b57ea1ac2c40d8ca5bfbac8e223cf",
+    "mtime": 1781659261.2187617,
+    "ast_hash": "b444f82a859100e2cc38459e80d5f987",
     "semantic_hash": ""
   },
   "tests/fixtures/demo_graph_edges.json": {
@@ -420,8 +420,8 @@
     "semantic_hash": ""
   },
   "tests/test_graph_schema.py": {
-    "mtime": 1781653571.9520397,
-    "ast_hash": "bea8efd7cd48cfeca6c9661567408015",
+    "mtime": 1781659207.1561062,
+    "ast_hash": "8523899d2b66f665098dbccde6ce42f0",
     "semantic_hash": ""
   },
   "tests/test_settings_counts.py": {
@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781657226.110117,
-    "ast_hash": "299c614a9d50aed78472cb0826b7a655",
+    "mtime": 1781659342.488747,
+    "ast_hash": "c24419a84c91b31a30c9d79b174ba11a",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {
@@ -457,6 +457,11 @@
   "frontend/src/api/client.ts": {
     "mtime": 1781657284.995845,
     "ast_hash": "1391f18992fb26585d470f9305d3c927",
+    "semantic_hash": ""
+  },
+  "tests/test_graph_upload.py": {
+    "mtime": 1781659157.3435023,
+    "ast_hash": "bc8ec96940ff462d9d796c48438925d4",
     "semantic_hash": ""
   }
 }

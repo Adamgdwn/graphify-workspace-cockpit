@@ -73,6 +73,14 @@ def test_normalize_graph_rejects_malformed_links() -> None:
         normalize_graph({"nodes": [{"id": "a"}], "links": [{"source": "a"}]})
 
 
+def test_normalize_graph_can_require_links_to_reference_nodes() -> None:
+    graph = {"nodes": [{"id": "a"}], "links": [{"source": "a", "target": "missing"}]}
+
+    assert count_links(graph) == 1
+    with pytest.raises(GraphValidationError, match="reference existing nodes"):
+        normalize_graph(graph, require_link_targets=True)
+
+
 def test_normalize_graph_requires_nodes_array() -> None:
     with pytest.raises(GraphValidationError, match="nodes array"):
         normalize_graph({"links": []})

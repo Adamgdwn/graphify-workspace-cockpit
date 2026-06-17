@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T18:46:30-06:00
-Status: stabilization Chunk 4 task complete; current-build pathway archived
+Last Updated: 2026-06-16T19:21:41-06:00
+Status: stabilization Chunk 5 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -36,8 +36,12 @@ wrapper, structured Graphify errors and readiness status are exposed in backend
 and Settings, and Docker backend build installs `graphifyy`. Chunk 4 is task
 complete: frontend backend calls now use a shared API client, Settings can save,
 test, and clear the browser-local API key, protected-mode 401/403 copy is
-normalized, and authenticated plus unauthenticated smoke validation passed. The
-recommended next implementation chunk is Chunk 5: Graph Upload Hardening.
+normalized, and authenticated plus unauthenticated smoke validation passed.
+Chunk 5 is task complete: graph upload now rejects unsafe names, oversized
+files, invalid JSON, missing nodes, malformed links, and invalid activation
+candidates; uploaded graphs are normalized and written atomically before
+activation. The recommended next implementation chunk is Chunk 6: Atomic State
+Writes and Clean-State Safety.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is

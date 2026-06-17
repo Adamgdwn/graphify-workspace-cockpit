@@ -71,6 +71,7 @@ _USERS_FILE = Path(__file__).parent.parent / "config" / "users.json"
 _DEMO_GRAPH = str(Path(__file__).parent.parent / "workspace" / "demo" / "graph.json")
 DEFAULT_GRAPH = os.environ.get("GRAPH_PATH", _DEMO_GRAPH)
 API_KEY = os.environ.get("API_KEY", "")
+GRAPH_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "file")  # "file" | "supabase"
 
@@ -273,6 +274,32 @@ def _graph_path() -> str:
         except Exception:
             pass
     return DEFAULT_GRAPH
+
+
+def _write_json_atomic(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        tmp_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+
+def _safe_graph_upload_name(filename: str | None) -> str:
+    raw_name = (filename or "").strip()
+    name = Path(raw_name).name
+    if not raw_name or name in {"", ".", ".."}:
+        raise HTTPException(status_code=400, detail="Graph filename is required.")
+    if name != raw_name or "\\" in raw_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Graph filename must not include path separators.",
+        )
+    if Path(name).suffix.lower() != ".json":
+        raise HTTPException(status_code=400, detail="Graph upload must be a .json file.")
+    return name
 
 
 # ---------------------------------------------------------------------------
@@ -1893,19 +1920,33 @@ def ollama_status() -> dict:
 async def upload_graph(file: UploadFile = File(...)) -> dict:
     """Accept a graph.json file, validate it, store it, and activate it without restart."""
     global _graph_cache, _summary_cache
-    content = await file.read()
+    name = _safe_graph_upload_name(file.filename)
+
+    content = await file.read(GRAPH_UPLOAD_MAX_BYTES + 1)
+    if len(content) > GRAPH_UPLOAD_MAX_BYTES:
+        limit_mib = GRAPH_UPLOAD_MAX_BYTES // (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Graph upload exceeds the {limit_mib} MiB limit.",
+        )
+
     try:
         data = json.loads(content)
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=422, detail=f"Invalid JSON: {exc}")
-    if not isinstance(data.get("nodes"), list):
-        raise HTTPException(
-            status_code=422, detail="graph.json must contain a 'nodes' array"
-        )
-    GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
-    name = file.filename or "uploaded_graph.json"
-    dest = GRAPHS_DIR / name
-    dest.write_bytes(content)
+        raise HTTPException(status_code=422, detail=f"Invalid JSON: {exc}") from exc
+    try:
+        normalized = normalize_graph(data, require_link_targets=True)
+    except GraphValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid graph: {exc}") from exc
+
+    graphs_root = GRAPHS_DIR.resolve()
+    dest = (GRAPHS_DIR / name).resolve()
+    try:
+        dest.relative_to(graphs_root)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Graph filename is not safe.") from exc
+
+    _write_json_atomic(dest, normalized)
     settings: dict = {}
     if SETTINGS_FILE.exists():
         try:
@@ -1919,7 +1960,8 @@ async def upload_graph(file: UploadFile = File(...)) -> dict:
     _summary_cache = {}
     return {
         "filename": name,
-        "node_count": len(data["nodes"]),
+        "node_count": len(normalized["nodes"]),
+        "link_count": len(normalized["links"]),
         "path": str(dest),
         "active": True,
     }
@@ -1996,6 +2038,12 @@ def activate_graph(name: str) -> dict:
     """Switch the active graph by name. Must exist in GRAPHS_DIR or be the demo graph."""
     global _graph_cache, _summary_cache
     candidate = _graph_activation_candidate(name)
+    try:
+        normalize_graph(json.loads(candidate.read_text()), require_link_targets=True)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid JSON: {exc}") from exc
+    except GraphValidationError as exc:
+        raise HTTPException(status_code=422, detail=f"Invalid graph: {exc}") from exc
     settings: dict = {}
     if SETTINGS_FILE.exists():
         try:
