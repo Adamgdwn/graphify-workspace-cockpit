@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T22:38:07-06:00
-Status: active plan - Chunk 13 task complete; no next implementation chunk queued in this plan
+Last Updated: 2026-06-16T22:53:06-06:00
+Status: closeout - Chunks 1-13 task complete; post-plan Map control polish pushed; owner video-readiness testing next
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -1270,6 +1270,45 @@ Rollback note: Move-only refactor must be easy to revert as one PR.
 Token/context warning: Future backend edits should start from the route modules
 or wrappers named above, and only open broad `backend/main.py` ranges when the
 remaining facade-owned behavior is directly involved.
+
+### Post-Plan UX Closeout: Map Control Visibility
+
+Status: **task complete** — 2026-06-16T22:53:06-06:00
+
+Completion target: Task complete
+
+Goal: Make the Map's physical/semantic/path/review controls discoverable before
+owner hands-on testing and video capture.
+
+Implementation notes:
+
+- Exposed Map controls together instead of hiding most of them behind the active
+  mode preset: view mode, node type filter, source selector, Physical edge
+  layer, Semantic edge layer, Start Trace, Overlap, and Fit.
+- Renamed the former Structural edge button to Physical, matching the owner's
+  expected language for non-semantic connections.
+- Kept Explore, Trace, Overlap, and Review as quick presets, but added clearer
+  sublabels and hover/focus explanations.
+- Pushed the UI polish at `c27d433 Expose map connection controls`.
+
+Validation evidence:
+
+```bash
+PATH=/home/adamgoodwin/.nvm/versions/node/v24.14.0/bin:$PATH ./node_modules/.bin/tsc --noEmit
+# passed from frontend/
+
+PATH=/home/adamgoodwin/.nvm/versions/node/v24.14.0/bin:$PATH ./node_modules/.bin/vite build
+# passed from frontend/; existing large-bundle warning remains
+
+git diff --check
+# passed
+
+graphify update . --no-cluster
+# rebuilt ignored local graphify-out graph: 1314 nodes, 39199 edges
+```
+
+Next: Adam to do hands-on app testing and a video-readiness smoke pass. No next
+implementation chunk is queued in this plan.
 
 ## 6. Validation Matrix
 

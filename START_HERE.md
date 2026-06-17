@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T22:38:07-06:00
-Status: stabilization Chunk 13 task complete; current-build pathway archived
+Last Updated: 2026-06-16T22:53:06-06:00
+Status: stabilization plan boxed up; post-plan Map control polish pushed; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -68,9 +68,17 @@ and stale context. Chunk 13 is task complete: backend configuration, app
 construction, API-key middleware, storage readiness, and bounded route groups
 for health/runtime, Ask, Decisions, cluster selection, connectors, and chat now
 live outside `backend/main.py`; `backend.main:app` remains import-compatible and
-the backend contract plus live health/runtime smoke checks passed. No next
-implementation chunk is queued in this stabilization plan; project completion or
-new follow-up scope remains an owner decision.
+the backend contract plus live health/runtime smoke checks passed.
+
+Post-plan owner-reported Map toolbar clarity polish is also task complete:
+physical/structural, semantic, overlap, trace, view, type, source, and fit
+controls are now visible together, while the top mode presets carry clearer
+sublabels and hover/focus explanations. The UI polish commit is
+`c27d433 Expose map connection controls`.
+
+No next implementation chunk is queued in this stabilization plan. The next
+natural step is owner hands-on testing and a video-readiness smoke pass; project
+completion or new follow-up scope remains an owner decision.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
