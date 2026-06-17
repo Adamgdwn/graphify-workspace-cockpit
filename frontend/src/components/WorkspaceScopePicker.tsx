@@ -63,16 +63,22 @@ interface WorkspaceScopePickerProps {
   intro?: string;
   generateLabel?: string;
   autoInspectSavedProfile?: boolean;
+  restoreSavedSelection?: boolean;
+  initialRoot?: string;
   onGenerated?: () => void;
   onProfileSaved?: (profile: WorkspaceScopeProfile) => void;
 }
 
 const DEFAULT_ROOT_OPTIONS = [
+  "/",
+  "/home/adamgoodwin",
   "/home/adamgoodwin/code",
   "/home/adamgoodwin/code/agents",
   "/home/adamgoodwin/code/Applications",
   "/home/adamgoodwin/code/Tools",
   "/home/adamgoodwin/code/Infrastructure",
+  "/mnt",
+  "/media",
 ];
 
 function scopePathLabel(node: WorkspaceScopeNode): string {
@@ -112,6 +118,8 @@ export function WorkspaceScopePicker({
   intro = "Choose a parent folder, inspect the bounded repo tree, select included folders, and generate a scoped map.",
   generateLabel = "Generate Map",
   autoInspectSavedProfile,
+  restoreSavedSelection,
+  initialRoot = "/home/adamgoodwin/code",
   onGenerated,
   onProfileSaved,
 }: WorkspaceScopePickerProps) {
@@ -139,6 +147,7 @@ export function WorkspaceScopePicker({
   const includedCount = included.size;
   const excludedCount = excluded.size;
   const shouldAutoInspectSavedProfile = autoInspectSavedProfile ?? mode === "settings";
+  const shouldRestoreSavedSelection = restoreSavedSelection ?? mode === "settings";
   const generateDisabledReason = !scope
     ? "Inspect a parent folder first."
     : includedCount === 0
@@ -192,18 +201,25 @@ export function WorkspaceScopePicker({
       })
       .then((data) => {
         setProfile(data.profile);
-        if (!data.profile) return;
+        if (!data.profile) {
+          if (mode === "startup") {
+            setRootInput(initialRoot);
+            setSelectedRootOption(initialRoot);
+            void inspectRoot(initialRoot, null);
+          }
+          return;
+        }
         setRootInput(data.profile.root);
         setSelectedRootOption(data.profile.root);
         setProfileName(data.profile.profile_name);
-        setIncluded(new Set(data.profile.included_paths));
-        setExcluded(new Set(data.profile.excluded_paths));
+        setIncluded(shouldRestoreSavedSelection ? new Set(data.profile.included_paths) : new Set());
+        setExcluded(shouldRestoreSavedSelection ? new Set(data.profile.excluded_paths) : new Set());
         if (shouldAutoInspectSavedProfile) {
-          void inspectRoot(data.profile.root, data.profile);
+          void inspectRoot(data.profile.root, shouldRestoreSavedSelection ? data.profile : null);
         }
       })
       .catch(() => setProfile(null));
-  }, [inspectRoot, shouldAutoInspectSavedProfile]);
+  }, [initialRoot, inspectRoot, mode, shouldAutoInspectSavedProfile, shouldRestoreSavedSelection]);
 
   useEffect(() => {
     loadSavedProfile();
@@ -369,7 +385,7 @@ export function WorkspaceScopePicker({
             disabled={node.children.length === 0}
             aria-label={isOpen ? "Collapse folder" : "Expand folder"}
           >
-              {node.children.length > 0 ? (isOpen ? "v" : ">") : ""}
+            {node.children.length > 0 ? (isOpen ? "v" : ">") : ""}
           </button>
           <label className="scope-node-toggle">
             <input

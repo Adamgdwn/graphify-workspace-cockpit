@@ -1823,6 +1823,8 @@ export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, on
             title="Generate Workspace Map"
             intro={scopeGateReason}
             generateLabel="Generate Map"
+            autoInspectSavedProfile
+            restoreSavedSelection={false}
             onGenerated={handleScopeGenerated}
             onProfileSaved={setWorkspaceProfile}
           />

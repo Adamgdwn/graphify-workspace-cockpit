@@ -112,9 +112,10 @@ Observed on 2026-06-16:
 - Chunk 8 is task complete as of 2026-06-17T14:54:17-06:00:
   a reusable Workspace Scope Picker now drives both Settings and the Map
   startup gate. Map checks the saved scope before rendering, shows the picker
-  when no scope exists or the active graph is above the browser-safe cap, keeps
-  broad saved profiles from auto-inspecting in startup mode, and exposes a
-  disabled Generate Map action until a valid folder is inspected and selected.
+  when no scope exists or the active graph is above the browser-safe cap,
+  auto-opens the saved or suggested parent folder as a checkbox tree with no
+  startup selections restored, and exposes a disabled Generate Map action until
+  at least one valid folder is selected.
   Backend profile validation now rejects empty selections, non-directory
   included paths, and default-ignored included paths; lockfiles are treated as
   default low-signal noise. A controlled generate smoke selected this repo,
@@ -832,9 +833,10 @@ Completed implementation:
 - Replaced the custom Settings workspace-scope state with the shared picker.
 - Added Map startup gating: missing saved scope or a broad active graph shows
   Generate Workspace Map instead of rendering the existing broad graph canvas.
-- Kept broad startup profiles from auto-inspecting before the operator chooses
-  a narrower scope; Settings still auto-inspects saved profiles for advanced
-  editing convenience.
+- In Map startup mode, auto-inspects the saved or suggested parent folder so a
+  directory tree with checkboxes is visible immediately, while intentionally
+  starting with zero selected folders. Settings still restores saved selections
+  for advanced editing convenience.
 - Hardened backend workspace-scope profile normalization so empty selections,
   files, and default-ignored paths cannot be persisted as scan roots.
 - Added backend tests for empty selection rejection, default-ignored include
@@ -852,8 +854,9 @@ Validation:
 - `graphify update . --no-cluster`
 - `node scripts/demo-path-smoke.mjs`
 - Headless Chromium Map-tab smoke: broad 22,613-visible-node graph shows the
-  Generate Workspace Map gate with browser-safe-cap copy and disabled Generate
-  Map state before loading Evidence/full graph.
+  Generate Workspace Map gate with browser-safe-cap copy, renders the workspace
+  directory tree with checkboxes, and starts with zero selected folders before
+  loading Evidence/full graph.
 - Controlled scoped generate smoke: saved a temporary repo-only scope, ran
   `POST /graph/rebuild`, verified `/graph/summary` returned 1,128 visible
   nodes and one overview group, restored the prior broad smoke profile and
