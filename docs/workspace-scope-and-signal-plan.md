@@ -1,7 +1,7 @@
 # Workspace Scope and Signal Plan
 
-Last Updated: 2026-06-17T12:27:12-06:00
-Status: active plan - zero-start folder picker planned; implement Chunk 8 next
+Last Updated: 2026-06-17T14:54:17-06:00
+Status: active plan - Workspace Scope Chunk 8 task complete; owner review / next polish next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -109,6 +109,17 @@ Observed on 2026-06-16:
   startup pull-down/tree picker with checkboxes, zero folders selected by
   default, a single Generate Map action, and default noisy/standard-file
   ignoring before any graph is generated. This is now Chunk 8.
+- Chunk 8 is task complete as of 2026-06-17T14:54:17-06:00:
+  a reusable Workspace Scope Picker now drives both Settings and the Map
+  startup gate. Map checks the saved scope before rendering, shows the picker
+  when no scope exists or the active graph is above the browser-safe cap, keeps
+  broad saved profiles from auto-inspecting in startup mode, and exposes a
+  disabled Generate Map action until a valid folder is inspected and selected.
+  Backend profile validation now rejects empty selections, non-directory
+  included paths, and default-ignored included paths; lockfiles are treated as
+  default low-signal noise. A controlled generate smoke selected this repo,
+  rebuilt a 1,128-node scoped overview, then restored the broad smoke profile
+  and active graph.
 
 ## Target Mental Model
 
@@ -810,7 +821,44 @@ Implementation steps:
 6. Update smoke coverage to assert the first meaningful browser action is scope
    selection, not broad graph rendering.
 
-Status: planned on 2026-06-17T12:27:12-06:00. Implement next.
+Status: task complete on 2026-06-17T14:54:17-06:00.
+
+Completed implementation:
+
+- Added reusable `frontend/src/components/WorkspaceScopePicker.tsx` with root
+  suggestions, exact path fallback, collapsible tree rows, empty-by-default
+  selection for new inspections, disabled default-ignored rows, save, and
+  Generate Map orchestration.
+- Replaced the custom Settings workspace-scope state with the shared picker.
+- Added Map startup gating: missing saved scope or a broad active graph shows
+  Generate Workspace Map instead of rendering the existing broad graph canvas.
+- Kept broad startup profiles from auto-inspecting before the operator chooses
+  a narrower scope; Settings still auto-inspects saved profiles for advanced
+  editing convenience.
+- Hardened backend workspace-scope profile normalization so empty selections,
+  files, and default-ignored paths cannot be persisted as scan roots.
+- Added backend tests for empty selection rejection, default-ignored include
+  rejection, include-only scan roots, and lockfile default exclusion.
+
+Validation:
+
+- `bash scripts/governance-preflight.sh`
+- `backend/.venv/bin/python -m pytest tests/test_workspace_scope.py`
+- `backend/.venv/bin/python -m pytest`
+- `backend/.venv/bin/python -m compileall -q backend`
+- `source "$HOME/.nvm/nvm.sh" && npm --prefix frontend run typecheck`
+- `source "$HOME/.nvm/nvm.sh" && npm --prefix frontend run build`
+- `git diff --check`
+- `graphify update . --no-cluster`
+- `node scripts/demo-path-smoke.mjs`
+- Headless Chromium Map-tab smoke: broad 22,613-visible-node graph shows the
+  Generate Workspace Map gate with browser-safe-cap copy and disabled Generate
+  Map state before loading Evidence/full graph.
+- Controlled scoped generate smoke: saved a temporary repo-only scope, ran
+  `POST /graph/rebuild`, verified `/graph/summary` returned 1,128 visible
+  nodes and one overview group, restored the prior broad smoke profile and
+  active merged graph, restarted backend to clear cache, and reverified the
+  restored broad summary at 22,613 visible nodes across four groups.
 
 ## Non-Goals
 

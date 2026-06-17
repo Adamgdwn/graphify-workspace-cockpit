@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-17T12:27:12-06:00
-Status: workspace scope zero-start folder picker planned; implement Chunk 8 next; current-build pathway archived
+Last Updated: 2026-06-17T14:54:17-06:00
+Status: workspace scope zero-start folder picker task complete; owner review / next polish next; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,7 +12,7 @@ default.
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
 3. Read `docs/workspace-scope-and-signal-plan.md`.
-4. Start with Workspace Scope Chunk 8 unless Adam redirects.
+4. Start with owner review / next polish unless Adam redirects.
 5. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 6. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
@@ -158,15 +158,20 @@ Scope. `/graph/full` now rejects oversized default payloads with
 when the visible graph is above the browser cap, and Settings shows Workspace
 Scope as the first settings card.
 
-Owner review on 2026-06-17T12:27:12-06:00 clarified the remaining product gap:
-the cockpit needs to start from zero selected folders, present a pull-down/tree
-folder picker with checkboxes, ignore standard noisy files by default, and only
-generate the map after the operator selects folders and presses Generate Map.
-This is planned as Workspace Scope Chunk 8 in
-`docs/workspace-scope-and-signal-plan.md`.
+Workspace scope Chunk 8 is task complete as of 2026-06-17T14:54:17-06:00:
+Map now gates missing/unsafe-broad scopes behind a reusable Generate Workspace
+Map picker instead of rendering the broad graph canvas. The same picker is used
+from Settings, starts new inspections with no folders selected, offers useful
+root suggestions plus exact path fallback, disables default-ignored/noisy rows,
+and runs save + scoped rebuild behind a single Generate Map action. Backend
+profile validation rejects empty selections, non-directory included paths, and
+default-ignored included paths; lockfiles are treated as default low-signal
+noise. Validation passed with backend tests, backend compile, frontend
+typecheck/build, Graphify update, demo smoke, headless broad-graph Map gate
+smoke, and a controlled scoped generate smoke that restored the prior broad
+profile/active graph afterward.
 
-Continue with Workspace Scope Chunk 8: Zero-Start Folder Picker and Generate
-Flow.
+Continue with owner review / next polish for the knowledge-tool experience.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -199,7 +204,7 @@ Open owner-review flags before future implementation:
 
 1. `git status --short` — preserve unrelated work.
 2. Read `docs/workspace-scope-and-signal-plan.md`.
-3. Start with owner review / final polish unless Adam redirects.
+3. Start with owner review / next polish unless Adam redirects.
 4. Load only the files named in that chunk.
 5. Use `docs/context-map.md` if routing is still unclear.
 

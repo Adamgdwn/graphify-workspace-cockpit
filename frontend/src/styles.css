@@ -730,6 +730,34 @@ body {
   background: #0c0e16;
 }
 
+.map-startup-shell {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.map-startup-overlay {
+  position: static;
+  min-height: 100%;
+}
+
+.map-scope-gate {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 22px;
+}
+
+.map-scope-gate .scope-picker-startup {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.map-scope-existing {
+  max-width: 1080px;
+  margin: 10px auto 0;
+}
+
 /* Toolbar */
 
 .map-toolbar {
@@ -3753,6 +3781,31 @@ body {
   gap: 12px;
 }
 
+.scope-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.scope-picker-startup {
+  padding: 16px;
+  border: 1px solid #1a2238;
+  border-radius: 8px;
+  background: #090c17;
+}
+
+.scope-root-form {
+  gap: 8px;
+}
+
+.scope-root-select {
+  flex: 0 1 300px;
+}
+
+.scope-root-input {
+  flex: 1 1 360px;
+}
+
 .scope-summary {
   display: flex;
   flex-wrap: wrap;
@@ -3800,6 +3853,18 @@ body {
   gap: 10px;
 }
 
+.scope-actions {
+  display: flex;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.settings-secondary-btn {
+  border-color: #26324a;
+  background: transparent;
+  color: #8fa0c0;
+}
+
 .scope-tree {
   display: flex;
   flex-direction: column;
@@ -3822,6 +3887,23 @@ body {
   justify-content: space-between;
   gap: 10px;
   min-height: 28px;
+}
+
+.scope-expand-btn {
+  width: 20px;
+  height: 22px;
+  flex: 0 0 20px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #52607d;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.scope-expand-btn:disabled {
+  cursor: default;
+  opacity: 0;
 }
 
 .scope-node-toggle {
@@ -3877,6 +3959,14 @@ body {
 }
 
 .scope-node-excluded .scope-node-label {
+  color: #6b7280;
+}
+
+.scope-node-disabled .scope-node-toggle {
+  cursor: not-allowed;
+}
+
+.scope-node-disabled .scope-node-label {
   color: #6b7280;
 }
 
@@ -4102,6 +4192,15 @@ body {
   .scope-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .scope-actions {
+    flex-direction: column;
+  }
+
+  .scope-root-select,
+  .scope-root-input {
+    flex-basis: auto;
   }
 }
 

@@ -9,6 +9,7 @@ from backend.workspace_scope import (
     apply_signal_tiers_to_graph,
     filter_workspace_scope_graph,
     inspect_workspace_scope,
+    workspace_scope_scan_roots,
 )
 
 
@@ -31,6 +32,7 @@ def test_inspect_workspace_scope_reports_default_exclusions_without_file_content
     (root / "graphify-out" / "cache").mkdir(parents=True)
     (root / "workspace" / "state").mkdir(parents=True)
     _touch(root / "package.json", "{}")
+    _touch(root / "package-lock.json", "{}")
     _touch(root / "src" / "app.py", "print('hello')")
     _touch(root / ".env", "SUPER_SECRET_VALUE=do-not-return")
     _touch(root / "credentials" / "api-key.txt", "do-not-return-either")
@@ -45,6 +47,7 @@ def test_inspect_workspace_scope_reports_default_exclusions_without_file_content
     assert flat["node_modules"]["state"] == "excluded"
     assert flat["graphify-out"]["state"] == "excluded"
     assert flat["workspace/state"]["state"] == "excluded"
+    assert flat["package-lock.json"]["state"] == "excluded"
     assert flat[".env"]["state"] == "excluded"
     assert flat["credentials"]["state"] == "excluded"
     assert "Secret-like path detected" in flat[".env"]["reasons"][0]
@@ -157,6 +160,67 @@ def test_workspace_scope_profile_rejects_paths_outside_root(monkeypatch, tmp_pat
     assert response.status_code == 422
     assert "must stay within root" in response.json()["detail"]
     assert not state_file.exists()
+
+
+def test_workspace_scope_profile_rejects_empty_selection(monkeypatch, tmp_path: Path) -> None:
+    state_file = tmp_path / "state" / "workspace-scope.json"
+    root = tmp_path / "code"
+    root.mkdir()
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", state_file)
+    client = TestClient(main.app)
+
+    response = client.put(
+        "/workspace-scope",
+        json={
+            "root": str(root),
+            "profile_name": "Empty Scope",
+            "included_paths": [],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "Select at least one included folder" in response.json()["detail"]
+    assert not state_file.exists()
+
+
+def test_workspace_scope_profile_rejects_default_ignored_included_path(monkeypatch, tmp_path: Path) -> None:
+    state_file = tmp_path / "state" / "workspace-scope.json"
+    root = tmp_path / "code"
+    ignored = root / "node_modules"
+    ignored.mkdir(parents=True)
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", state_file)
+    client = TestClient(main.app)
+
+    response = client.put(
+        "/workspace-scope",
+        json={
+            "root": str(root),
+            "profile_name": "Ignored Scope",
+            "included_paths": [str(ignored)],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "default-ignored paths" in response.json()["detail"]
+    assert not state_file.exists()
+
+
+def test_workspace_scope_scan_roots_uses_only_selected_includes(tmp_path: Path) -> None:
+    root = tmp_path / "code"
+    agents = root / "agents"
+    app = root / "Applications" / "demo"
+    nested = agents / "child"
+    ignored = root / "node_modules"
+    for path in (agents, app, nested, ignored):
+        path.mkdir(parents=True)
+
+    roots = workspace_scope_scan_roots({
+        "root": str(root),
+        "included_paths": [str(nested), str(agents), str(app), str(ignored)],
+        "excluded_paths": [],
+    })
+
+    assert roots == [agents.resolve(), app.resolve()]
 
 
 def test_signal_tiering_demotes_low_signal_and_keeps_source_of_truth(tmp_path: Path) -> None:

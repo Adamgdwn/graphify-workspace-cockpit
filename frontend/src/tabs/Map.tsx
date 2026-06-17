@@ -9,6 +9,7 @@ import layoutUtilities from "cytoscape-layout-utilities";
 import { DECISION_CLASSIFICATIONS } from "../domain/decision";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
+import { WorkspaceScopePicker, type WorkspaceScopeProfile } from "../components/WorkspaceScopePicker";
 
 // ── Extension registration (once per page lifetime) ───────────────────────
 
@@ -103,6 +104,7 @@ type Filter = "all" | "code" | "document";
 type ViewMode = "summary" | "full";
 const FULL_GRAPH_NODE_LIMIT = 5000;
 type MapMode = "explore" | "trace" | "overlap" | "review";
+type ScopeGateState = "checking" | "ready" | "setup";
 
 const MAP_MODES: Array<{ id: MapMode; label: string; subLabel: string; hint: string; tooltip: string }> = [
   {
@@ -756,7 +758,7 @@ interface MapProps {
   onActiveContextChange?: ActiveCockpitContextHandler;
 }
 
-export function Map({ activeContext, onNavigateSettings, onActiveContextChange }: MapProps) {
+export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, onActiveContextChange }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const appliedContextKeyRef = useRef<string | null>(null);
@@ -815,6 +817,9 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   const [triageResults, setTriageResults] = useState<Record<string, TriageResult>>({});
   const [triaging, setTriaging] = useState<Record<string, boolean>>({});
   const [focusNotice, setFocusNotice] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
+  const [scopeGate, setScopeGate] = useState<ScopeGateState>("checking");
+  const [scopeGateReason, setScopeGateReason] = useState("Choose folders before generating a workspace map.");
+  const [workspaceProfile, setWorkspaceProfile] = useState<WorkspaceScopeProfile | null>(null);
 
   const showSemanticRef = useRef(false);
   const semanticEdgesRef = useRef<Array<{ source: string; target: string; similarity: number }>>([]);
@@ -1135,6 +1140,14 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
       const data: GraphSummary = await res.json();
       setSummary(data);
       setBreadcrumb(project ? [label || project] : []);
+      if (!project && data.total_nodes > FULL_GRAPH_NODE_LIMIT) {
+        setScopeGate("setup");
+        setScopeGateReason(
+          `The active graph has ${data.total_nodes.toLocaleString()} visible nodes, above the ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} browser-safe cap. Select a narrower scope and generate a fresh map.`,
+        );
+        return;
+      }
+      setScopeGate("ready");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1142,7 +1155,32 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     }
   }, []);
 
-  useEffect(() => { fetchSummary(); }, [fetchSummary]);
+  useEffect(() => {
+    let cancelled = false;
+    async function checkWorkspaceScope() {
+      setScopeGate("checking");
+      try {
+        const response = await apiFetch(`/workspace-scope`);
+        if (!response.ok) throw new Error(await apiErrorMessage(response));
+        const data = await response.json() as { profile: WorkspaceScopeProfile | null };
+        if (cancelled) return;
+        setWorkspaceProfile(data.profile);
+        if (!data.profile) {
+          setScopeGate("setup");
+          setScopeGateReason("No workspace scope is selected yet. Select folders, then generate the map.");
+          return;
+        }
+        setScopeGate("ready");
+        void fetchSummary();
+      } catch (e) {
+        if (cancelled) return;
+        setScopeGate("setup");
+        setScopeGateReason(e instanceof Error ? e.message : "Workspace scope is unavailable. Inspect a folder before generating the map.");
+      }
+    }
+    void checkWorkspaceScope();
+    return () => { cancelled = true; };
+  }, [fetchSummary]);
 
   const fetchFullGraph = useCallback(async () => {
     if (fullGraph && Boolean(fullGraph.include_low_signal) === showLowSignal) return; // already loaded
@@ -1748,6 +1786,55 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   const hiddenLowSignalCount = lowSignalCount(fullGraph, summary);
   const excludedFromScopeCount = excludedNodeCount(fullGraph, summary);
   const broadEvidenceDisabled = !fullGraph && (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
+
+  function handleScopeGenerated() {
+    setScopeGate("ready");
+    setScopeGateReason("");
+    setFullGraph(null);
+    setViewMode("summary");
+    setMapMode("explore");
+    setShowLowSignal(false);
+    setShowOverlap(false);
+    setShowSemantic(false);
+    setBreadcrumb([]);
+    void fetchSummary();
+  }
+
+  if (scopeGate === "checking") {
+    return (
+      <div className="map-pane">
+        <div className="map-startup-shell">
+          <div className="map-overlay map-startup-overlay">
+            <div className="map-spinner" />
+            <span>Checking workspace scope...</span>
+            <span className="map-overlay-sub">The map waits until scope is known.</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (scopeGate === "setup") {
+    return (
+      <div className="map-pane">
+        <div className="map-scope-gate">
+          <WorkspaceScopePicker
+            mode="startup"
+            title="Generate Workspace Map"
+            intro={scopeGateReason}
+            generateLabel="Generate Map"
+            onGenerated={handleScopeGenerated}
+            onProfileSaved={setWorkspaceProfile}
+          />
+          {workspaceProfile && (
+            <p className="settings-dim map-scope-existing">
+              Current saved profile: <span className="settings-mono">{workspaceProfile.profile_name}</span>
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const sourceSelector = clusterData && clusterData.available_clusters.length > 0 ? (
     <div className="map-source-control">

@@ -236,6 +236,9 @@ def _basic_exclusion_reasons(path: Path, root: Path) -> list[str]:
     if kind == "directory" and name in EXCLUDED_DIR_REASONS:
         reasons.append(EXCLUDED_DIR_REASONS[name])
 
+    if kind == "file" and name.lower() in LOCKFILE_NAMES:
+        reasons.append("Lockfiles are low-signal dependency state and are hidden from default maps.")
+
     if kind == "file" and path.suffix.lower() in MEDIA_EXTENSIONS:
         reasons.append("Binary or media bulk is excluded unless explicitly included.")
 
@@ -264,6 +267,8 @@ def _path_matches_default_exclusion(
     if any(left == "workspace" and right == "state" for left, right in zip(parts, parts[1:])):
         return True
     if _is_secret_like(path, root):
+        return True
+    if path.is_file() and name in LOCKFILE_NAMES:
         return True
     if path.suffix.lower() in MEDIA_EXTENSIONS:
         return True
@@ -503,6 +508,16 @@ def normalize_workspace_scope_profile(payload: dict) -> dict:
     exclude_patterns = payload.get("exclude_patterns", DEFAULT_EXCLUDE_PATTERNS)
     if not isinstance(exclude_patterns, list) or not all(isinstance(item, str) for item in exclude_patterns):
         raise WorkspaceScopeError("exclude_patterns must be a list of strings.")
+    normalized_exclude_patterns = list(dict.fromkeys(exclude_patterns))
+
+    if not normalized_included:
+        raise WorkspaceScopeError("Select at least one included folder before generating a workspace map.")
+    for path_text in normalized_included:
+        path = Path(path_text)
+        if not path.is_dir():
+            raise WorkspaceScopeError(f"included_paths must contain directories: {path}")
+        if _path_matches_default_exclusion(path, root_path, normalized_exclude_patterns):
+            raise WorkspaceScopeError(f"included_paths cannot include default-ignored paths: {path}")
 
     signal = payload.get("signal", {})
     if not isinstance(signal, dict):
@@ -519,7 +534,7 @@ def normalize_workspace_scope_profile(payload: dict) -> dict:
         "profile_name": profile_name.strip(),
         "included_paths": normalized_included,
         "excluded_paths": normalized_excluded,
-        "exclude_patterns": list(dict.fromkeys(exclude_patterns)),
+        "exclude_patterns": normalized_exclude_patterns,
         "signal": normalized_signal,
     }
 
@@ -557,7 +572,7 @@ def workspace_scope_scan_roots(profile: Mapping) -> list[Path]:
         for pattern in profile.get("exclude_patterns", DEFAULT_EXCLUDE_PATTERNS)
         if isinstance(pattern, str)
     ]
-    included = profile.get("included_paths") or [str(root)]
+    included = profile.get("included_paths") or []
     candidates: list[Path] = []
     for raw in included:
         path = Path(str(raw)).expanduser().resolve()
