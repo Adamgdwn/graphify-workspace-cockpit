@@ -1131,6 +1131,7 @@ export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, on
     setPathMode(false);
     setPathSource(null);
     setPathNoRoute(false);
+    setFocusNotice(null);
     try {
       const qs = project ? `?project=${encodeURIComponent(project)}` : "";
       const res = await apiFetch(`/graph/summary${qs}`);
@@ -1141,11 +1142,10 @@ export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, on
       setSummary(data);
       setBreadcrumb(project ? [label || project] : []);
       if (!project && data.total_nodes > FULL_GRAPH_NODE_LIMIT) {
-        setScopeGate("setup");
-        setScopeGateReason(
-          `The active graph has ${data.total_nodes.toLocaleString()} visible nodes, above the ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} browser-safe cap. Select a narrower scope and generate a fresh map.`,
-        );
-        return;
+        setFocusNotice({
+          tone: "warn",
+          text: `Overview is ready. Evidence view is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes, and this scope has ${data.total_nodes.toLocaleString()}. Select a narrower scope or drill into a smaller project before opening Evidence.`,
+        });
       }
       setScopeGate("ready");
     } catch (e) {
