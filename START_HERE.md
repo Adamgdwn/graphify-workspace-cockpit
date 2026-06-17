@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T22:53:06-06:00
-Status: stabilization plan boxed up; post-plan Map control polish pushed; current-build pathway archived
+Last Updated: 2026-06-16T23:02:47-06:00
+Status: stabilization complete; workspace scope and signal plan is next; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -11,9 +11,10 @@ default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/stabilization-plan.md`.
-4. Load only the files named in the selected stabilization chunk.
-5. Open `docs/current-build-pathway.md` only when investigating old chunk
+3. Read `docs/workspace-scope-and-signal-plan.md`.
+4. Start with Chunk 1 unless Adam redirects.
+5. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
+6. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
@@ -24,8 +25,8 @@ decision surface with seven tabs (`Command`, `Ask`, `Map`, `Decisions`,
 overlay. The prior decision-tool polish path is integration complete and now
 archived in `docs/current-build-pathway.md`.
 
-The active next path is controlled hosted beta stabilization in
-`docs/stabilization-plan.md`. Chunk 1 is task complete: graph schema handling now
+The controlled hosted beta stabilization path in `docs/stabilization-plan.md`
+is complete. Chunk 1 is task complete: graph schema handling now
 normalizes `links` and legacy/internal `edges`, Settings counts both shapes
 correctly, connector ingest emits canonical `links`, and backend contract tests
 exist for this slice. Chunk 2 is task complete: Settings now calls
@@ -76,9 +77,12 @@ controls are now visible together, while the top mode presets carry clearer
 sublabels and hover/focus explanations. The UI polish commit is
 `c27d433 Expose map connection controls`.
 
-No next implementation chunk is queued in this stabilization plan. The next
-natural step is owner hands-on testing and a video-readiness smoke pass; project
-completion or new follow-up scope remains an owner decision.
+The next active plan is
+`docs/workspace-scope-and-signal-plan.md`: select a parent folder, represent
+repos/projects as a tree, exclude noisy/generated/secret-like paths, hide
+low-signal files by default, and keep the cockpit focused on token-saving build
+intelligence: overlaps, gaps, important insights, and compact future-build
+context.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -97,7 +101,8 @@ Open owner-review flags before future implementation:
 
 | What | Where |
 |------|-------|
-| Active stabilization plan | `docs/stabilization-plan.md` |
+| Active workspace scope + signal plan | `docs/workspace-scope-and-signal-plan.md` |
+| Completed stabilization plan | `docs/stabilization-plan.md` |
 | Archived build history | `docs/current-build-pathway.md` — superseded for startup |
 | Architecture + ADRs | `docs/architecture.md` |
 | Roadmap and non-goals | `docs/roadmap.md` |
@@ -109,8 +114,8 @@ Open owner-review flags before future implementation:
 ## To Resume
 
 1. `git status --short` — preserve unrelated work.
-2. Read `docs/stabilization-plan.md`.
-3. Pick or confirm the next stabilization chunk.
+2. Read `docs/workspace-scope-and-signal-plan.md`.
+3. Start with Chunk 1 unless Adam redirects.
 4. Load only the files named in that chunk.
 5. Use `docs/context-map.md` if routing is still unclear.
 
@@ -137,6 +142,6 @@ tool use, governance changes, release readiness.
 ## Agent Handoff
 
 Update this file only when the top-level plan or pause state changes. Put
-detailed stabilization progress in `docs/stabilization-plan.md`. Treat
-`docs/current-build-pathway.md` as an archived historical record unless Adam
-explicitly asks to reopen it.
+workspace scope and signal progress in `docs/workspace-scope-and-signal-plan.md`.
+Treat `docs/stabilization-plan.md` and `docs/current-build-pathway.md` as
+historical records unless Adam explicitly asks to reopen them.

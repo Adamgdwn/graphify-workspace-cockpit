@@ -8,10 +8,11 @@ generated output or old pathway history.
 1. `git status --short`
 2. `AGENTS.md`
 3. `START_HERE.md` for material work or active-plan continuation
-4. `docs/stabilization-plan.md` for the current chunk
+4. `docs/workspace-scope-and-signal-plan.md` for the current chunk
 5. Only the files named by the selected chunk
 
 Use `docs/context-map.md` when routing is unclear. Use
+`docs/stabilization-plan.md` only for completed stabilization evidence. Use
 `docs/current-build-pathway.md` only for archived 0-to-1 build evidence,
 regression history, or validation details from the original build.
 
