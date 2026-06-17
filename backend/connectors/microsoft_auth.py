@@ -13,6 +13,11 @@ import json
 import os
 from pathlib import Path
 
+try:
+    from backend.state_store import write_json_atomic
+except ModuleNotFoundError:
+    from state_store import write_json_atomic
+
 MICROSOFT_CLIENT_ID = os.environ.get("MICROSOFT_CLIENT_ID", "")
 MICROSOFT_TENANT_ID = os.environ.get("MICROSOFT_TENANT_ID", "common")
 
@@ -53,7 +58,7 @@ def _get_app(state_dir: Path):
 
 def _persist(cache, cache_path: Path) -> None:
     if cache.has_state_changed:
-        cache_path.write_text(cache.serialize())
+        write_json_atomic(cache_path, json.loads(cache.serialize()))
 
 
 def is_configured() -> bool:
@@ -91,7 +96,7 @@ def start_device_flow(state_dir: Path) -> dict:
             f"Device flow error: {flow.get('error_description', flow['error'])}"
         )
     flow_path = _tokens_dir(state_dir) / "microsoft_flow.json"
-    flow_path.write_text(json.dumps(flow))
+    write_json_atomic(flow_path, flow)
     return {
         "user_code": flow["user_code"],
         "verification_uri": flow["verification_uri"],

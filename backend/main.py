@@ -33,6 +33,7 @@ try:
         run_graphify_merge,
         run_graphify_update,
     )
+    from backend.state_store import write_json_atomic
 except ModuleNotFoundError:
     from graph_schema import GraphValidationError, count_links, normalize_graph
     from services.graphify_service import (
@@ -43,6 +44,7 @@ except ModuleNotFoundError:
         run_graphify_merge,
         run_graphify_update,
     )
+    from state_store import write_json_atomic
 
 _STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
 WORKSPACE_STATE = (
@@ -224,8 +226,7 @@ def _track_device(user_id: str) -> None:
             except Exception:
                 pass
         devices[user_id] = datetime.now(tz=timezone.utc).isoformat()
-        WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
-        DEVICES_FILE.write_text(json.dumps(devices, indent=2))
+        write_json_atomic(DEVICES_FILE, devices)
     except Exception:
         pass
 
@@ -274,17 +275,6 @@ def _graph_path() -> str:
         except Exception:
             pass
     return DEFAULT_GRAPH
-
-
-def _write_json_atomic(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        tmp_path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-        tmp_path.replace(path)
-    finally:
-        if tmp_path.exists():
-            tmp_path.unlink()
 
 
 def _safe_graph_upload_name(filename: str | None) -> str:
@@ -421,8 +411,7 @@ def _load_cluster_selection() -> dict:
 
 
 def _save_cluster_selection(sel: dict) -> None:
-    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
-    CLUSTER_SELECTION_FILE.write_text(json.dumps(sel, indent=2))
+    write_json_atomic(CLUSTER_SELECTION_FILE, sel)
 
 
 def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] | None) -> bool:
@@ -516,7 +505,6 @@ def ask(req: AskRequest) -> AskResponse:
     session_id = str(uuid.uuid4())
 
     # Save session transcript
-    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
     transcript = {
         "session_id": session_id,
         "timestamp": datetime.now(tz=timezone.utc).isoformat(),
@@ -530,9 +518,7 @@ def ask(req: AskRequest) -> AskResponse:
         "evidence": evidence,
         "suggestions": suggestions,
     }
-    (SESSIONS_DIR / f"{session_id}.json").write_text(
-        json.dumps(transcript, indent=2)
-    )
+    write_json_atomic(SESSIONS_DIR / f"{session_id}.json", transcript)
     _prune_sessions()
 
     return AskResponse(
@@ -908,7 +894,7 @@ def _load_decisions() -> list[dict]:
 def _save_decisions(decisions: list[dict]) -> None:
     if _supabase_client:
         return  # Supabase mode uses _upsert_decision per-record
-    DECISIONS_FILE.write_text(json.dumps(decisions, indent=2))
+    write_json_atomic(DECISIONS_FILE, decisions)
 
 
 def _upsert_decision(record: dict) -> None:
@@ -1023,8 +1009,7 @@ def _save_recommendation(rec: dict) -> None:
     if _supabase_client:
         _supabase_client.table("recommendations").upsert(rec).execute()
         return
-    RECOMMENDATIONS_DIR.mkdir(parents=True, exist_ok=True)
-    (RECOMMENDATIONS_DIR / f"{rec['id']}.json").write_text(json.dumps(rec, indent=2))
+    write_json_atomic(RECOMMENDATIONS_DIR / f"{rec['id']}.json", rec)
 
 
 def _load_recommendation(rec_id: str) -> dict | None:
@@ -1575,8 +1560,7 @@ def _save_action(action: dict) -> None:
     if _supabase_client:
         _supabase_client.table("actions").upsert(action).execute()
         return
-    ACTION_QUEUE_DIR.mkdir(parents=True, exist_ok=True)
-    (ACTION_QUEUE_DIR / f"{action['id']}.json").write_text(json.dumps(action, indent=2))
+    write_json_atomic(ACTION_QUEUE_DIR / f"{action['id']}.json", action)
 
 
 def _load_action(action_id: str) -> dict | None:
@@ -1946,7 +1930,7 @@ async def upload_graph(file: UploadFile = File(...)) -> dict:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Graph filename is not safe.") from exc
 
-    _write_json_atomic(dest, normalized)
+    write_json_atomic(dest, normalized)
     settings: dict = {}
     if SETTINGS_FILE.exists():
         try:
@@ -1954,8 +1938,7 @@ async def upload_graph(file: UploadFile = File(...)) -> dict:
         except Exception:
             pass
     settings["graph_path"] = str(dest)
-    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+    write_json_atomic(SETTINGS_FILE, settings)
     _graph_cache = None
     _summary_cache = {}
     return {
@@ -2051,8 +2034,7 @@ def activate_graph(name: str) -> dict:
         except Exception:
             pass
     settings["graph_path"] = str(candidate)
-    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
-    SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+    write_json_atomic(SETTINGS_FILE, settings)
     _graph_cache = None
     _summary_cache = {}
     return {"activated": name, "path": str(candidate)}
@@ -2185,7 +2167,7 @@ def _run_rebuild() -> None:
                 except Exception:
                     pass
             settings["graph_path"] = str(out_path)
-            SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+            write_json_atomic(SETTINGS_FILE, settings)
 
         _graph_cache = None
         _summary_cache = {}
@@ -2250,8 +2232,7 @@ def _load_scan_dirs() -> list[str]:
 
 
 def _save_scan_dirs(dirs: list[str]) -> None:
-    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
-    SCAN_DIRS_FILE.write_text(json.dumps(dirs, indent=2))
+    write_json_atomic(SCAN_DIRS_FILE, dirs)
 
 
 @app.get("/graph/scan-dirs")
@@ -2310,6 +2291,20 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b))
     mag = (sum(x * x for x in a) ** 0.5) * (sum(x * x for x in b) ** 0.5)
     return dot / mag if mag else 0.0
+
+
+def _save_semantic_edges(
+    semantic_edges: list[dict],
+    model: str,
+    threshold: float,
+    created_at: str,
+) -> None:
+    write_json_atomic(SEMANTIC_EDGES_FILE, {
+        "edges": semantic_edges,
+        "model": model,
+        "threshold": threshold,
+        "created_at": created_at,
+    })
 
 
 def _run_semantic_pass(model: str, threshold: float) -> None:
@@ -2377,14 +2372,8 @@ def _run_semantic_pass(model: str, threshold: float) -> None:
                             "relation": "semantic_similar",
                         })
 
-        WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
         ts = datetime.now(tz=timezone.utc).isoformat()
-        SEMANTIC_EDGES_FILE.write_text(json.dumps({
-            "edges": semantic_edges,
-            "model": model,
-            "threshold": threshold,
-            "created_at": ts,
-        }, indent=2))
+        _save_semantic_edges(semantic_edges, model, threshold, ts)
 
         _SEMANTIC_STATUS.update({
             "status": "complete",
@@ -2814,8 +2803,7 @@ def _load_overlap_statuses() -> dict[str, dict]:
 
 
 def _save_overlap_statuses(statuses: dict[str, dict]) -> None:
-    OVERLAP_STATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    OVERLAP_STATUS_FILE.write_text(json.dumps(statuses, indent=2))
+    write_json_atomic(OVERLAP_STATUS_FILE, statuses)
 
 
 @app.get("/overlap/status")
@@ -3062,7 +3050,6 @@ def _load_connector_config() -> dict:
 
 
 def _connector_status_path() -> Path:
-    CONNECTORS_DIR.mkdir(parents=True, exist_ok=True)
     return CONNECTORS_DIR / "sync-status.json"
 
 
@@ -3077,7 +3064,7 @@ def _load_sync_status() -> dict:
 
 
 def _save_sync_status(status: dict) -> None:
-    _connector_status_path().write_text(json.dumps(status, indent=2))
+    write_json_atomic(_connector_status_path(), status)
 
 
 def _run_connector_sync(connector_id: str) -> None:
@@ -3122,8 +3109,7 @@ def _run_connector_sync(connector_id: str) -> None:
                 except Exception:
                     pass
             settings["graph_path"] = str(new_graph)
-            WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
-            SETTINGS_FILE.write_text(json.dumps(settings, indent=2))
+            write_json_atomic(SETTINGS_FILE, settings)
             _graph_cache = None
             _summary_cache = {}
 
@@ -3279,8 +3265,7 @@ def update_chat_config(req: ChatConfigBody) -> dict:
     config["system_prompt"] = req.system_prompt
     if req.model is not None:
         config["model"] = req.model.strip() or RECOMMEND_MODEL_DEFAULT
-    WORKSPACE_STATE.mkdir(parents=True, exist_ok=True)
-    CHAT_CONFIG_FILE.write_text(json.dumps(config, indent=2))
+    write_json_atomic(CHAT_CONFIG_FILE, config)
     return config
 
 
@@ -3310,16 +3295,16 @@ def chat_stream(req: ChatRequest):
     messages.append({"role": "user", "content": req.message})
 
     session_id = str(uuid.uuid4())
-    CHAT_SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-    (CHAT_SESSIONS_DIR / f"{session_id}.json").write_text(
-        json.dumps({
+    write_json_atomic(
+        CHAT_SESSIONS_DIR / f"{session_id}.json",
+        {
             "session_id": session_id,
             "timestamp": datetime.now(tz=timezone.utc).isoformat(),
             "message": req.message,
             "history_len": len(req.history),
             "nodes_used": nodes_used,
             "model": model,
-        }, indent=2)
+        },
     )
     _prune_chat_sessions()
 

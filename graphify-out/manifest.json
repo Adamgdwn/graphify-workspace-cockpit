@@ -1,7 +1,7 @@
 {
   "backend/main.py": {
-    "mtime": 1781659194.035947,
-    "ast_hash": "dd70b410a37291a1c6b7283e986e6a13",
+    "mtime": 1781660323.659632,
+    "ast_hash": "d389def1c782fe4624c3eecf22d1bb2e",
     "semantic_hash": ""
   },
   "db/migrations/001_initial.sql": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "START_HERE.md": {
-    "mtime": 1781659342.493747,
-    "ast_hash": "ead75b86ef40e71c26d1a0973b5dceb1",
+    "mtime": 1781660292.5002546,
+    "ast_hash": "c93267ad7cdde12e47b565090d02be5b",
     "semantic_hash": ""
   },
   "backend/prompts/recommend_archive.txt": {
@@ -300,13 +300,13 @@
     "semantic_hash": ""
   },
   "backend/connectors/ingest.py": {
-    "mtime": 1781653727.9469888,
-    "ast_hash": "7b14d4a053d3b49f48f3ce6feefcbd68",
+    "mtime": 1781660086.121755,
+    "ast_hash": "208a571ad4f5ea2382c38859d83d0f70",
     "semantic_hash": ""
   },
   "backend/connectors/microsoft_auth.py": {
-    "mtime": 1781477310.8371155,
-    "ast_hash": "b08d9814f4d4515936bed7533a9f4264",
+    "mtime": 1781660092.578833,
+    "ast_hash": "3ed1422461d18bf0e10bc2a8c131c3e0",
     "semantic_hash": ""
   },
   "backend/connectors/onenote.py": {
@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781659342.488747,
-    "ast_hash": "c24419a84c91b31a30c9d79b174ba11a",
+    "mtime": 1781660282.9351387,
+    "ast_hash": "179deeaaf60254de941d7cc56a7c709f",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {
@@ -462,6 +462,16 @@
   "tests/test_graph_upload.py": {
     "mtime": 1781659157.3435023,
     "ast_hash": "bc8ec96940ff462d9d796c48438925d4",
+    "semantic_hash": ""
+  },
+  "backend/state_store.py": {
+    "mtime": 1781660040.897207,
+    "ast_hash": "f65b239bb92ab1e513715d8015ca0d0f",
+    "semantic_hash": ""
+  },
+  "tests/test_clean_state.py": {
+    "mtime": 1781660198.4721158,
+    "ast_hash": "4348c2daa82e79e1c6c5526157537923",
     "semantic_hash": ""
   }
 }

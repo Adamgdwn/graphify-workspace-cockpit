@@ -14,8 +14,10 @@ from pathlib import Path
 
 try:
     from backend.graph_schema import normalize_graph
+    from backend.state_store import write_json_atomic
 except ModuleNotFoundError:
     from graph_schema import normalize_graph
+    from state_store import write_json_atomic
 
 _STOP = frozenset({
     "the", "and", "for", "this", "that", "with", "from", "are", "was",
@@ -98,6 +100,5 @@ def merge_nodes_into_graph(
 
     ts = datetime.now(tz=timezone.utc).strftime("%Y%m%dT%H%M%S")
     out_path = graphs_dir / f"cloud-merged-{ts}.json"
-    graphs_dir.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(merged, indent=2))
+    write_json_atomic(out_path, merged)
     return out_path

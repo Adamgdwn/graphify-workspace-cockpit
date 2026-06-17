@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T19:21:41-06:00
-Status: active plan - Chunk 5 task complete; next recommended chunk is Chunk 6 Atomic State Writes and Clean-State Safety
+Last Updated: 2026-06-16T19:37:26-06:00
+Status: active plan - Chunk 6 task complete; next recommended chunk is Chunk 7 Caddy and Deployment Routing Fix
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -39,7 +39,6 @@ Preserve the current product while hardening it. The seven-tab workflow
 P0 - blocks hosted beta:
 
 - Caddy handles the frontend catch-all before `/api/*`, so hosted API routing can fail.
-- Clean first-run JSON state writes are scattered and not uniformly parent-safe or atomic.
 - Backend tests now exist, but coverage is still partial until the remaining P0
   backend contracts are added.
 
@@ -79,6 +78,16 @@ Resolved in Chunk 5:
   `links`, written atomically inside `GRAPHS_DIR`, and only activated after
   validation. Existing graph activation now rejects invalid graph files before
   switching Settings state.
+
+Resolved in Chunk 6:
+
+- Local JSON state writes now go through `backend/state_store.py` atomic
+  same-directory replacement with parent creation. Decisions, recommendations,
+  actions, settings, sessions, connector sync status, Microsoft auth cache/flow
+  JSON, graph uploads, scan dirs, semantic edges, overlap statuses, cluster
+  selection, device tracking, and chat config/session metadata use the helper.
+  Clean empty-state tests cover the persisted local file surfaces without
+  calling network-backed Graphify or Ollama paths.
 
 P1 - beta confidence:
 
@@ -145,6 +154,9 @@ Baseline evidence gathered on 2026-06-16:
 - Graph upload route: `POST /graph/upload` in `backend/main.py`, now sanitizes
   file names, validates and normalizes graph JSON, writes atomically under
   `GRAPHS_DIR`, and activates only after successful validation.
+- Local state writes: `backend/state_store.py` owns atomic JSON replacement for
+  the file backend, and `tests/test_clean_state.py` covers fresh empty-state
+  writes for the main persisted surfaces.
 - Caddy route file: `config/Caddyfile`, currently handles frontend catch-all
   before `/api/*`.
 - Supabase migration: `db/migrations/001_initial.sql`, missing newer optional
@@ -379,6 +391,8 @@ Validation completed:
 - Passed after starting with `bash scripts/start.sh`:
   `source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs`
   — 8 smoke checks passed.
+- Passed: `graphify update . --no-cluster` rebuilt `graphify-out/graph.json`
+  with 1131 nodes and 29146 edges.
 - Verified: `curl http://localhost:8000/health` exposed
   `graph_loaded: true` and `graphify.available: true`.
 - Verified: `curl http://localhost:8000/settings` exposed Graphify runtime
@@ -559,6 +573,10 @@ Token/context warning: Do not inspect real private graph files.
 
 ### Chunk 6: Atomic State Writes and Clean-State Safety
 
+Status: **task complete** — 2026-06-16T19:37:26-06:00
+
+Completion target: Task complete
+
 Goal: Prevent fresh deployments from failing or corrupting local JSON state.
 
 Why this matters: First-run reliability is core beta readiness, and state writes
@@ -589,12 +607,37 @@ python -m compileall -q backend
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 ```
 
+Implementation completed:
+
+- Added `backend/state_store.py` with atomic same-directory JSON replacement and
+  parent directory creation.
+- Converted local JSON writes in `backend/main.py`,
+  `backend/connectors/ingest.py`, and `backend/connectors/microsoft_auth.py` to
+  the helper. Non-JSON approved action note creation remains a direct text
+  write because it is user content, not JSON state.
+- Added `tests/test_clean_state.py` covering a missing state directory for graph
+  upload/settings, decisions/device tracking, recommendations, actions, cluster
+  selection, scan dirs, overlap status, semantic edges, connector sync status,
+  Ask transcript storage, and chat config.
+- No `write_bytes_atomic` was added; upload hardening stores normalized graph
+  JSON through the shared atomic JSON helper.
+
+Validation completed:
+
+- Passed: `bash scripts/governance-preflight.sh` with 0 warnings.
+- Passed: `backend/.venv/bin/python -m pytest tests/test_clean_state.py` — 2 tests passed.
+- Passed: `backend/.venv/bin/python -m pytest` — 35 tests passed.
+- Passed: `backend/.venv/bin/python -m compileall -q backend`.
+- Passed after starting with `bash scripts/start.sh`:
+  `source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs`
+  — 8 smoke checks passed.
+
 Acceptance criteria:
 
-- Fresh empty state directory can write settings, decisions, recommendations,
+- [x] Fresh empty state directory can write settings, decisions, recommendations,
   actions, missions if applicable, overlap status, semantic edges, scan dirs, and chat config.
-- JSON writes are atomic for local file backend.
-- Existing local demo state can still be read after the helper conversion.
+- [x] JSON writes are atomic for local file backend.
+- [x] Existing local demo state can still be read after the helper conversion.
 
 Rollback note: Restore specific caller writes only if helper introduces a
 regression; keep parent-directory creation fixes.
