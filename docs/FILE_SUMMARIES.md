@@ -22,10 +22,20 @@ target file only when the current task needs its details.
 
 | Path | Summary |
 |---|---|
-| `backend/main.py` | FastAPI app, routes, runtime status, graph upload/activation, recommendations, actions, chat, and settings. Large file: search first. |
+| `backend/main.py` | Import-compatible FastAPI facade plus remaining graph/settings/recommendation/action/mission/rebuild/overlap behavior. Large file: search first. |
+| `backend/app.py` | FastAPI construction, rate limiting, CORS, and API-key middleware registration. |
+| `backend/auth.py` | API-key middleware with dynamic config callbacks for tests/runtime patching. |
+| `backend/config.py` | Backend path, env, graph, API-key, CORS, and secret-marker defaults. |
 | `backend/graph_schema.py` | Shared graph validation and normalization helpers for `nodes`, canonical `links`, and legacy/internal `edges`. |
 | `backend/state_store.py` | Atomic JSON write helpers for local persisted state. |
+| `backend/storage_status.py` | File/Supabase storage readiness and required-schema-column warnings. |
 | `backend/services/graphify_service.py` | Graphify CLI availability, command execution, timeouts, and structured errors. |
+| `backend/routes/ask.py` | Ask endpoint, Graphify output parsing, evidence filtering, and session transcript writes. |
+| `backend/routes/chat.py` | In-cockpit assistant config and SSE chat streaming route. |
+| `backend/routes/cluster_selection.py` | Source/cluster selection route and available-cluster/source calculation. |
+| `backend/routes/connectors.py` | Microsoft connector auth, sync status, and background SharePoint/OneNote sync routes. |
+| `backend/routes/decisions.py` | Decision ledger storage helpers and routes. |
+| `backend/routes/runtime.py` | Health and runtime readiness response builders and routes. |
 | `backend/connectors/base.py` | Connector item models plus shared graph node/link contract helpers. |
 | `backend/connectors/ingest.py` | Merges connector data into active graph files with canonical links. |
 | `backend/connectors/sharepoint.py` | SharePoint adapter and graph node conversion. |
@@ -74,7 +84,7 @@ target file only when the current task needs its details.
 | `docs/architecture.md` | Full architecture overview and data flow narrative. |
 | `docs/ARCHITECTURE_MAP.md` | Concise source routing map for implementation work. |
 | `docs/FILE_SUMMARIES.md` | This context-saving guide to important files and generated/local-only paths. |
-| `docs/KNOWN_ISSUES.md` | Current known limitations and owner-review gates. |
+| `docs/KNOWN_ISSUES.md` | Current known limitations, owner-review gates, and post-stabilization notes. |
 | `docs/deployment-guide.md` | Hosted deployment and environment guidance. |
 | `docs/runbook.md` | Operator procedures and smoke checks. |
 | `docs/manual.md` | User/operator manual. |

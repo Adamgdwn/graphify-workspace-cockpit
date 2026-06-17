@@ -9,8 +9,10 @@ The detailed implementation history lives in `docs/stabilization-plan.md`.
 
 ## Active Technical Debt
 
-- `backend/main.py` is still large. Chunk 13 is the planned module-split pass,
-  after the contract tests added in earlier stabilization chunks.
+- `backend/main.py` is still a large compatibility facade, but Chunk 13 moved
+  config, app construction, auth, storage readiness, and several route groups
+  into dedicated modules. Split remaining graph/settings/recommendation/action/
+  mission/rebuild/overlap areas only when future work touches them.
 - `docs/standards/README.md` references supporting standards that are not all
   present in this repo. Use the local files first, then the governance source
   repo only if a missing standard is task-critical.
@@ -33,7 +35,6 @@ The detailed implementation history lives in `docs/stabilization-plan.md`.
 
 ## Current Next Work
 
-- Continue with `docs/stabilization-plan.md`, currently moving from Chunk 12 to
-  Chunk 13.
-- Keep future chunks bounded and update `START_HERE.md` plus the active plan
-  when status changes.
+- No next implementation chunk is queued in `docs/stabilization-plan.md`.
+- Future follow-up scope should be owner-selected, bounded, and recorded in
+  `START_HERE.md` plus the active plan or a new plan.

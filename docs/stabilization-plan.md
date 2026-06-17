@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T22:15:25-06:00
-Status: active plan - Chunk 12 task complete; next recommended chunk is Chunk 13 Backend Module Split Plan
+Last Updated: 2026-06-16T22:38:07-06:00
+Status: active plan - Chunk 13 task complete; no next implementation chunk queued in this plan
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -141,9 +141,21 @@ Resolved in Chunk 12:
   short routing summaries so they can avoid generated output, local state,
   archived build history, and broad `backend/main.py` reads unless needed.
 
+Resolved in Chunk 13:
+
+- `backend/main.py` is now an import-compatible FastAPI facade under 3,000
+  lines. Config, app construction, API-key middleware, storage readiness, and
+  bounded route groups for health/runtime, Ask, Decisions, cluster selection,
+  connectors, and chat live in dedicated backend modules. Backend contract
+  tests and live `uvicorn backend.main:app` health/runtime smoke validation
+  passed after the split.
+
 P1 - beta confidence:
 
-- `backend/main.py` is large enough that behavior changes are hard to review.
+- No active P1 blockers remain for the scoped stabilization plan. The backend
+  facade still carries graph, settings, recommendations, actions, missions,
+  semantic overlap, and rebuild behavior; continue splitting those areas only
+  as future feature work touches them.
 
 Governance flag: `project-control.yaml` classifies this as `AI agent with tools`
 while selected `risk_tier` is `low` and `governance_level` is `1`. Per local
@@ -1175,6 +1187,10 @@ Token/context warning: Do not duplicate long existing docs.
 
 ### Chunk 13: Backend Module Split Plan
 
+Status: **task complete** — 2026-06-16T22:38:07-06:00
+
+Completion target: Task complete
+
 Goal: Reduce `backend/main.py` complexity after tests exist.
 
 Why this matters: `backend/main.py` is over 3,000 lines, making risk-sensitive
@@ -1207,13 +1223,53 @@ curl http://127.0.0.1:8000/health
 
 Acceptance criteria:
 
-- Routes behave the same after move.
-- Tests pass before and after split.
-- `uvicorn backend.main:app` still works.
+- [x] Routes behave the same after move.
+- [x] Tests pass before and after split.
+- [x] `uvicorn backend.main:app` still works.
+
+Implementation notes:
+
+- Added `backend/config.py`, `backend/app.py`, `backend/auth.py`, and
+  `backend/storage_status.py` for runtime configuration, FastAPI construction,
+  API-key middleware, and Supabase/file storage readiness.
+- Added bounded route modules under `backend/routes/` for Ask, runtime/health,
+  Decisions, cluster selection, connectors, and chat.
+- Kept `backend.main:app` import-compatible and preserved `backend.main`
+  wrappers for existing tests and local callers that patch helpers such as
+  `_storage_status`, `_save_sync_status`, `_load_decisions`,
+  `update_chat_config`, and route endpoint functions.
+- Reduced `backend/main.py` from 3,627 lines before the chunk to 2,970 lines
+  after import cleanup, while leaving graph upload/settings/recommendation/
+  action/mission/rebuild/overlap behavior unchanged.
+
+Validation evidence:
+
+```bash
+bash scripts/governance-preflight.sh
+# passed with 0 warnings
+
+backend/.venv/bin/python -m pytest
+# 48 passed, 3 known deprecation warnings
+
+backend/.venv/bin/python -m compileall -q backend
+# passed
+
+backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8765
+curl -sS -f http://127.0.0.1:8765/health
+# 200 OK; status ok, backend version 0.1.0, storage ready
+
+curl -sS -f http://127.0.0.1:8765/runtime/status
+# 200 OK; state ready in the local runtime
+
+graphify update . --no-cluster
+# rebuilt ignored local graphify-out graph: 1314 nodes, 37039 edges
+```
 
 Rollback note: Move-only refactor must be easy to revert as one PR.
 
-Token/context warning: Large refactor. Do only after chunks 1-10 are stable.
+Token/context warning: Future backend edits should start from the route modules
+or wrappers named above, and only open broad `backend/main.py` ranges when the
+remaining facade-owned behavior is directly involved.
 
 ## 6. Validation Matrix
 

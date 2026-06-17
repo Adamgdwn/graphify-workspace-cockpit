@@ -13,18 +13,22 @@ from typing import Literal, Optional
 
 import hashlib
 
-from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
-from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
-from starlette.middleware.base import BaseHTTPMiddleware
 
 try:
+    from backend import config as _config
+    from backend.app import create_app
+    from backend.auth import APIKeyMiddleware
     from backend.graph_schema import GraphValidationError, count_links, normalize_graph
+    from backend.routes import ask as _ask_routes
+    from backend.routes import chat as _chat_routes
+    from backend.routes import cluster_selection as _cluster_selection_routes
+    from backend.routes import connectors as _connector_routes
+    from backend.routes import decisions as _decision_routes
+    from backend.routes import runtime as _runtime_routes
     from backend.services.graphify_service import (
         GRAPHIFY_MISSING,
         GraphifyServiceError,
@@ -34,8 +38,18 @@ try:
         run_graphify_update,
     )
     from backend.state_store import write_json_atomic
+    from backend.storage_status import StorageStatusProvider, safe_error_message
 except ModuleNotFoundError:
+    import config as _config
+    from app import create_app
+    from auth import APIKeyMiddleware
     from graph_schema import GraphValidationError, count_links, normalize_graph
+    from routes import ask as _ask_routes
+    from routes import chat as _chat_routes
+    from routes import cluster_selection as _cluster_selection_routes
+    from routes import connectors as _connector_routes
+    from routes import decisions as _decision_routes
+    from routes import runtime as _runtime_routes
     from services.graphify_service import (
         GRAPHIFY_MISSING,
         GraphifyServiceError,
@@ -45,37 +59,91 @@ except ModuleNotFoundError:
         run_graphify_update,
     )
     from state_store import write_json_atomic
+    from storage_status import StorageStatusProvider, safe_error_message
 
-_STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
-WORKSPACE_STATE = (
-    Path(_STATE_DIR_ENV) if _STATE_DIR_ENV
-    else Path(__file__).parent.parent / "workspace" / "state"
-)
-SESSIONS_DIR = WORKSPACE_STATE / "sessions"
-SETTINGS_FILE = WORKSPACE_STATE / "settings.json"
-DECISIONS_FILE = WORKSPACE_STATE / "decisions.json"
-GRAPHS_DIR = WORKSPACE_STATE / "graphs"
-DEVICES_FILE = WORKSPACE_STATE / "devices.json"
-CONNECTORS_DIR = WORKSPACE_STATE / "connectors"
-CLUSTER_SELECTION_FILE = WORKSPACE_STATE / "cluster-selection.json"
-CHAT_CONFIG_FILE      = WORKSPACE_STATE / "chat-config.json"
-CHAT_SESSIONS_DIR     = WORKSPACE_STATE / "chat-sessions"
-SCAN_DIRS_FILE        = WORKSPACE_STATE / "scan-dirs.json"
-SEMANTIC_EDGES_FILE   = WORKSPACE_STATE / "semantic-edges.json"
-OVERLAP_STATUS_FILE   = WORKSPACE_STATE / "overlap-status.json"
-_CHAT_DEFAULT_SYSTEM_PROMPT = (
-    "You are an assistant with access to the user's knowledge graph. "
-    "Answer based on the provided graph context. "
-    "If the answer is not in the graph, say so."
-)
-_USERS_FILE = Path(__file__).parent.parent / "config" / "users.json"
+AskDeps = _ask_routes.AskDeps
+AskRequest = _ask_routes.AskRequest
+AskResponse = _ask_routes.AskResponse
+EvidenceNode = _ask_routes.EvidenceNode
+Mode = _ask_routes.Mode
+create_ask_router = _ask_routes.create_ask_router
+parse_explain_output = _ask_routes.parse_explain_output
+parse_path_output = _ask_routes.parse_path_output
+parse_query_output = _ask_routes.parse_query_output
+suggestions = _ask_routes.suggestions
 
-_DEMO_GRAPH = str(Path(__file__).parent.parent / "workspace" / "demo" / "graph.json")
-DEFAULT_GRAPH = os.environ.get("GRAPH_PATH", _DEMO_GRAPH)
-API_KEY = os.environ.get("API_KEY", "")
-GRAPH_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
+ChatConfigBody = _chat_routes.ChatConfigBody
+ChatDeps = _chat_routes.ChatDeps
+_ChatMsgModel = _chat_routes.ChatMsgModel
+ChatRequest = _chat_routes.ChatRequest
+create_chat_router = _chat_routes.create_chat_router
 
-STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "file")  # "file" | "supabase"
+ClusterSelectionBody = _cluster_selection_routes.ClusterSelectionBody
+ClusterSelectionDeps = _cluster_selection_routes.ClusterSelectionDeps
+create_cluster_selection_router = _cluster_selection_routes.create_cluster_selection_router
+
+CONNECTOR_CONFIG_PATH = _connector_routes.CONNECTOR_CONFIG_PATH
+SYNC_LOCK = _connector_routes.SYNC_LOCK
+SYNC_STATUS = _connector_routes.SYNC_STATUS
+ConnectorDeps = _connector_routes.ConnectorDeps
+_route_connector_status_path = _connector_routes.connector_status_path
+_route_connector_sync_status = _connector_routes.connector_sync_status
+create_connectors_router = _connector_routes.create_connectors_router
+is_microsoft_authenticated = _connector_routes.is_microsoft_authenticated
+_route_list_connectors = _connector_routes.list_connectors
+_route_load_connector_config = _connector_routes.load_connector_config
+_route_load_sync_status = _connector_routes.load_sync_status
+_route_poll_microsoft_auth = _connector_routes.poll_microsoft_auth
+_route_revoke_connector_auth = _connector_routes.revoke_connector_auth
+_route_run_connector_sync = _connector_routes.run_connector_sync
+_route_save_sync_status = _connector_routes.save_sync_status
+_route_start_microsoft_auth = _connector_routes.start_microsoft_auth
+_route_sync_connector = _connector_routes.sync_connector
+
+CreateDecisionRequest = _decision_routes.CreateDecisionRequest
+DecisionClassification = _decision_routes.DecisionClassification
+DecisionDeps = _decision_routes.DecisionDeps
+PatchDecisionRequest = _decision_routes.PatchDecisionRequest
+create_decision_record = _decision_routes.create_decision_record
+create_decisions_router = _decision_routes.create_decisions_router
+list_decisions_response = _decision_routes.list_decisions_response
+_route_load_decisions = _decision_routes.load_decisions
+patch_decision_record = _decision_routes.patch_decision_record
+_route_save_decisions = _decision_routes.save_decisions
+_route_upsert_decision = _decision_routes.upsert_decision
+
+RuntimeDeps = _runtime_routes.RuntimeDeps
+_route_active_graph_readiness = _runtime_routes.active_graph_readiness
+build_health = _runtime_routes.build_health
+build_runtime_status = _runtime_routes.build_runtime_status
+_route_connector_readiness = _runtime_routes.connector_readiness
+create_runtime_router = _runtime_routes.create_runtime_router
+runtime_action = _runtime_routes.runtime_action
+runtime_warning = _runtime_routes.runtime_warning
+
+_STATE_DIR_ENV = _config.STATE_DIR_ENV
+WORKSPACE_STATE = _config.WORKSPACE_STATE
+SESSIONS_DIR = _config.SESSIONS_DIR
+SETTINGS_FILE = _config.SETTINGS_FILE
+DECISIONS_FILE = _config.DECISIONS_FILE
+GRAPHS_DIR = _config.GRAPHS_DIR
+DEVICES_FILE = _config.DEVICES_FILE
+CONNECTORS_DIR = _config.CONNECTORS_DIR
+CLUSTER_SELECTION_FILE = _config.CLUSTER_SELECTION_FILE
+CHAT_CONFIG_FILE = _config.CHAT_CONFIG_FILE
+CHAT_SESSIONS_DIR = _config.CHAT_SESSIONS_DIR
+SCAN_DIRS_FILE = _config.SCAN_DIRS_FILE
+SEMANTIC_EDGES_FILE = _config.SEMANTIC_EDGES_FILE
+OVERLAP_STATUS_FILE = _config.OVERLAP_STATUS_FILE
+_CHAT_DEFAULT_SYSTEM_PROMPT = _config.CHAT_DEFAULT_SYSTEM_PROMPT
+_USERS_FILE = _config.USERS_FILE
+
+_DEMO_GRAPH = _config.DEMO_GRAPH
+DEFAULT_GRAPH = _config.DEFAULT_GRAPH
+API_KEY = _config.API_KEY
+GRAPH_UPLOAD_MAX_BYTES = _config.GRAPH_UPLOAD_MAX_BYTES
+
+STORAGE_BACKEND = _config.STORAGE_BACKEND  # "file" | "supabase"
 
 # Supabase client — initialised only when STORAGE_BACKEND=supabase
 _supabase_client = None
@@ -96,79 +164,21 @@ SUPABASE_SCHEMA_REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "actions": ("action_plan",),
 }
 _supabase_schema_status_cache: dict | None = None
+_storage_status_provider = StorageStatusProvider(
+    backend_getter=lambda: STORAGE_BACKEND,
+    client_getter=lambda: _supabase_client,
+    required_migration=SUPABASE_SCHEMA_MIGRATION,
+    required_columns=SUPABASE_SCHEMA_REQUIRED_COLUMNS,
+)
 
 
 def _safe_error_message(exc: Exception) -> str:
-    return f"{exc.__class__.__name__}: {str(exc)[:240]}"
+    return safe_error_message(exc)
 
 
 def _check_supabase_schema() -> dict:
     """Verify the optional Supabase columns required by current app records."""
-    if STORAGE_BACKEND != "supabase":
-        return {
-            "backend": STORAGE_BACKEND,
-            "ready": True,
-            "schema_checked": False,
-            "required_migration": None,
-            "required_columns": {},
-            "missing_or_unverified_columns": {},
-            "warning": None,
-            "errors": [],
-        }
-    if _supabase_client is None:
-        return {
-            "backend": STORAGE_BACKEND,
-            "ready": False,
-            "schema_checked": False,
-            "required_migration": SUPABASE_SCHEMA_MIGRATION,
-            "required_columns": {
-                table: list(columns)
-                for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items()
-            },
-            "missing_or_unverified_columns": {
-                table: list(columns)
-                for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items()
-            },
-            "warning": (
-                "Supabase schema could not be checked because the client is not initialized. "
-                f"Apply {SUPABASE_SCHEMA_MIGRATION} before using Supabase mode for hosted beta."
-            ),
-            "errors": ["Supabase client is not initialized."],
-        }
-
-    missing_or_unverified: dict[str, list[str]] = {}
-    errors: list[str] = []
-    for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items():
-        try:
-            (
-                _supabase_client
-                .table(table)
-                .select(",".join(columns))
-                .limit(0)
-                .execute()
-            )
-        except Exception as exc:
-            missing_or_unverified[table] = list(columns)
-            errors.append(f"{table}: {_safe_error_message(exc)}")
-
-    ready = not missing_or_unverified
-    return {
-        "backend": STORAGE_BACKEND,
-        "ready": ready,
-        "schema_checked": True,
-        "required_migration": SUPABASE_SCHEMA_MIGRATION,
-        "required_columns": {
-            table: list(columns)
-            for table, columns in SUPABASE_SCHEMA_REQUIRED_COLUMNS.items()
-        },
-        "missing_or_unverified_columns": missing_or_unverified,
-        "warning": None if ready else (
-            "Supabase schema is missing or cannot verify current recommendation/action "
-            f"columns. Apply {SUPABASE_SCHEMA_MIGRATION} before using Supabase mode "
-            "for hosted beta."
-        ),
-        "errors": errors,
-    }
+    return _storage_status_provider.check_schema()
 
 
 def _storage_status(force_check: bool = False) -> dict:
@@ -183,28 +193,8 @@ def _storage_status(force_check: bool = False) -> dict:
 _graph_cache: dict | None = None
 _summary_cache: dict[str, dict] = {}
 
-_REPO_ROOT = Path(__file__).parent.parent
-_SECRET_PATH_MARKERS = (
-    ".env",
-    ".pem",
-    ".key",
-    "secret",
-    "credential",
-    "password",
-    "private-key",
-    "api-key",
-    "api_key",
-    "access_token",
-    "refresh_token",
-    "token",
-    "users.json",
-)
-
-app = FastAPI(title="Graphify Workspace Cockpit", version="0.1.0")
-
-_limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
-app.state.limiter = _limiter
-app.add_middleware(SlowAPIMiddleware)
+_REPO_ROOT = _config.REPO_ROOT
+_SECRET_PATH_MARKERS = _config.SECRET_PATH_MARKERS
 
 
 async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
@@ -213,24 +203,6 @@ async def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONR
         status_code=429,
         headers={"Retry-After": "60"},
     )
-
-
-app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)  # type: ignore[arg-type]
-
-_cors_origins = [
-    o.strip()
-    for o in os.environ.get(
-        "CORS_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
-    ).split(",")
-    if o.strip()
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 
 def _prune_sessions(max_count: int = 50) -> None:
@@ -279,12 +251,6 @@ _SEMANTIC_STATUS: dict = {
 }
 
 
-@app.on_event("startup")
-async def _startup() -> None:
-    _prune_sessions()
-    _prune_chat_sessions()
-
-
 def _resolve_user(api_key: str) -> str:
     """Map an API key to a human-readable user name via config/users.json.
     Falls back to 'adam' (single-user default) when no mapping exists."""
@@ -320,29 +286,21 @@ def _track_device(user_id: str) -> None:
         pass
 
 
-class _APIKeyMiddleware(BaseHTTPMiddleware):
-    """When API_KEY is set, require Authorization: Bearer <key> or X-API-Key: <key>.
-    OPTIONS requests and /health are always allowed so CORS preflight and health
-    checks work without credentials."""
-
-    async def dispatch(self, request: Request, call_next):
-        provided = ""
-        if (
-            API_KEY
-            and request.method != "OPTIONS"
-            and request.url.path not in ("/health",)
-        ):
-            provided = (
-                request.headers.get("authorization", "").removeprefix("Bearer ").strip()
-                or request.headers.get("x-api-key", "")
-            )
-            if provided != API_KEY:
-                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
-        request.state.user_id = _resolve_user(provided or API_KEY)
-        return await call_next(request)
+app, _limiter = create_app(
+    title="Graphify Workspace Cockpit",
+    version="0.1.0",
+    cors_origins=_config.CORS_ORIGINS,
+    api_key_middleware_cls=APIKeyMiddleware,
+    api_key_getter=lambda: API_KEY,
+    resolve_user=_resolve_user,
+    rate_limit_handler=_rate_limit_handler,
+)
 
 
-app.add_middleware(_APIKeyMiddleware)
+@app.on_event("startup")
+async def _startup() -> None:
+    _prune_sessions()
+    _prune_chat_sessions()
 
 
 def _load_graph() -> dict:
@@ -381,109 +339,10 @@ def _safe_graph_upload_name(filename: str | None) -> str:
     return name
 
 
-# ---------------------------------------------------------------------------
-# Output parsers
-# ---------------------------------------------------------------------------
-
-def _parse_query_output(raw: str) -> tuple[str, list[dict]]:
-    """Parse `graphify query` stdout into (summary_line, evidence_nodes)."""
-    lines = raw.strip().splitlines()
-    header = lines[0] if lines else raw
-    evidence: list[dict] = []
-    pattern = re.compile(
-        r"^NODE\s+(.+?)\s+\[src=(.+?)\s+loc=(L\d+)\s+community=([^\]]*)\]"
-    )
-    for line in lines[1:]:
-        m = pattern.match(line.strip())
-        if m:
-            evidence.append(
-                {
-                    "label": m.group(1).strip(),
-                    "src": m.group(2),
-                    "loc": m.group(3),
-                    "community": m.group(4).strip(),
-                }
-            )
-    return header, evidence
-
-
-def _parse_explain_output(raw: str) -> tuple[str, list[dict]]:
-    """Parse `graphify explain` stdout into (summary, connections)."""
-    evidence: list[dict] = []
-    conn_re = re.compile(r"^\s+(<--|-->)\s+(.+?)\s+\[(.+?)\]")
-    for line in raw.splitlines():
-        m = conn_re.match(line)
-        if m:
-            evidence.append(
-                {
-                    "label": m.group(2).strip(),
-                    "relation": m.group(3),
-                    "direction": m.group(1),
-                }
-            )
-    return raw.strip(), evidence
-
-
-def _parse_path_output(raw: str) -> tuple[str, list[dict]]:
-    """Parse `graphify path` stdout into (path_description, hop_list)."""
-    hops: list[dict] = []
-    # e.g. "FastAPI <--imports_from [EXTRACTED]-- main.py --contains [EXTRACTED]--> health()"
-    hop_re = re.compile(r"([^\s<>-][^<>-]*?)\s+(?:<--|-->)")
-    for token in re.split(r"\s+(?:<--|-->)\s+", raw):
-        token = token.strip()
-        if token:
-            hops.append({"label": token})
-    return raw.strip(), hops
-
-
-# ---------------------------------------------------------------------------
-# Request / response models
-# ---------------------------------------------------------------------------
-
-Mode = Literal["query", "path", "explain"]
-
-
-class AskRequest(BaseModel):
-    question: str
-    mode: Mode = "query"
-    node_a: str | None = None
-    node_b: str | None = None
-
-
-class EvidenceNode(BaseModel):
-    label: str
-    src: str | None = None
-    loc: str | None = None
-    community: str | None = None
-    relation: str | None = None
-    direction: str | None = None
-
-
-class AskResponse(BaseModel):
-    session_id: str
-    question: str
-    mode_used: Mode
-    answer: str
-    evidence: list[dict]
-    suggestions: list[str]
-
-
-# ---------------------------------------------------------------------------
-# Suggestion generator
-# ---------------------------------------------------------------------------
-
-def _suggestions(question: str, mode: Mode, evidence: list[dict]) -> list[str]:
-    labels = [e["label"] for e in evidence[:3] if e.get("label")]
-    base: list[str] = []
-    if mode == "query" and labels:
-        base.append(f"Explain {labels[0]}")
-        if len(labels) >= 2:
-            base.append(f"How are {labels[0]} and {labels[1]} related?")
-    if mode == "explain":
-        base.append(f"What connects to {question.replace('Explain', '').strip()}")
-    if mode == "path":
-        base.append("What are the main projects in this workspace?")
-    return base
+_parse_query_output = parse_query_output
+_parse_explain_output = parse_explain_output
+_parse_path_output = parse_path_output
+_suggestions = suggestions
 
 
 # ---------------------------------------------------------------------------
@@ -520,294 +379,71 @@ def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] |
 # Routes
 # ---------------------------------------------------------------------------
 
-@app.get("/health")
-@_limiter.exempt
+def _runtime_deps() -> RuntimeDeps:
+    return RuntimeDeps(
+        graph_path=_graph_path,
+        demo_graph_path=lambda: _DEMO_GRAPH,
+        load_graph=_load_graph,
+        graphify_status=lambda **kwargs: get_graphify_status(**kwargs),
+        ollama_status=ollama_status,
+        storage_status=lambda **kwargs: _storage_status(**kwargs),
+        connector_readiness=lambda: _connector_readiness(),
+        api_key_required=lambda: bool(API_KEY),
+        app_version=lambda: app.version,
+        count_links=count_links,
+        graph_validation_error=GraphValidationError,
+        safe_error_message=_safe_error_message,
+    )
+
+
 def health() -> dict:
-    graph = _graph_path()
-    demo_mode = Path(graph).resolve() == Path(_DEMO_GRAPH).resolve()
-    graph_loaded = False
-    graph_error = None
-    try:
-        _load_graph()
-        graph_loaded = True
-    except Exception as exc:
-        graph_error = str(exc)
-    return {
-        "status": "ok",
-        "version": "0.1.0",
-        "demo_mode": demo_mode,
-        "graph_loaded": graph_loaded,
-        "graph_error": graph_error,
-        "graphify": get_graphify_status(include_version=False),
-        "storage": _storage_status(),
-    }
+    return build_health(_runtime_deps())
 
 
-def _runtime_action(label: str, destination: str | None = "settings") -> dict:
-    action: dict[str, str] = {"label": label}
-    if destination:
-        action["destination"] = destination
-    return action
-
-
-def _runtime_warning(
-    code: str,
-    message: str,
-    *,
-    severity: Literal["warning", "error"] = "warning",
-    action_label: str = "Open Settings",
-    destination: str | None = "settings",
-) -> dict:
-    return {
-        "code": code,
-        "severity": severity,
-        "message": message,
-        "action": _runtime_action(action_label, destination),
-    }
+_runtime_action = runtime_action
+_runtime_warning = runtime_warning
 
 
 def _active_graph_readiness() -> dict:
-    graph_path = _graph_path()
-    graph_file = Path(graph_path)
-    base = {
-        "name": graph_file.name,
-        "path": graph_path,
-        "exists": graph_file.exists(),
-        "valid": False,
-        "node_count": 0,
-        "link_count": 0,
-        "error": None,
-    }
-    try:
-        data = _load_graph()
-    except FileNotFoundError as exc:
-        base["error"] = f"Graph not found: {exc}"
-    except GraphValidationError as exc:
-        base["error"] = f"Invalid graph: {exc}"
-    except json.JSONDecodeError as exc:
-        base["error"] = f"Invalid JSON: {exc}"
-    except Exception as exc:
-        base["error"] = _safe_error_message(exc)
-    else:
-        base.update({
-            "exists": True,
-            "valid": True,
-            "node_count": len(data.get("nodes", [])),
-            "link_count": count_links(data),
-        })
-    return base
+    return _route_active_graph_readiness(_runtime_deps())
 
 
 def _connector_readiness() -> dict:
-    try:
-        connectors = list_connectors()
-    except Exception as exc:
-        return {
-            "items": [],
-            "configured_count": 0,
-            "authenticated_count": 0,
-            "syncing_count": 0,
-            "error_count": 1,
-            "error": _safe_error_message(exc),
-        }
-
-    items: list[dict] = []
-    for connector in connectors:
-        sync = connector.get("sync") or {}
-        items.append({
-            "id": connector.get("id"),
-            "display_name": connector.get("display_name"),
-            "configured": bool(connector.get("configured")),
-            "authenticated": bool(connector.get("authenticated")),
-            "sync_status": sync.get("status") or "never_synced",
-            "sync_error": sync.get("error"),
-        })
-
-    return {
-        "items": items,
-        "configured_count": sum(1 for item in items if item["configured"]),
-        "authenticated_count": sum(1 for item in items if item["authenticated"]),
-        "syncing_count": sum(1 for item in items if item["sync_status"] == "syncing"),
-        "error_count": sum(
-            1
-            for item in items
-            if item["sync_status"] == "error" or bool(item["sync_error"])
-        ),
-        "error": None,
-    }
+    return _route_connector_readiness(
+        list_connectors=list_connectors,
+        safe_error_message=_safe_error_message,
+    )
 
 
 def runtime_status() -> dict:
-    graph = _active_graph_readiness()
-    graphify = get_graphify_status(include_version=False)
-    ollama = ollama_status()
-    storage = _storage_status()
-    connectors = _connector_readiness()
-
-    warnings: list[dict] = []
-    if not graph["valid"]:
-        warnings.append(_runtime_warning(
-            "GRAPH_INVALID",
-            graph["error"] or "Active graph is missing or invalid.",
-            severity="error",
-            action_label="Open graph settings",
-        ))
-    if not graphify.get("available"):
-        warnings.append(_runtime_warning(
-            graphify.get("code") or "GRAPHIFY_UNAVAILABLE",
-            graphify.get("message") or "Graphify CLI is not available.",
-            action_label="Review Graphify setup",
-        ))
-    if not ollama.get("connected"):
-        warnings.append(_runtime_warning(
-            "OLLAMA_UNAVAILABLE",
-            f"Ollama is not reachable at {ollama.get('url')}.",
-            action_label="Review Ollama settings",
-        ))
-    if not storage.get("ready", True):
-        warnings.append(_runtime_warning(
-            "STORAGE_NOT_READY",
-            storage.get("warning") or "Storage backend is not ready.",
-            action_label="Review storage setup",
-        ))
-    if connectors.get("error"):
-        warnings.append(_runtime_warning(
-            "CONNECTORS_UNAVAILABLE",
-            f"Connector status could not be checked: {connectors['error']}",
-            action_label="Review connectors",
-        ))
-    else:
-        unauthenticated = [
-            item["display_name"] or item["id"]
-            for item in connectors["items"]
-            if item["configured"] and not item["authenticated"]
-        ]
-        if unauthenticated:
-            warnings.append(_runtime_warning(
-                "CONNECTOR_AUTH_REQUIRED",
-                f"Connector authentication needed for {', '.join(unauthenticated)}.",
-                action_label="Connect Microsoft",
-            ))
-        if connectors["error_count"]:
-            warnings.append(_runtime_warning(
-                "CONNECTOR_SYNC_ERROR",
-                "One or more connector sync jobs reported an error.",
-                action_label="Review connector sync",
-            ))
-
-    if not graph["valid"]:
-        readiness = "not_ready"
-        summary = "Active graph needs attention before the workspace is usable."
-    elif warnings:
-        readiness = "partial"
-        summary = "Core workspace is available with runtime warnings."
-    else:
-        readiness = "ready"
-        summary = "Workspace runtime is ready."
-
-    next_best_action = (
-        warnings[0]["action"]
-        if warnings
-        else _runtime_action("Open graph map", "map")
-    )
-
-    return {
-        "state": readiness,
-        "summary": summary,
-        "checked_at": datetime.now(tz=timezone.utc).isoformat(),
-        "backend": {"online": True, "version": app.version},
-        "graph": graph,
-        "graphify": graphify,
-        "ollama": ollama,
-        "auth": {"api_key_required": bool(API_KEY)},
-        "storage": storage,
-        "connectors": connectors,
-        "warnings": warnings,
-        "next_best_action": next_best_action,
-    }
+    return build_runtime_status(_runtime_deps())
 
 
-@app.get("/runtime/status")
 def get_runtime_status() -> dict:
     return runtime_status()
 
 
-@app.post("/ask", response_model=AskResponse)
-def ask(req: AskRequest) -> AskResponse:
-    graph = _graph_path()
-    if not Path(graph).exists():
-        raise HTTPException(
-            status_code=503,
-            detail=f"Graph not found at {graph}. Run graphify update first.",
-        )
+app.include_router(create_runtime_router(
+    health_endpoint=health,
+    runtime_status_endpoint=get_runtime_status,
+    limiter=_limiter,
+))
 
-    if req.mode == "path" and (not req.node_a or not req.node_b):
-        raise HTTPException(
-            status_code=422,
-            detail="Path mode requires node_a and node_b.",
-        )
 
-    try:
-        result = run_graphify_ask(
-            mode=req.mode,
-            question=req.question,
-            graph_path=graph,
-            node_a=req.node_a,
-            node_b=req.node_b,
-            timeout=30,
-        )
-    except GraphifyServiceError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail()) from exc
-
-    cmd = result.command
-    raw = result.output
-
-    # Parse by mode
-    if req.mode == "query":
-        answer, evidence = _parse_query_output(raw)
-    elif req.mode == "explain":
-        answer, evidence = _parse_explain_output(raw)
-    else:
-        answer, evidence = _parse_path_output(raw)
-
-    # Post-filter evidence by active cluster selection
-    _ask_sel = _load_cluster_selection()
-    _ask_clusters = _ask_sel.get("clusters")
-    if _ask_clusters is not None:
-        evidence = [
-            ev for ev in evidence
-            if not ev.get("src", "").split("/")[0]
-            or ev["src"].split("/")[0] in _ask_clusters
-        ]
-
-    suggestions = _suggestions(req.question, req.mode, evidence)
-    session_id = str(uuid.uuid4())
-
-    # Save session transcript
-    transcript = {
-        "session_id": session_id,
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-        "question": req.question,
-        "mode": req.mode,
-        "node_a": req.node_a,
-        "node_b": req.node_b,
-        "cmd": cmd,
-        "raw_output": raw,
-        "answer": answer,
-        "evidence": evidence,
-        "suggestions": suggestions,
-    }
-    write_json_atomic(SESSIONS_DIR / f"{session_id}.json", transcript)
-    _prune_sessions()
-
-    return AskResponse(
-        session_id=session_id,
-        question=req.question,
-        mode_used=req.mode,
-        answer=answer,
-        evidence=evidence,
-        suggestions=suggestions,
+def _ask_deps() -> AskDeps:
+    return AskDeps(
+        graph_path=_graph_path,
+        run_graphify_ask=lambda **kwargs: run_graphify_ask(**kwargs),
+        load_cluster_selection=_load_cluster_selection,
+        sessions_dir=lambda: SESSIONS_DIR,
+        write_json_atomic=write_json_atomic,
+        prune_sessions=_prune_sessions,
+        graphify_error=GraphifyServiceError,
     )
+
+
+_ask_router, ask = create_ask_router(_ask_deps)
+app.include_router(_ask_router)
 
 
 @app.get("/graph/summary")
@@ -1141,105 +777,53 @@ def graph_full() -> dict:
 # Decision ledger
 # ---------------------------------------------------------------------------
 
-DecisionClassification = Literal["invest", "client-ready", "monitor", "archive", "paused"]
-
-
-class CreateDecisionRequest(BaseModel):
-    target_id: str
-    label: str = ""
-    classification: DecisionClassification
-    rationale: str = ""
-
-
-class PatchDecisionRequest(BaseModel):
-    classification: Optional[DecisionClassification] = None
-    rationale: Optional[str] = None
-    label: Optional[str] = None
-    status: Optional[Literal["active", "retired"]] = None
+def _decision_deps() -> DecisionDeps:
+    return DecisionDeps(
+        supabase_client=lambda: _supabase_client,
+        decisions_file=lambda: DECISIONS_FILE,
+        write_json_atomic=write_json_atomic,
+    )
 
 
 def _load_decisions() -> list[dict]:
-    if _supabase_client:
-        resp = _supabase_client.table("decisions").select("*").order("created_at", desc=True).execute()
-        return resp.data or []
-    if DECISIONS_FILE.exists():
-        try:
-            return json.loads(DECISIONS_FILE.read_text())
-        except Exception:
-            return []
-    return []
+    return _route_load_decisions(_decision_deps())
 
 
 def _save_decisions(decisions: list[dict]) -> None:
-    if _supabase_client:
-        return  # Supabase mode uses _upsert_decision per-record
-    write_json_atomic(DECISIONS_FILE, decisions)
+    _route_save_decisions(decisions, _decision_deps())
 
 
 def _upsert_decision(record: dict) -> None:
     """Persist a single decision record to the active backend."""
-    if _supabase_client:
-        _supabase_client.table("decisions").upsert(record).execute()
-        return
-    decisions = _load_decisions()
-    for i, d in enumerate(decisions):
-        if d["id"] == record["id"]:
-            decisions[i] = record
-            _save_decisions(decisions)
-            return
-    decisions.append(record)
-    _save_decisions(decisions)
+    _route_upsert_decision(record, _decision_deps())
 
 
-@app.get("/decisions")
 def list_decisions(request: Request):
-    decisions = _load_decisions()
-    tag = _etag(decisions)
-    if request.headers.get("if-none-match") == tag:
-        return Response(status_code=304)
-    _track_device(getattr(request.state, "user_id", "local"))
-    return JSONResponse(content=decisions, headers={"ETag": tag})
+    return list_decisions_response(
+        request,
+        load_records=_load_decisions,
+        etag=_etag,
+        track_device=_track_device,
+    )
 
-
-@app.post("/decisions", status_code=201)
 def create_decision(req: CreateDecisionRequest, request: Request) -> dict:
-    if not req.target_id.strip():
-        raise HTTPException(status_code=422, detail="target_id must not be blank.")
-    now = datetime.now(tz=timezone.utc).isoformat()
-    record = {
-        "id": str(uuid.uuid4()),
-        "target_type": "project",
-        "target_id": req.target_id.strip(),
-        "label": req.label.strip() or req.target_id.strip(),
-        "classification": req.classification,
-        "rationale": req.rationale,
-        "created_at": now,
-        "updated_at": now,
-        "status": "active",
-        "created_by": getattr(request.state, "user_id", "local"),
-    }
-    _upsert_decision(record)
-    return record
+    return create_decision_record(req, request, upsert_record=_upsert_decision)
 
-
-@app.patch("/decisions/{decision_id}")
 def patch_decision(decision_id: str, req: PatchDecisionRequest) -> dict:
-    decisions = _load_decisions()
-    for d in decisions:
-        if d["id"] == decision_id:
-            now = datetime.now(tz=timezone.utc).isoformat()
-            if req.classification is not None:
-                d["classification"] = req.classification
-            if req.rationale is not None:
-                d["rationale"] = req.rationale
-            if req.label is not None:
-                d["label"] = req.label
-            if req.status is not None:
-                d["status"] = req.status
-            d["updated_at"] = now
-            _upsert_decision(d)
-            return d
-    raise HTTPException(status_code=404, detail=f"Decision {decision_id} not found.")
+    return patch_decision_record(
+        decision_id,
+        req,
+        load_records=_load_decisions,
+        upsert_record=_upsert_decision,
+    )
+
+
+app.include_router(create_decisions_router(
+    load_records=_load_decisions,
+    upsert_record=_upsert_decision,
+    etag=_etag,
+    track_device=_track_device,
+))
 
 
 # ---------------------------------------------------------------------------
@@ -3253,263 +2837,108 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
 # Chunk Sixteen — Knowledge Base Cluster Selector
 # ---------------------------------------------------------------------------
 
-class ClusterSelectionBody(BaseModel):
-    sources: list[str]
-    clusters: Optional[list[str]] = None  # None = all clusters active
-
-
-@app.get("/cluster-selection")
-def get_cluster_selection() -> dict:
-    """Return the current cluster/source selection and available options."""
-    selection = _load_cluster_selection()
-    # Compute available clusters from the active graph (≥20 nodes each)
-    available_clusters: list[dict] = []
-    try:
-        data = _load_graph()
-        counts: dict[str, int] = {}
-        for n in data.get("nodes", []):
-            sf = n.get("source_file", "")
-            cluster = sf.split("/")[0] if sf else ""
-            if cluster:
-                counts[cluster] = counts.get(cluster, 0) + 1
-        available_clusters = [
-            {"id": k, "node_count": v}
-            for k, v in sorted(counts.items(), key=lambda x: -x[1])
-            if v >= 20
-        ]
-    except Exception:
-        pass
-    # Available sources: local always present; cloud only when authenticated
-    available_sources = ["local"]
-    if _ms_auth.is_authenticated(WORKSPACE_STATE):
-        available_sources.extend(["sharepoint", "onenote"])
-    return {
-        "selection": selection,
-        "available_clusters": available_clusters,
-        "available_sources": available_sources,
-    }
-
-
-@app.put("/cluster-selection")
-def update_cluster_selection(req: ClusterSelectionBody) -> dict:
-    """Atomically persist the cluster/source selection. Clears summary cache."""
+def _clear_summary_cache() -> None:
     global _summary_cache
-    selection = {"sources": req.sources, "clusters": req.clusters}
-    _save_cluster_selection(selection)
     _summary_cache = {}
-    return selection
+
+
+def _cluster_selection_deps() -> ClusterSelectionDeps:
+    return ClusterSelectionDeps(
+        load_cluster_selection=_load_cluster_selection,
+        save_cluster_selection=_save_cluster_selection,
+        load_graph=_load_graph,
+        workspace_state=lambda: WORKSPACE_STATE,
+        is_microsoft_authenticated=is_microsoft_authenticated,
+        clear_summary_cache=_clear_summary_cache,
+    )
+
+
+(
+    _cluster_selection_router,
+    get_cluster_selection,
+    update_cluster_selection,
+) = create_cluster_selection_router(_cluster_selection_deps)
+app.include_router(_cluster_selection_router)
 
 
 # ---------------------------------------------------------------------------
 # Chunk Fourteen — Cloud Knowledge Base Connectors
 # ---------------------------------------------------------------------------
 
-import sys as _sys  # noqa: E402
+_SYNC_STATUS = SYNC_STATUS
+_SYNC_LOCK = SYNC_LOCK
+_CONNECTOR_CONFIG_PATH = CONNECTOR_CONFIG_PATH
 
-_connectors_path = Path(__file__).parent / "connectors"
-if str(_connectors_path.parent) not in _sys.path:
-    _sys.path.insert(0, str(_connectors_path.parent))
 
-from connectors import microsoft_auth as _ms_auth  # noqa: E402
-from connectors.ingest import merge_nodes_into_graph as _ingest  # noqa: E402
-from connectors.sharepoint import SharePointConnector  # noqa: E402
-from connectors.onenote import OneNoteConnector  # noqa: E402
+def _connector_deps() -> ConnectorDeps:
+    return ConnectorDeps(
+        workspace_state=lambda: WORKSPACE_STATE,
+        connectors_dir=lambda: CONNECTORS_DIR,
+        graphs_dir=lambda: GRAPHS_DIR,
+        settings_file=lambda: SETTINGS_FILE,
+        graph_path=_graph_path,
+        write_json_atomic=write_json_atomic,
+        clear_graph_caches=_clear_graph_caches,
+    )
 
-_SYNC_STATUS: dict[str, dict] = {}
-_SYNC_LOCK = _threading.Lock()
 
-_CONNECTOR_CONFIG_PATH = Path(__file__).parent.parent / "config" / "connectors.json"
+def _clear_graph_caches() -> None:
+    global _graph_cache, _summary_cache
+    _graph_cache = None
+    _summary_cache = {}
 
 
 def _load_connector_config() -> dict:
-    if _CONNECTOR_CONFIG_PATH.exists():
-        try:
-            return json.loads(_CONNECTOR_CONFIG_PATH.read_text())
-        except Exception:
-            pass
-    return {"sharepoint": {"site_urls": []}, "sync_interval_hours": 0}
+    return _route_load_connector_config()
 
 
 def _connector_status_path() -> Path:
-    return CONNECTORS_DIR / "sync-status.json"
+    return _route_connector_status_path(_connector_deps())
 
 
 def _load_sync_status() -> dict:
-    p = _connector_status_path()
-    if p.exists():
-        try:
-            return json.loads(p.read_text())
-        except Exception:
-            pass
-    return {}
+    return _route_load_sync_status(_connector_deps())
 
 
 def _save_sync_status(status: dict) -> None:
-    write_json_atomic(_connector_status_path(), status)
+    _route_save_sync_status(status, _connector_deps())
 
 
 def _run_connector_sync(connector_id: str) -> None:
-    """Background sync job — mirrors mission pattern."""
-    now = datetime.now(tz=timezone.utc).isoformat()
-    with _SYNC_LOCK:
-        _SYNC_STATUS[connector_id] = {
-            "status": "syncing",
-            "started_at": now,
-            "finished_at": None,
-            "item_count": 0,
-            "error": None,
-        }
-
-    try:
-        cfg = _load_connector_config()
-        graph_path = Path(_graph_path())
-        item_count = 0
-
-        if connector_id == "sharepoint":
-            site_urls = cfg.get("sharepoint", {}).get("site_urls", [])
-            conn = SharePointConnector(WORKSPACE_STATE, site_urls)
-            items = conn.list_items()
-            nodes = conn.to_graph_nodes(items)
-            item_count = len(nodes)
-        elif connector_id == "onenote":
-            conn_one = OneNoteConnector(WORKSPACE_STATE)
-            items = conn_one.list_items()
-            nodes = conn_one.to_graph_nodes(items)
-            item_count = len(nodes)
-        else:
-            raise ValueError(f"Unknown connector: {connector_id}")
-
-        if nodes:
-            new_graph = _ingest(nodes, graph_path, GRAPHS_DIR)
-            # Activate merged graph
-            global _graph_cache, _summary_cache
-            settings: dict = {}
-            if SETTINGS_FILE.exists():
-                try:
-                    settings = json.loads(SETTINGS_FILE.read_text())
-                except Exception:
-                    pass
-            settings["graph_path"] = str(new_graph)
-            write_json_atomic(SETTINGS_FILE, settings)
-            _graph_cache = None
-            _summary_cache = {}
-
-        finished = datetime.now(tz=timezone.utc).isoformat()
-        result = {
-            "status": "complete",
-            "started_at": now,
-            "finished_at": finished,
-            "item_count": item_count,
-            "error": None,
-        }
-    except Exception as exc:
-        finished = datetime.now(tz=timezone.utc).isoformat()
-        result = {
-            "status": "error",
-            "started_at": now,
-            "finished_at": finished,
-            "item_count": 0,
-            "error": str(exc),
-        }
-
-    with _SYNC_LOCK:
-        _SYNC_STATUS[connector_id] = result
-    _save_sync_status({**_load_sync_status(), connector_id: result})
+    _route_run_connector_sync(connector_id, _connector_deps())
 
 
-@app.get("/connectors")
 def list_connectors() -> list[dict]:
     """List configured connectors with authentication and sync status."""
-    cfg = _load_connector_config()
-    persisted = _load_sync_status()
-
-    def _status(cid: str) -> dict:
-        with _SYNC_LOCK:
-            mem = _SYNC_STATUS.get(cid)
-        return mem or persisted.get(cid) or {}
-
-    ms_authed = _ms_auth.is_authenticated(WORKSPACE_STATE)
-    ms_configured = _ms_auth.is_configured()
-
-    connectors = [
-        {
-            "id": "sharepoint",
-            "display_name": "SharePoint",
-            "source": "microsoft",
-            "configured": ms_configured,
-            "authenticated": ms_authed,
-            "site_urls": cfg.get("sharepoint", {}).get("site_urls", []),
-            "sync": _status("sharepoint"),
-        },
-        {
-            "id": "onenote",
-            "display_name": "OneNote",
-            "source": "microsoft",
-            "configured": ms_configured,
-            "authenticated": ms_authed,
-            "sync": _status("onenote"),
-        },
-    ]
-    return connectors
+    return _route_list_connectors(_connector_deps())
 
 
-@app.post("/connectors/microsoft/auth")
 def start_microsoft_auth() -> dict:
     """Initiate Microsoft device code flow. Returns user_code + verification_uri."""
-    try:
-        return _ms_auth.start_device_flow(WORKSPACE_STATE)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    return _route_start_microsoft_auth(_connector_deps())
 
 
-@app.post("/connectors/microsoft/auth/poll")
 def poll_microsoft_auth() -> dict:
     """Poll for device code completion. Returns {status: pending|complete|error}."""
-    return _ms_auth.poll_device_flow(WORKSPACE_STATE)
+    return _route_poll_microsoft_auth(_connector_deps())
 
 
-@app.post("/connectors/{connector_id}/sync", status_code=202)
 def sync_connector(connector_id: str) -> dict:
     """Trigger a background sync for the given connector."""
-    if connector_id not in ("sharepoint", "onenote"):
-        raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
-    if not _ms_auth.is_authenticated(WORKSPACE_STATE):
-        raise HTTPException(
-            status_code=401,
-            detail="Not authenticated with Microsoft. Complete device code auth first."
-        )
-    with _SYNC_LOCK:
-        current = _SYNC_STATUS.get(connector_id, {})
-    if current.get("status") == "syncing":
-        raise HTTPException(status_code=409, detail="Sync already in progress.")
-
-    thread = _threading.Thread(
-        target=_run_connector_sync, args=(connector_id,), daemon=True
-    )
-    thread.start()
-    return {"connector_id": connector_id, "status": "syncing"}
+    return _route_sync_connector(connector_id, _connector_deps())
 
 
-@app.get("/connectors/{connector_id}/status")
 def connector_sync_status(connector_id: str) -> dict:
     """Return the last sync status for a connector."""
-    if connector_id not in ("sharepoint", "onenote"):
-        raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
-    with _SYNC_LOCK:
-        mem = _SYNC_STATUS.get(connector_id)
-    if mem:
-        return mem
-    persisted = _load_sync_status()
-    return persisted.get(connector_id) or {"status": "never_synced"}
+    return _route_connector_sync_status(connector_id, _connector_deps())
 
 
-@app.delete("/connectors/{connector_id}/auth", status_code=200)
 def revoke_connector_auth(connector_id: str) -> dict:
     """Revoke Microsoft token and clear cache. Re-auth required afterward."""
-    if connector_id not in ("sharepoint", "onenote", "microsoft"):
-        raise HTTPException(status_code=404, detail=f"Connector '{connector_id}' not found.")
-    _ms_auth.revoke_token(WORKSPACE_STATE)
-    return {"revoked": True, "connector_id": connector_id}
+    return _route_revoke_connector_auth(connector_id, _connector_deps())
+
+
+app.include_router(create_connectors_router(_connector_deps))
 
 
 # ---------------------------------------------------------------------------
@@ -3517,111 +2946,25 @@ def revoke_connector_auth(connector_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
-class _ChatMsgModel(BaseModel):
-    role: str
-    content: str
-
-
-class ChatRequest(BaseModel):
-    message: str
-    history: list[_ChatMsgModel] = []
-    include_graph_context: bool = True
-
-
-class ChatConfigBody(BaseModel):
-    system_prompt: str
-    model: Optional[str] = None
-
-
-@app.get("/chat-config")
-def get_chat_config() -> dict:
-    """Return the current AI assistant configuration."""
-    return _load_chat_config()
-
-
-@app.put("/chat-config")
-def update_chat_config(req: ChatConfigBody) -> dict:
-    """Persist AI assistant configuration."""
-    config = _load_chat_config()
-    config["system_prompt"] = req.system_prompt
-    if req.model is not None:
-        config["model"] = req.model.strip() or RECOMMEND_MODEL_DEFAULT
-    write_json_atomic(CHAT_CONFIG_FILE, config)
-    return config
-
-
-@app.post("/chat")
-def chat_stream(req: ChatRequest):
-    """Stream an Ollama chat response with cluster-aware graph context via SSE."""
-    config = _load_chat_config()
-    system_prompt = config.get("system_prompt", _CHAT_DEFAULT_SYSTEM_PROMPT)
-    model = config.get("model", RECOMMEND_MODEL_DEFAULT)
-
-    nodes_used = 0
-    graph_ctx = ""
-    if req.include_graph_context:
-        try:
-            summary = graph_summary()
-            graph_ctx = _build_graph_context(summary)
-            nodes_used = len(summary.get("nodes", []))
-        except Exception:
-            pass
-
-    sys_content = system_prompt
-    if graph_ctx:
-        sys_content = f"{system_prompt}\n\nGraph context:\n{graph_ctx}"
-    messages = [{"role": "system", "content": sys_content}]
-    for h in req.history[-20:]:
-        messages.append({"role": h.role, "content": h.content})
-    messages.append({"role": "user", "content": req.message})
-
-    session_id = str(uuid.uuid4())
-    write_json_atomic(
-        CHAT_SESSIONS_DIR / f"{session_id}.json",
-        {
-            "session_id": session_id,
-            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-            "message": req.message,
-            "history_len": len(req.history),
-            "nodes_used": nodes_used,
-            "model": model,
-        },
+def _chat_deps() -> ChatDeps:
+    return ChatDeps(
+        load_chat_config=_load_chat_config,
+        chat_config_file=lambda: CHAT_CONFIG_FILE,
+        chat_sessions_dir=lambda: CHAT_SESSIONS_DIR,
+        write_json_atomic=write_json_atomic,
+        prune_chat_sessions=_prune_chat_sessions,
+        recommend_model_default=lambda: RECOMMEND_MODEL_DEFAULT,
+        default_system_prompt=lambda: _CHAT_DEFAULT_SYSTEM_PROMPT,
+        graph_summary=graph_summary,
+        build_graph_context=_build_graph_context,
+        ollama_url=lambda: os.environ.get("OLLAMA_URL", "http://localhost:11434"),
     )
-    _prune_chat_sessions()
 
-    _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 
-    def _generate():
-        import urllib.request as _ureq
-        yield f"data: {json.dumps({'type': 'meta', 'nodes_used': nodes_used, 'session_id': session_id})}\n\n"
-        payload = json.dumps({"model": model, "messages": messages, "stream": True}).encode()
-        req_obj = _ureq.Request(
-            f"{_ollama_base}/api/chat",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with _ureq.urlopen(req_obj, timeout=120) as resp:
-                for raw in resp:
-                    line = raw.decode("utf-8").strip()
-                    if not line:
-                        continue
-                    try:
-                        chunk = json.loads(line)
-                        token = chunk.get("message", {}).get("content", "")
-                        if token:
-                            yield f"data: {json.dumps({'type': 'token', 'token': token})}\n\n"
-                        if chunk.get("done"):
-                            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                            return
-                    except Exception:
-                        continue
-        except Exception as exc:
-            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)})}\n\n"
-
-    return StreamingResponse(
-        _generate(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+(
+    _chat_router,
+    get_chat_config,
+    update_chat_config,
+    chat_stream,
+) = create_chat_router(_chat_deps)
+app.include_router(_chat_router)
