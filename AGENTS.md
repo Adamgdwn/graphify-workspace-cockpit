@@ -10,6 +10,10 @@ For ordinary scoped work:
 4. inspect the specific files, errors, or docs needed for the task
 5. run targeted validation after the change
 
+For a one-page restart path after clearing, compaction, or agent handoff, use
+`AGENT_QUICKSTART.md`. It routes to the active plan and summarizes which
+generated directories to avoid.
+
 Do not turn `START_HERE.md`, pathway docs, governance standards, Graphify, plugins, MCP servers, or provider tools into an automatic startup chain for every small edit.
 
 ## Governance Triggers

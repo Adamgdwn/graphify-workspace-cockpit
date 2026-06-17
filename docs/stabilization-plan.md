@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T22:00:00-06:00
-Status: active plan - Chunk 11 task complete; next recommended chunk is Chunk 12 Token-Saving Repo Cleanup and Agent Docs
+Last Updated: 2026-06-16T22:15:25-06:00
+Status: active plan - Chunk 12 task complete; next recommended chunk is Chunk 13 Backend Module Split Plan
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -132,6 +132,14 @@ Resolved in Chunk 11:
   `_origin`, and connector metadata, connector ingest normalizes incoming cloud
   nodes before merge, and term-overlap relationships are written as canonical
   `links` with `source`, `target`, `relation`, and `weight`.
+
+Resolved in Chunk 12:
+
+- Generated Graphify output is now ignored and removed from version control.
+  `AGENT_QUICKSTART.md`, `docs/ARCHITECTURE_MAP.md`,
+  `docs/FILE_SUMMARIES.md`, and `docs/KNOWN_ISSUES.md` give future agents
+  short routing summaries so they can avoid generated output, local state,
+  archived build history, and broad `backend/main.py` reads unless needed.
 
 P1 - beta confidence:
 
@@ -1084,6 +1092,10 @@ Token/context warning: Do not initiate Microsoft auth or external connector sync
 
 ### Chunk 12: Token-Saving Repo Cleanup and Agent Docs
 
+Status: **task complete** — 2026-06-16T22:15:25-06:00
+
+Completion target: Task complete
+
 Goal: Make the repo easier and cheaper for future AI coding agents to inspect.
 
 Why this matters: Large generated output and missing file summaries increase
@@ -1114,10 +1126,48 @@ git diff --check
 
 Acceptance criteria:
 
-- A future agent can orient without reading generated graph/cache files.
-- Existing context map remains accurate.
-- `START_HERE.md` points to this plan and identifies
+- [x] A future agent can orient without reading generated graph/cache files.
+- [x] Existing context map remains accurate.
+- [x] `START_HERE.md` points to this plan and identifies
   `docs/current-build-pathway.md` as an archive.
+
+Implementation notes:
+
+- `.gitignore` now covers `graphify-out/`, root and backend virtual
+  environments, Python caches, pytest/mypy/ruff caches, generic Node
+  `node_modules/`, `dist/`, and `build/` outputs.
+- The 202 tracked generated files under `graphify-out/` were removed from
+  version control with `git rm --cached`; the local files remain on disk and
+  can be regenerated with `graphify update . --no-cluster`.
+- Added `AGENT_QUICKSTART.md` as a compact restart path for clears,
+  compaction, and handoffs.
+- Added summary-only source routing docs:
+  `docs/ARCHITECTURE_MAP.md`, `docs/FILE_SUMMARIES.md`, and
+  `docs/KNOWN_ISSUES.md`.
+- Updated `AGENTS.md`, `docs/context-map.md`, and `START_HERE.md` to point to
+  the short routing docs while keeping `docs/current-build-pathway.md` archived.
+
+Validation evidence:
+
+```bash
+bash scripts/governance-preflight.sh
+# passed with 0 warnings
+
+git check-ignore -v graphify-out/graph.json frontend/node_modules/x frontend/dist/x build/x .venv/x __pycache__/x.pyc .pytest_cache/x
+# all paths matched .gitignore rules
+
+git ls-files graphify-out | wc -l
+# 0
+
+git diff --check
+# passed
+
+git status --short
+# reviewed intended docs/.gitignore changes and graphify-out tracked-file removals only
+
+graphify update . --no-cluster
+# skipped: docs-only cleanup, no code changed, and graphify-out is intentionally local-only
+```
 
 Rollback note: Documentation-only rollback is safe.
 

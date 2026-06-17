@@ -26,6 +26,9 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 | Task | Load First |
 |---|---|
 | Current plan, chunking, validation, or handoff | `docs/stabilization-plan.md`; use `docs/current-build-pathway.md` only for archived build history |
+| Fast restart after clearing or compaction | `AGENT_QUICKSTART.md` |
+| Source routing without generated output | `docs/ARCHITECTURE_MAP.md`, then `docs/FILE_SUMMARIES.md` |
+| Known issues or owner-review gates | `docs/KNOWN_ISSUES.md`, then relevant sections of `docs/stabilization-plan.md` |
 | Engineering standards map | `docs/standards/README.md` |
 | Context windows, token budgets, compaction, scoped reads, or handoffs | `docs/standards/context-hygiene-standard.md` |
 | Durable implementation, design quality, testing discipline, or AI coding fundamentals | `docs/policy/durable-development-engineering-policy.md` |
@@ -43,6 +46,7 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 - logs, generated reports, and command output
 - exported manifests
 - archived plans or superseded briefs
+- `backend/main.py` broad ranges; search for route/helper names first
 
 Use `rg` or targeted file excerpts before opening long files.
 
@@ -51,6 +55,8 @@ Use `rg` or targeted file excerpts before opening long files.
 - `.git/`
 - `.venv/`, `venv/`, `node_modules/`, and dependency caches
 - build output, coverage, and generated artifacts
+- `graphify-out/` and `graphify-out/cache/`
+- `workspace/state/`
 - ignored Graphify output
 - secrets and environment files
 - large transcripts or pasted chat histories

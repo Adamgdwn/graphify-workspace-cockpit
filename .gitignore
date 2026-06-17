@@ -1,12 +1,28 @@
 # Python
 backend/.venv/
+.venv/
+venv/
 __pycache__/
 *.pyc
 *.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+htmlcov/
 
 # Node
+node_modules/
 frontend/node_modules/
+dist/
+build/
 frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# Generated Graphify output (rebuild locally with `graphify update . --no-cluster`)
+graphify-out/
 
 # State (user data — not committed)
 workspace/state/

@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T22:00:00-06:00
-Status: stabilization Chunk 11 task complete; current-build pathway archived
+Last Updated: 2026-06-16T22:15:25-06:00
+Status: stabilization Chunk 12 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -61,8 +61,11 @@ storage, connector status, warnings, and next best action. Chunk 11 is task
 complete: SharePoint and OneNote graph nodes now use a shared connector contract
 with Graphify-compatible grouping fields, connector ingest normalizes cloud
 nodes before merge, and connector relationships are canonical `links` that
-appear in graph counts and Map full-graph output. The recommended next
-implementation chunk is Chunk 12: Token-Saving Repo Cleanup and Agent Docs.
+appear in graph counts and Map full-graph output. Chunk 12 is task complete:
+generated Graphify output is ignored and removed from version control, and
+short restart/source-routing docs now help future agents avoid generated output
+and stale context. The recommended next implementation chunk is Chunk 13:
+Backend Module Split Plan.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is
