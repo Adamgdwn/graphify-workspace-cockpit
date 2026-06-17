@@ -489,6 +489,14 @@ def _node_cluster_id(node: dict) -> str:
     return _node_workspace_label(node)
 
 
+def _node_overlap_cluster_id(node: dict) -> str:
+    workspace_key = _node_workspace_key(node)
+    _, module_label = _node_module_group(node, workspace_key)
+    if module_label != "(root)":
+        return f"{_node_workspace_label(node, workspace_key)}::{module_label}"
+    return _node_workspace_label(node, workspace_key)
+
+
 def _node_project_relative_parts(node: dict, workspace_key: str) -> list[str]:
     parts = _node_source_parts(node)
     if not parts:
@@ -2326,6 +2334,51 @@ def _load_workspace_scope_for_rebuild() -> dict | None:
         ) from exc
 
 
+def _dedupe_raw_graphify_node_ids(graph: dict) -> dict:
+    """Repair duplicate semantic ids in raw Graphify output before strict activation."""
+    nodes = graph.get("nodes")
+    if not isinstance(nodes, list):
+        return graph
+
+    used_ids: set[str] = set()
+    seen_counts: Counter[str] = Counter()
+    repaired_nodes: list[object] = []
+    changed = False
+
+    for raw_node in nodes:
+        if not isinstance(raw_node, dict):
+            repaired_nodes.append(raw_node)
+            continue
+        raw_id = raw_node.get("id")
+        if not raw_id:
+            repaired_nodes.append(raw_node)
+            continue
+
+        node_id = str(raw_id)
+        seen_counts[node_id] += 1
+        next_id = node_id
+        if next_id in used_ids:
+            changed = True
+            index = seen_counts[node_id]
+            next_id = f"{node_id}__duplicate_{index}"
+            while next_id in used_ids:
+                index += 1
+                next_id = f"{node_id}__duplicate_{index}"
+            node = dict(raw_node)
+            node["id"] = next_id
+            node.setdefault("original_graphify_id", node_id)
+            repaired_nodes.append(node)
+        else:
+            repaired_nodes.append(raw_node)
+        used_ids.add(next_id)
+
+    if not changed:
+        return graph
+    repaired = dict(graph)
+    repaired["nodes"] = repaired_nodes
+    return repaired
+
+
 def _filtered_scoped_graph_path(
     *,
     source_graph_path: Path,
@@ -2333,7 +2386,8 @@ def _filtered_scoped_graph_path(
     profile: dict,
     scan_root: Path,
 ) -> tuple[Path, dict]:
-    graph = normalize_graph(json.loads(source_graph_path.read_text()))
+    raw_graph = _dedupe_raw_graphify_node_ids(json.loads(source_graph_path.read_text()))
+    graph = normalize_graph(raw_graph)
     filtered_graph, stats = filter_workspace_scope_graph(graph, profile, scan_root)
     normalized = normalize_graph(filtered_graph, require_link_targets=True)
     destination_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2759,7 +2813,7 @@ def get_overlap_report() -> dict:
     node_meta: dict[str, dict] = {
         n["id"]: {
             "label": n.get("label", n["id"]),
-            "cluster": _node_cluster_id(n),
+            "cluster": _node_overlap_cluster_id(n),
             "source_file": n.get("source_file", ""),
         }
         for n in g.get("nodes", [])

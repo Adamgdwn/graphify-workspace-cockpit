@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-17T11:09:43-06:00
-Status: workspace scope Chunk 6 task complete; Chunk 7 next; current-build pathway archived
+Last Updated: 2026-06-17T11:35:38-06:00
+Status: workspace scope Chunk 7 task complete; owner review / final polish next; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,7 +12,7 @@ default.
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
 3. Read `docs/workspace-scope-and-signal-plan.md`.
-4. Start with Chunk 7 unless Adam redirects.
+4. Start with owner review / final polish unless Adam redirects.
 5. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 6. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
@@ -130,7 +130,15 @@ graph, chat and recommendation workflows receive compact scope context with
 included groups plus hidden/excluded evidence, overlap analysis ignores
 low-signal hidden nodes by default, and Recommendation cards show context and
 rough token-saving evidence.
-Continue with Chunk 7: Video-Readiness Smoke Pass.
+
+Workspace scope Chunk 7 is task complete as of 2026-06-17T11:35:38-06:00:
+the video-readiness path was validated against `/home/adamgoodwin/code` with a
+saved scoped profile, explicit noisy-folder exclusions, scoped rebuild,
+workspace overview, repo/module drilldown, hidden low-signal counts, semantic
+overlap groups, and a compact scoped Ask response. The smoke pass also fixed
+duplicate raw Graphify node ids during scoped rebuild activation and made
+single-repo semantic overlap group by meaningful module areas when community
+metadata is absent. Continue with owner review / final polish.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -163,7 +171,7 @@ Open owner-review flags before future implementation:
 
 1. `git status --short` — preserve unrelated work.
 2. Read `docs/workspace-scope-and-signal-plan.md`.
-3. Start with Chunk 7 unless Adam redirects.
+3. Start with owner review / final polish unless Adam redirects.
 4. Load only the files named in that chunk.
 5. Use `docs/context-map.md` if routing is still unclear.
 

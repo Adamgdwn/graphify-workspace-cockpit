@@ -1,7 +1,7 @@
 # Workspace Scope and Signal Plan
 
-Last Updated: 2026-06-17T11:09:43-06:00
-Status: active plan - Chunk 6 task complete; Chunk 7 next
+Last Updated: 2026-06-17T11:35:38-06:00
+Status: active plan - Chunk 7 task complete; owner review / final polish next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -80,6 +80,14 @@ Observed on 2026-06-16:
   context packet, overlap reporting ignores low-signal hidden nodes, and
   recommendation cards surface included groups, hidden/excluded context, and
   rough token-saving evidence.
+- Chunk 7 is task complete as of 2026-06-17T11:35:38-06:00:
+  the video-readiness path was validated against `/home/adamgoodwin/code` with
+  explicit noisy-folder exclusions, a scoped rebuild, workspace overview,
+  repo/module drilldown, hidden low-signal counts, semantic overlap groups, and
+  a compact scoped Ask response. The smoke pass uncovered and fixed two
+  runtime issues: duplicate raw Graphify node ids are repaired before scoped
+  activation, and single-repo semantic overlap now groups by meaningful module
+  areas when community metadata is absent.
 
 ## Target Mental Model
 
@@ -643,6 +651,39 @@ Acceptance:
 - Demonstrate hidden low-signal node counts.
 - Ask one question that returns a compact scoped answer.
 
+Status: task complete on 2026-06-17T11:35:38-06:00.
+
+Evidence:
+
+- `POST /workspace-scope/inspect` selected `/home/adamgoodwin/code`; saved
+  profile `Adam Code Cockpit Video Scope` included
+  `/home/adamgoodwin/code/agents/graphify-workspace-cockpit` and explicitly
+  excluded noisy/config/archive/sibling folders plus secret-like root files by
+  path presence only.
+- `POST /graph/rebuild` completed for the saved scope at
+  `2026-06-17T17:31:20.404726+00:00`.
+- `/graph/summary` returned 1,130 visible scoped nodes, 328 hidden low-signal
+  nodes, 7 scoped exclusions, and a top-level
+  `graphify-workspace-cockpit` overview group.
+- `/graph/summary?project=/home/adamgoodwin/code/agents/graphify-workspace-cockpit`
+  drilled into module groups including `docs`, `backend`, `frontend`,
+  `tests`, `scripts`, and `db`.
+- `POST /graph/semantic-pass` with `nomic-embed-text:latest` completed across
+  1,458 raw graph nodes and stored 29,755 semantic edges.
+- `/graph/overlap-report` returned two meaningful overlap groups after the
+  module-grouping fix, including `graphify-workspace-cockpit::backend` to
+  `graphify-workspace-cockpit::tests`.
+- `POST /ask` for "What are the main project areas in this scoped workspace?"
+  returned 13 scoped evidence items enriched with repo/source-root/signal-tier
+  metadata.
+- `scripts/demo-path-smoke.mjs` passed against the live local backend/frontend:
+  backend health, graph summary, Ask evidence, recommendation queue, work queue,
+  decision ledger, overlap report, and headless Chromium frontend shell.
+- Focused regression validation passed with
+  `backend/.venv/bin/python -m pytest tests/test_graphify_service.py -q`
+  after adding coverage for duplicate Graphify ids and single-repo module
+  overlap grouping.
+
 ## Non-Goals
 
 - Do not index the entire home directory by default.
@@ -661,7 +702,7 @@ To continue tomorrow:
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md`.
 4. Read this document only: `docs/workspace-scope-and-signal-plan.md`.
-5. Start with Chunk 5 unless Adam redirects.
+5. Start with owner review / final polish unless Adam redirects.
 
 Avoid loading `docs/current-build-pathway.md` and long historical sections of
 `docs/stabilization-plan.md` unless investigating a regression.

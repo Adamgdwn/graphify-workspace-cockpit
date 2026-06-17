@@ -259,6 +259,47 @@ def test_rebuild_with_workspace_scope_scans_and_activates_filtered_graph(
     assert main._REBUILD_STATUS["status"] == "complete"
 
 
+def test_scoped_rebuild_repairs_duplicate_graphify_node_ids(tmp_path: Path) -> None:
+    workspace_root = tmp_path / "code"
+    app = workspace_root / "app"
+    app.mkdir(parents=True)
+    (app / "README.md").write_text("# App")
+    (app / "runtime.py").write_text("class RuntimeError(Exception): pass")
+    (app / "worker.py").write_text("def worker(): pass")
+
+    source_graph = app / "graphify-out" / "graph.json"
+    source_graph.parent.mkdir(parents=True)
+    source_graph.write_text(json.dumps({
+        "nodes": [
+            {"id": "runtimeerror", "label": "RuntimeError", "source_file": "README.md"},
+            {"id": "runtimeerror", "label": "RuntimeError", "source_file": "runtime.py"},
+            {"id": "worker", "label": "worker", "source_file": "worker.py"},
+        ],
+        "links": [{"source": "runtimeerror", "target": "worker", "relation": "mentions"}],
+    }))
+    profile = {
+        "root": str(workspace_root),
+        "profile_name": "Duplicate Repair",
+        "included_paths": [str(app)],
+    }
+    destination = tmp_path / "scoped" / "graph.json"
+
+    main._filtered_scoped_graph_path(
+        source_graph_path=source_graph,
+        destination_path=destination,
+        profile=profile,
+        scan_root=app,
+    )
+
+    graph = json.loads(destination.read_text())
+    ids = [node["id"] for node in graph["nodes"]]
+    duplicate = next(node for node in graph["nodes"] if node["source_file"] == "runtime.py")
+
+    assert ids == ["runtimeerror", "runtimeerror__duplicate_2", "worker"]
+    assert duplicate["original_graphify_id"] == "runtimeerror"
+    assert graph["links"] == [{"source": "runtimeerror", "target": "worker", "relation": "mentions"}]
+
+
 def test_graph_full_hides_low_signal_nodes_by_default(monkeypatch, tmp_path: Path) -> None:
     graph = tmp_path / "graph.json"
     graph.write_text(json.dumps({
@@ -615,3 +656,50 @@ def test_overlap_report_ignores_low_signal_nodes(monkeypatch, tmp_path: Path) ->
     assert report["groups"][0]["cluster_a"] == "app-a"
     assert report["groups"][0]["cluster_b"] == "app-b"
     assert [pair["target"] for pair in report["groups"][0]["top_pairs"]] == ["b-readme"]
+
+
+def test_overlap_report_groups_single_repo_edges_by_module(monkeypatch, tmp_path: Path) -> None:
+    repo = tmp_path / "code" / "cockpit"
+    graph = tmp_path / "workspace-graph.json"
+    graph.write_text(json.dumps({
+        "nodes": [
+            {
+                "id": "backend-main",
+                "label": "main.py",
+                "source_file": "backend/main.py",
+                "source_root": str(repo),
+                "source_root_name": "cockpit",
+                "repo_project_name": "cockpit",
+            },
+            {
+                "id": "docs-plan",
+                "label": "plan.md",
+                "source_file": "docs/plan.md",
+                "source_root": str(repo),
+                "source_root_name": "cockpit",
+                "repo_project_name": "cockpit",
+            },
+        ],
+        "links": [],
+    }))
+    semantic_file = tmp_path / "semantic-edges.json"
+    semantic_file.write_text(json.dumps({
+        "created_at": "2026-06-17T11:33:00-06:00",
+        "edges": [{"source": "backend-main", "target": "docs-plan", "similarity": 0.88}],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "SEMANTIC_EDGES_FILE", semantic_file)
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+
+    report = TestClient(main.app).get("/graph/overlap-report").json()
+
+    assert report["total_cross_edges"] == 1
+    assert report["groups"][0]["cluster_a"] == "cockpit::backend"
+    assert report["groups"][0]["cluster_b"] == "cockpit::docs"
