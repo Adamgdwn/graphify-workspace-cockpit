@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-17T17:25:00-06:00
-Status: concise relationship-map plan split out; start with docs/relationship-map-plan.md
+Last Updated: 2026-06-17T17:39:29-06:00
+Status: relationship-map Slices 1-2 complete; next active work is Slice 3 gap triage
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,7 +12,7 @@ default.
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
 3. Read `docs/relationship-map-plan.md`.
-4. Start with Slice 1 unless Adam redirects.
+4. Start with Slice 3 unless Adam redirects.
 5. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
 6. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 7. Open `docs/current-build-pathway.md` only when investigating old chunk
@@ -81,7 +81,11 @@ sublabels and hover/focus explanations. The UI polish commit is
 The active plan is now `docs/relationship-map-plan.md`: make the Map tab a
 decision-grade relationship map that shows physical structure, meaningful
 connections, overlaps, gaps, and decisions without requiring a full broad graph
-payload in the browser.
+payload in the browser. Relationship-map Slices 1-2 are task complete: the
+broad Overview now exposes weighted group-to-group physical relationships,
+selected groups show connected groups plus gap metadata, and Overlap can open a
+summary-level server-side overlap panel without loading capped Evidence/full
+graph payloads. Next active work is Slice 3 gap triage.
 
 The completed scope/signal history is retained in
 `docs/workspace-scope-and-signal-plan.md`: select a parent folder, represent
@@ -231,7 +235,7 @@ Relationship-map plan split is task complete as of
 `docs/workspace-scope-and-signal-plan.md` is marked completed history and should
 only be opened for scope/signal evidence or regressions.
 
-Continue with `docs/relationship-map-plan.md`, Slice 1 unless Adam redirects.
+Continue with `docs/relationship-map-plan.md`, Slice 3 unless Adam redirects.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -265,7 +269,7 @@ Open owner-review flags before future implementation:
 
 1. `git status --short` — preserve unrelated work.
 2. Read `docs/relationship-map-plan.md`.
-3. Start with Slice 1 unless Adam redirects.
+3. Start with Slice 3 unless Adam redirects.
 4. Load only the files named in that chunk.
 5. Use `docs/context-map.md` if routing is still unclear.
 

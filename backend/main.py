@@ -10,7 +10,7 @@ from collections import Counter, defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 
 import hashlib
 
@@ -559,6 +559,50 @@ def _node_path_module_group(node: dict, area: str) -> tuple[str, str] | None:
     return f"{area}::{module}", module
 
 
+def _summary_cluster_getter(
+    nodes: list[dict],
+    project: str | None = None,
+) -> tuple[Callable[[dict], str | None], dict[str, str], dict[str, str]]:
+    cluster_labels: dict[str, str] = {}
+    cluster_group_types: dict[str, str] = {}
+    group_by_path = _should_group_summary_by_path(nodes)
+    project_is_path_area = bool(
+        project is not None
+        and any((area := _node_path_area(n)) is not None and area[0] == project for n in nodes)
+    )
+
+    def get_cluster(n: dict) -> str | None:
+        if project is None and group_by_path:
+            area = _node_path_area(n)
+            if area is None:
+                return None
+            cluster_id, label = area
+            cluster_labels.setdefault(cluster_id, label)
+            cluster_group_types.setdefault(cluster_id, "repo")
+            return cluster_id
+        if project_is_path_area and project is not None:
+            module = _node_path_module_group(n, project)
+            if module is None:
+                return None
+            module_key, module_label = module
+            cluster_labels.setdefault(module_key, module_label)
+            cluster_group_types.setdefault(module_key, "module")
+            return module_key
+        workspace_key = _node_workspace_key(n)
+        if project is None:
+            cluster_labels.setdefault(workspace_key, _node_workspace_label(n, workspace_key))
+            cluster_group_types.setdefault(workspace_key, "repo")
+            return workspace_key
+        if workspace_key != project:
+            return None
+        module_key, module_label = _node_module_group(n, workspace_key)
+        cluster_labels.setdefault(module_key, module_label)
+        cluster_group_types.setdefault(module_key, "module")
+        return module_key
+
+    return get_cluster, cluster_labels, cluster_group_types
+
+
 def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] | None) -> bool:
     """Return True if node passes the active source/cluster filter."""
     node_source = n.get("source", "local")
@@ -754,42 +798,10 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
     links_raw: list[dict] = signal_graph["links"]
     node_map: dict[str, dict] = {n["id"]: n for n in nodes_raw}
 
-    cluster_labels: dict[str, str] = {}
-    cluster_group_types: dict[str, str] = {}
-    group_by_path = _should_group_summary_by_path(nodes_raw)
-    project_is_path_area = bool(
-        project is not None
-        and any((area := _node_path_area(n)) is not None and area[0] == project for n in nodes_raw)
+    get_cluster, cluster_labels, cluster_group_types = _summary_cluster_getter(
+        nodes_raw,
+        project,
     )
-
-    def get_cluster(n: dict) -> str | None:
-        if project is None and group_by_path:
-            area = _node_path_area(n)
-            if area is None:
-                return None
-            cluster_id, label = area
-            cluster_labels.setdefault(cluster_id, label)
-            cluster_group_types.setdefault(cluster_id, "repo")
-            return cluster_id
-        if project_is_path_area and project is not None:
-            module = _node_path_module_group(n, project)
-            if module is None:
-                return None
-            module_key, module_label = module
-            cluster_labels.setdefault(module_key, module_label)
-            cluster_group_types.setdefault(module_key, "module")
-            return module_key
-        workspace_key = _node_workspace_key(n)
-        if project is None:
-            cluster_labels.setdefault(workspace_key, _node_workspace_label(n, workspace_key))
-            cluster_group_types.setdefault(workspace_key, "repo")
-            return workspace_key
-        if workspace_key != project:
-            return None
-        module_key, module_label = _node_module_group(n, workspace_key)
-        cluster_labels.setdefault(module_key, module_label)
-        cluster_group_types.setdefault(module_key, "module")
-        return module_key
 
     # Aggregate node counts per cluster
     cluster_stats: dict[str, dict] = defaultdict(
@@ -2944,6 +2956,171 @@ def get_semantic_edges() -> dict:
         return json.loads(SEMANTIC_EDGES_FILE.read_text())
     except Exception:
         return {"edges": [], "model": None, "threshold": None, "created_at": None}
+
+
+@app.get("/graph/overlap-summary")
+def get_overlap_summary(project: str | None = None) -> dict:
+    """Compute semantic overlap groups aligned to the visible summary map."""
+    if not SEMANTIC_EDGES_FILE.exists():
+        return {
+            "groups": [],
+            "total_cross_edges": 0,
+            "created_at": None,
+            "level": "top" if project is None else "project",
+            "project": project,
+        }
+    try:
+        sem_data = json.loads(SEMANTIC_EDGES_FILE.read_text())
+    except Exception:
+        return {
+            "groups": [],
+            "total_cross_edges": 0,
+            "created_at": None,
+            "level": "top" if project is None else "project",
+            "project": project,
+        }
+
+    edges = sem_data.get("edges", [])
+    if not edges:
+        return {
+            "groups": [],
+            "total_cross_edges": 0,
+            "created_at": sem_data.get("created_at"),
+            "level": "top" if project is None else "project",
+            "project": project,
+        }
+
+    try:
+        graph = apply_signal_tiers_to_graph(_load_graph())
+    except Exception:
+        return {
+            "groups": [],
+            "total_cross_edges": 0,
+            "created_at": sem_data.get("created_at"),
+            "level": "top" if project is None else "project",
+            "project": project,
+        }
+
+    selection = _load_cluster_selection()
+    sel_sources = selection.get("sources", ["local", "sharepoint", "onenote"])
+    sel_clusters = selection.get("clusters")
+    nodes_raw = [
+        n for n in graph.get("nodes", [])
+        if isinstance(n, dict)
+        and _is_node_selected(n, sel_sources, sel_clusters)
+        and is_visible_signal_node(n)
+    ]
+    node_map: dict[str, dict] = {str(n.get("id")): n for n in nodes_raw}
+    get_cluster, cluster_labels, _cluster_group_types = _summary_cluster_getter(
+        nodes_raw,
+        project,
+    )
+    node_clusters: dict[str, str] = {}
+    for node in nodes_raw:
+        node_id = str(node.get("id"))
+        cluster = get_cluster(node)
+        if cluster:
+            node_clusters[node_id] = cluster
+
+    def basename(source_file: str) -> str:
+        return source_file.replace("\\", "/").split("/")[-1]
+
+    groups: dict[str, dict] = {}
+    total_cross = 0
+    for edge in edges:
+        source_id = str(edge.get("source") or "")
+        target_id = str(edge.get("target") or "")
+        src_node = node_map.get(source_id)
+        tgt_node = node_map.get(target_id)
+        if not src_node or not tgt_node:
+            continue
+        src_cluster = node_clusters.get(source_id)
+        tgt_cluster = node_clusters.get(target_id)
+        if not src_cluster or not tgt_cluster or src_cluster == tgt_cluster:
+            continue
+        try:
+            similarity = float(edge.get("similarity") or 0)
+        except (TypeError, ValueError):
+            similarity = 0.0
+        total_cross += 1
+        cluster_a, cluster_b = sorted((src_cluster, tgt_cluster))
+        key = f"{cluster_a}___{cluster_b}"
+        if key not in groups:
+            groups[key] = {
+                "cluster_a": cluster_a,
+                "cluster_b": cluster_b,
+                "label_a": cluster_labels.get(cluster_a, cluster_a),
+                "label_b": cluster_labels.get(cluster_b, cluster_b),
+                "edge_count": 0,
+                "total_similarity": 0.0,
+                "max_similarity": 0.0,
+                "same_name_count": 0,
+                "pairs": [],
+            }
+
+        file_a = str(src_node.get("source_file") or "")
+        file_b = str(tgt_node.get("source_file") or "")
+        same_name = bool(file_a and file_b and basename(file_a) == basename(file_b))
+        groups[key]["edge_count"] += 1
+        groups[key]["total_similarity"] += similarity
+        groups[key]["max_similarity"] = max(groups[key]["max_similarity"], similarity)
+        if same_name:
+            groups[key]["same_name_count"] += 1
+        groups[key]["pairs"].append(
+            {
+                "source": source_id,
+                "target": target_id,
+                "label_a": src_node.get("label", source_id),
+                "label_b": tgt_node.get("label", target_id),
+                "file_a": file_a,
+                "file_b": file_b,
+                "similarity": round(similarity, 4),
+                "same_name": same_name,
+            }
+        )
+
+    result: list[dict] = []
+    for group in sorted(
+        groups.values(),
+        key=lambda item: (
+            -int(item["same_name_count"] > 0),
+            -int(item["edge_count"]),
+            -float(item["max_similarity"]),
+        ),
+    ):
+        pairs = sorted(
+            group["pairs"],
+            key=lambda pair: (
+                -int(bool(pair.get("same_name"))),
+                -float(pair.get("similarity") or 0),
+            ),
+        )[:6]
+        avg_similarity = (
+            group["total_similarity"] / group["edge_count"]
+            if group["edge_count"]
+            else 0.0
+        )
+        result.append(
+            {
+                "cluster_a": group["cluster_a"],
+                "cluster_b": group["cluster_b"],
+                "label_a": group["label_a"],
+                "label_b": group["label_b"],
+                "edge_count": group["edge_count"],
+                "avg_similarity": round(avg_similarity, 4),
+                "max_similarity": round(group["max_similarity"], 4),
+                "same_name_count": group["same_name_count"],
+                "top_pairs": pairs,
+            }
+        )
+
+    return {
+        "groups": result,
+        "total_cross_edges": total_cross,
+        "created_at": sem_data.get("created_at"),
+        "level": "top" if project is None else "project",
+        "project": project,
+    }
 
 
 @app.get("/graph/overlap-report")

@@ -875,3 +875,81 @@ def test_overlap_report_groups_single_repo_edges_by_module(monkeypatch, tmp_path
     assert report["total_cross_edges"] == 1
     assert report["groups"][0]["cluster_a"] == "cockpit::backend"
     assert report["groups"][0]["cluster_b"] == "cockpit::docs"
+
+
+def test_overlap_summary_uses_visible_summary_groups(monkeypatch, tmp_path: Path) -> None:
+    code_root = tmp_path / "code"
+    graph = tmp_path / "broad-workspace-graph.json"
+    shared_meta = {
+        "source_root": str(code_root),
+        "source_root_name": "code",
+        "repo_project_name": "code",
+        "file_type": "document",
+    }
+    graph.write_text(json.dumps({
+        "nodes": [
+            {
+                **shared_meta,
+                "id": "app-readme",
+                "label": "README",
+                "source_file": "Applications/Timeshare-Connect/README.md",
+            },
+            {
+                **shared_meta,
+                "id": "agent-readme",
+                "label": "README",
+                "source_file": "agents/graphify-workspace-cockpit/README.md",
+            },
+            {
+                **shared_meta,
+                "id": "tool-plan",
+                "label": "Plan",
+                "source_file": "Tools/graphify/docs/plan.md",
+            },
+            {
+                **shared_meta,
+                "id": "lockfile",
+                "label": "Lock",
+                "source_file": "Applications/Timeshare-Connect/package-lock.json",
+                "signal_tier": "excluded",
+            },
+        ],
+        "links": [],
+    }))
+    semantic_file = tmp_path / "semantic-edges.json"
+    semantic_file.write_text(json.dumps({
+        "created_at": "2026-06-17T17:44:00-06:00",
+        "edges": [
+            {"source": "app-readme", "target": "agent-readme", "similarity": 0.92},
+            {"source": "app-readme", "target": "tool-plan", "similarity": 0.82},
+            {"source": "lockfile", "target": "agent-readme", "similarity": 0.99},
+        ],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "SEMANTIC_EDGES_FILE", semantic_file)
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+
+    report = TestClient(main.app).get("/graph/overlap-summary").json()
+
+    assert report["level"] == "top"
+    assert report["total_cross_edges"] == 2
+    assert {
+        (group["cluster_a"], group["cluster_b"], group["edge_count"])
+        for group in report["groups"]
+    } == {
+        ("Applications", "Tools", 1),
+        ("Applications", "agents", 1),
+    }
+    agents_group = next(
+        group for group in report["groups"]
+        if group["cluster_b"] == "agents"
+    )
+    assert agents_group["same_name_count"] == 1
+    assert agents_group["top_pairs"][0]["same_name"] is True

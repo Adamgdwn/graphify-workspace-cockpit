@@ -1,6 +1,6 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-17T17:25:02-06:00
+Last Updated: 2026-06-17T17:39:29-06:00
 Status: active plan - relationship-map restart and next implementation slices
 Owner: Adam Goodwin
 
@@ -64,11 +64,11 @@ answer:
 
 The map is only partway to that product intent.
 
-The latest fix prevents the one-dot collapse, but the broad workspace map still
-needs a clearer decision surface for relationships. In particular, broad maps
-cannot rely on full Evidence mode because `/graph/full` is capped for browser
-safety, and the existing Overlap workflow still expects Evidence/full graph in
-some cases.
+The latest fixes prevent the one-dot collapse and make broad Overlap usable
+without loading full Evidence mode. The next missing decision surface is gap
+triage: disconnected groups are visible, but the map does not yet explain
+whether they are truly isolated, hidden by current filters, missing semantic
+extraction, or just root-level docs.
 
 ## Next Implementation Slices
 
@@ -116,10 +116,12 @@ Validation:
 
 ### Slice 2 - Broad Overlap Without Full Evidence Mode
 
+Status: completed 2026-06-17T17:33:47-06:00.
+
 Goal: make overlap useful on broad maps without requiring a 5,000-node full
 graph payload.
 
-Expected behavior:
+Delivered behavior:
 
 - Add or reuse a server-side overlap summary that works on visible summary
   groups.
@@ -128,12 +130,33 @@ Expected behavior:
 - The UI should not ask the browser to render the full evidence graph just to
   start overlap review.
 
-Likely files:
+Implementation notes:
 
-- `backend/main.py`
-- `frontend/src/tabs/Map.tsx`
-- overlap status or recommendation routes only if needed
-- backend tests covering broad overlap summary behavior
+- `backend/main.py` now exposes `/graph/overlap-summary`, which reads stored
+  semantic edges server-side, applies the active source/cluster and signal
+  filters, and groups overlap pairs using the same visible summary grouping as
+  `/graph/summary`.
+- `frontend/src/tabs/Map.tsx` now opens Overlap in summary mode when Evidence
+  view is capped, fetches summary-level overlap pairs, and keeps the existing
+  triage/recommendation workflow available for those pairs.
+- Summary overlap cards can highlight the two visible Overview groups without
+  requiring raw full-graph nodes or semantic edge rendering.
+- `frontend/src/styles.css` labels summary-level overlap panels.
+- `tests/test_graphify_service.py` covers broad summary overlap grouping and
+  confirms excluded low-signal semantic edges are ignored.
+
+Validation:
+
+- `backend/.venv/bin/python -m pytest tests/test_graphify_service.py -q`:
+  22 passed
+- `backend/.venv/bin/python -m pytest tests -q`: 73 passed
+- `source ~/.nvm/nvm.sh && npm --prefix frontend run typecheck`: passed
+- `source ~/.nvm/nvm.sh && npm --prefix frontend run build`: passed
+- active graph overlap-summary inspection: endpoint returned cleanly with
+  0 stored summary overlap pairs because the current semantic-edge store is
+  empty
+- `git diff --check`: passed
+- `graphify update . --no-cluster`: rebuilt 1,516 nodes and 48,144 edges
 
 ### Slice 3 - Gap Triage
 
@@ -178,7 +201,7 @@ For the next coding session:
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md` only as the top-level router.
 4. Read this file: `docs/relationship-map-plan.md`.
-5. Start with Slice 1 unless Adam redirects.
+5. Start with Slice 3 unless Adam redirects.
 
 Avoid loading the long historical plans unless investigating a regression:
 

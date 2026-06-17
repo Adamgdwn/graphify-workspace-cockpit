@@ -1674,6 +1674,18 @@ body {
   color: #3a4060;
 }
 
+.map-overlap-source-badge {
+  padding: 2px 6px;
+  border: 1px solid rgba(107, 140, 255, 0.28);
+  border-radius: 4px;
+  background: rgba(107, 140, 255, 0.08);
+  color: #9ab0e0;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
 .map-overlap-hint {
   padding: 0 15px 10px;
   font-size: 0.72rem;

@@ -208,6 +208,30 @@ interface OverlapGroup {
   maxSimilarity: number;
   sameNameCount: number;
   topPairs: OverlapPair[];
+  source: "full" | "summary";
+}
+
+interface OverlapSummaryResponse {
+  groups?: Array<{
+    cluster_a: string;
+    cluster_b: string;
+    edge_count: number;
+    avg_similarity: number;
+    max_similarity?: number;
+    same_name_count?: number;
+    top_pairs?: Array<{
+      source?: string;
+      target?: string;
+      label_a?: string;
+      label_b?: string;
+      file_a?: string;
+      file_b?: string;
+      similarity?: number;
+      same_name?: boolean;
+    }>;
+  }>;
+  total_cross_edges?: number;
+  created_at?: string | null;
 }
 
 interface TriageResult {
@@ -264,6 +288,31 @@ function dossierList(items?: string[]): string[] {
 function relationList(relations?: string[]): string {
   const cleaned = (relations ?? []).map((relation) => relation.trim()).filter(Boolean);
   return cleaned.length ? cleaned.slice(0, 3).join(", ") : "physical links";
+}
+
+function overlapSummaryGroups(response: OverlapSummaryResponse | null): OverlapGroup[] {
+  return (response?.groups ?? []).map((group) => {
+    const topPairs = (group.top_pairs ?? []).map((pair) => ({
+      source: pair.source ?? "",
+      target: pair.target ?? "",
+      labelA: pair.label_a ?? pair.source ?? UNKNOWN_VALUE,
+      labelB: pair.label_b ?? pair.target ?? UNKNOWN_VALUE,
+      fileA: pair.file_a ?? "",
+      fileB: pair.file_b ?? "",
+      similarity: Number(pair.similarity ?? 0),
+      sameName: Boolean(pair.same_name),
+    }));
+    return {
+      clusterA: group.cluster_a,
+      clusterB: group.cluster_b,
+      edgeCount: group.edge_count,
+      avgSimilarity: Math.round(Number(group.avg_similarity ?? 0) * 100) / 100,
+      maxSimilarity: Math.round(Number(group.max_similarity ?? group.avg_similarity ?? 0) * 100) / 100,
+      sameNameCount: group.same_name_count ?? topPairs.filter((pair) => pair.sameName).length,
+      topPairs,
+      source: "summary" as const,
+    };
+  });
 }
 
 const DECISION_META = Object.fromEntries(
@@ -830,6 +879,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [showSemantic, setShowSemantic] = useState(false);
   const [semanticEdges, setSemanticEdges] = useState<Array<{ source: string; target: string; similarity: number }>>([]);
   const [semanticMeta, setSemanticMeta] = useState<{ edge_count: number; created_at: string | null } | null>(null);
+  const [summaryOverlap, setSummaryOverlap] = useState<OverlapSummaryResponse | null>(null);
   // overlap analysis panel
   const [showOverlap, setShowOverlap] = useState(false);
   const [highlightedPair, setHighlightedPair] = useState<[string, string] | null>(null);
@@ -870,7 +920,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   }, [semanticEdges, nodeClusterMap, fullGraph]);
 
   // Overlap analysis groups — ranked cross-cluster pairs by connection count
-  const overlapGroups = useMemo((): OverlapGroup[] => {
+  const fullOverlapGroups = useMemo((): OverlapGroup[] => {
     if (!fullGraph || !crossSemanticEdges.length) return [];
     const nodeMap = Object.fromEntries(fullGraph.nodes.map((n) => [n.id, n]));
     const basename = (f: string) => f.split("/").pop() ?? f;
@@ -915,6 +965,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           maxSimilarity: Math.round(maxSim * 100) / 100,
           sameNameCount,
           topPairs: sorted.slice(0, 6),
+          source: "full" as const,
         };
       })
       // sort: groups with same-name matches first, then by edge count
@@ -923,6 +974,16 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         return b.edgeCount - a.edgeCount;
       });
   }, [crossSemanticEdges, nodeClusterMap, fullGraph]);
+
+  const summaryOverlapGroupsData = useMemo(
+    () => overlapSummaryGroups(summaryOverlap),
+    [summaryOverlap],
+  );
+  const usingSummaryOverlap = viewMode !== "full";
+  const overlapGroups = usingSummaryOverlap ? summaryOverlapGroupsData : fullOverlapGroups;
+  const overlapConnectionCount = usingSummaryOverlap
+    ? summaryOverlap?.total_cross_edges ?? 0
+    : crossSemanticEdges.length;
 
   function overlapKey(group: Pick<OverlapGroup, "clusterA" | "clusterB">) {
     return `${group.clusterA}___${group.clusterB}`;
@@ -1072,6 +1133,18 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       })
       .catch(() => {});
   }, []);
+
+  // Load broad-safe overlap groups aligned to the current summary surface.
+  useEffect(() => {
+    if (!summary) return;
+    const qs = summary.project ? `?project=${encodeURIComponent(summary.project)}` : "";
+    apiFetch(`/graph/overlap-summary${qs}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: OverlapSummaryResponse | null) => {
+        if (d) setSummaryOverlap(d);
+      })
+      .catch(() => {});
+  }, [summary?.project]);
 
   // Load durable overlap review status on mount
   useEffect(() => {
@@ -1590,11 +1663,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
   // Clear highlighted pair when semantic is turned off
   useEffect(() => {
-    if (!showSemantic) {
+    if (!showSemantic && viewMode === "full") {
       setHighlightedPair(null);
       onActiveContextChange?.(null);
     }
-  }, [showSemantic, onActiveContextChange]);
+  }, [showSemantic, viewMode, onActiveContextChange]);
 
   async function saveOverlapStatus(
     group: OverlapGroup,
@@ -1741,9 +1814,13 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
     if (mode === "overlap") {
       if (broadEvidenceDisabled) {
+        setViewMode("summary");
+        setShowSemantic(false);
+        setHighlightedPair(null);
+        setShowOverlap(true);
         setFocusNotice({
-          tone: "warn",
-          text: `Overlap mode needs Evidence view, which is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes. Narrow the scope or drill into a smaller project first.`,
+          tone: "info",
+          text: `Showing summary-level overlap because Evidence view is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes for this scope.`,
         });
         return;
       }
@@ -1776,6 +1853,26 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       nodeType: match.dominant_type,
       viewMode: "summary",
     });
+  }
+
+  function highlightSummaryOverlapPair(clusterA: string, clusterB: string) {
+    const cy = cyRef.current;
+    if (!cy) return;
+    const nodeA = cy.getElementById(clusterA);
+    const nodeB = cy.getElementById(clusterB);
+    const pair = nodeA.union(nodeB);
+    cy.batch(() => {
+      cy.nodes().removeClass("selected");
+      cy.edges().removeClass("highlighted");
+      pair.addClass("selected");
+      cy.edges().forEach((edge: any) => {
+        const source = edge.data("source");
+        const target = edge.data("target");
+        const inPair = (source === clusterA && target === clusterB) || (source === clusterB && target === clusterA);
+        if (inPair) edge.addClass("highlighted");
+      });
+    });
+    if (!pair.empty()) cy.fit(pair, 90);
   }
 
   async function toggleCluster(clusterId: string) {
@@ -2037,7 +2134,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     <button
       className="map-path-btn"
       onClick={() => {
-        if (viewMode !== "full" || mapMode !== "overlap") {
+        if (mapMode !== "overlap") {
           switchMapMode("overlap");
           return;
         }
@@ -2048,18 +2145,16 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }
       }}
       title={
-        viewMode !== "full"
-          ? "Switch to Full graph and open semantic overlap analysis"
+        usingSummaryOverlap
+          ? `${showOverlap ? "Close" : "Open"} summary overlap analysis - ${overlapGroups.length} group pairs detected`
           : !crossSemanticEdges.length
           ? "Enable Semantic overlay to run overlap analysis"
           : `${showOverlap ? "Close" : "Open"} overlap analysis - ${overlapGroups.length} cluster pairs detected`
       }
       style={
-        viewMode !== "full"
-          ? { opacity: 0.3, cursor: "default" }
-          : showOverlap
+        showOverlap
           ? { borderColor: "#f59e0b", color: "#f59e0b", background: "rgba(245,158,11,0.07)" }
-          : crossSemanticEdges.length
+          : overlapGroups.length
           ? { borderColor: "#7a6020", color: "#a08030" }
           : { opacity: 0.4, cursor: "default" }
       }
@@ -2211,31 +2306,43 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         </div>
 
         {/* Overlap analysis panel */}
-        {showOverlap && viewMode === "full" && (
+        {showOverlap && (viewMode === "full" || usingSummaryOverlap) && (
           <aside className="map-panel map-overlap-panel">
             <div className="map-panel-head">
-              <span className="map-panel-name">Overlap Analysis</span>
+              <span className="map-panel-name">
+                {usingSummaryOverlap ? "Summary Overlap" : "Overlap Analysis"}
+              </span>
               <button
                 className="map-panel-close"
                 onClick={() => { setShowOverlap(false); setHighlightedPair(null); onActiveContextChange?.(null); }}
                 aria-label="Close"
               >✕</button>
             </div>
-            {!crossSemanticEdges.length ? (
+            {!usingSummaryOverlap && !crossSemanticEdges.length ? (
               <div className="map-overlap-empty">
                 Enable the Semantic overlay first to see cross-repo overlap analysis.
               </div>
             ) : overlapGroups.length === 0 ? (
-              <div className="map-overlap-empty">No cross-repo overlaps detected.</div>
+              <div className="map-overlap-empty">
+                {usingSummaryOverlap
+                  ? "No summary-level overlap pairs detected for the current map."
+                  : "No cross-repo overlaps detected."}
+              </div>
             ) : (
               <>
                 <div className="map-overlap-summary">
+                  {usingSummaryOverlap && (
+                    <>
+                      <span className="map-overlap-source-badge">Summary</span>
+                      <span className="map-overlap-dot">·</span>
+                    </>
+                  )}
                   <span>
                     {filteredGroups.length}
                     {filteredGroups.length !== overlapGroups.length ? `/${overlapGroups.length}` : ""} pairs
                   </span>
                   <span className="map-overlap-dot">·</span>
-                  <span>{crossSemanticEdges.length} connections</span>
+                  <span>{overlapConnectionCount} connections</span>
                   {overlapStatusCounts.dismissed > 0 && (
                     <>
                       <span className="map-overlap-dot">·</span>
@@ -2451,10 +2558,18 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                             onClick={() => {
                               if (isActive) {
                                 setHighlightedPair(null);
-                                setShowSemantic(false);
+                                if (!usingSummaryOverlap) setShowSemantic(false);
+                                if (usingSummaryOverlap) {
+                                  cyRef.current?.nodes().removeClass("selected");
+                                  cyRef.current?.edges().removeClass("highlighted");
+                                }
                                 onActiveContextChange?.(null);
                               } else {
-                                if (!showSemantic) setShowSemantic(true);
+                                if (usingSummaryOverlap) {
+                                  highlightSummaryOverlapPair(g.clusterA, g.clusterB);
+                                } else if (!showSemantic) {
+                                  setShowSemantic(true);
+                                }
                                 setHighlightedPair([g.clusterA, g.clusterB]);
                                 onActiveContextChange?.({
                                   kind: "overlap-pair",
