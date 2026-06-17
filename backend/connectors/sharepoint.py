@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .base import ConnectorBase
+from .base import ConnectorBase, connector_node
 from .microsoft_auth import get_token, is_authenticated
 
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -93,20 +93,28 @@ class SharePointConnector(ConnectorBase):
 
     def to_graph_nodes(self, items: list[dict]) -> list[dict]:
         return [
-            {
-                "id": f"sharepoint:{item['id']}",
-                "label": item["name"],
-                "type": "document",
-                "source": "sharepoint",
-                "site_url": item["site_url"],
-                "file_path": item.get("web_url", ""),
-                "modified_at": item.get("modified_at", ""),
-                "metadata": {
+            connector_node(
+                connector_id=self.connector_id,
+                item_id=item["id"],
+                label=item["name"],
+                node_type="document",
+                file_type="document",
+                source_path_parts=(item.get("site_url", ""), item.get("name", item["id"])),
+                metadata={
                     "drive_id": item.get("drive_id", ""),
                     "item_id": item["id"],
                     "mime_type": item.get("mime_type", ""),
                     "size": item.get("size", 0),
+                    "site_url": item.get("site_url", ""),
+                    "web_url": item.get("web_url", ""),
+                    "modified_at": item.get("modified_at", ""),
                 },
-            }
+                extra={
+                    "site_url": item.get("site_url", ""),
+                    "file_path": item.get("web_url", ""),
+                    "source_location": item.get("web_url", ""),
+                    "modified_at": item.get("modified_at", ""),
+                },
+            )
             for item in items
         ]

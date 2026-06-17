@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .base import ConnectorBase
+from .base import ConnectorBase, connector_node
 from .microsoft_auth import get_token, is_authenticated
 
 GRAPH = "https://graph.microsoft.com/v1.0"
@@ -86,18 +86,31 @@ class OneNoteConnector(ConnectorBase):
 
     def to_graph_nodes(self, items: list[dict]) -> list[dict]:
         return [
-            {
-                "id": f"onenote:{item['id']}",
-                "label": item["title"],
-                "type": "note",
-                "source": "onenote",
-                "notebook": item["notebook"],
-                "section": item["section"],
-                "modified_at": item.get("modified_at", ""),
-                "metadata": {
+            connector_node(
+                connector_id=self.connector_id,
+                item_id=item["id"],
+                label=item["title"],
+                node_type="note",
+                file_type="document",
+                source_path_parts=(
+                    item.get("notebook", ""),
+                    item.get("section", ""),
+                    item.get("title", item["id"]),
+                ),
+                metadata={
                     "page_id": item["id"],
                     "web_url": item.get("web_url", ""),
+                    "notebook": item.get("notebook", ""),
+                    "section": item.get("section", ""),
+                    "created_at": item.get("created_at", ""),
+                    "modified_at": item.get("modified_at", ""),
                 },
-            }
+                extra={
+                    "notebook": item.get("notebook", ""),
+                    "section": item.get("section", ""),
+                    "source_location": item.get("web_url", ""),
+                    "modified_at": item.get("modified_at", ""),
+                },
+            )
             for item in items
         ]

@@ -13,9 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
+    from backend.connectors.base import connector_link, normalize_connector_node
     from backend.graph_schema import normalize_graph
     from backend.state_store import write_json_atomic
 except ModuleNotFoundError:
+    from connectors.base import connector_link, normalize_connector_node
     from graph_schema import normalize_graph
     from state_store import write_json_atomic
 
@@ -56,11 +58,12 @@ def merge_nodes_into_graph(
     else:
         data = {"nodes": [], "links": []}
 
+    normalized_new_nodes = [normalize_connector_node(n) for n in new_nodes]
     existing_nodes: list[dict] = data.get("nodes", [])
     existing_links: list[dict] = data.get("links", [])
     existing_ids = {n["id"] for n in existing_nodes}
 
-    to_add = [n for n in new_nodes if n["id"] not in existing_ids]
+    to_add = [n for n in normalized_new_nodes if n["id"] not in existing_ids]
 
     # Build term → [node_id] index over existing nodes
     term_index: dict[str, list[str]] = {}
@@ -84,12 +87,12 @@ def merge_nodes_into_graph(
                 break
             pair = frozenset([n["id"], target_id])
             if pair not in seen_pairs:
-                new_links.append({
-                    "source": n["id"],
-                    "target": target_id,
-                    "relation": "related",
-                    "weight": round(min(count / 10.0, 1.0), 3),
-                })
+                new_links.append(connector_link(
+                    source=n["id"],
+                    target=target_id,
+                    relation="related",
+                    weight=round(min(count / 10.0, 1.0), 3),
+                ))
                 seen_pairs.add(pair)
 
     merged = {

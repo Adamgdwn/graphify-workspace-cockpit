@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T21:37:46-06:00
-Status: active plan - Chunk 10 task complete; next recommended chunk is Chunk 11 Connector Graph Normalization
+Last Updated: 2026-06-16T22:00:00-06:00
+Status: active plan - Chunk 11 task complete; next recommended chunk is Chunk 12 Token-Saving Repo Cleanup and Agent Docs
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -125,6 +125,14 @@ Resolved in Chunk 10:
   includes actionable warnings, and links the next best action to Settings or
   Map.
 
+Resolved in Chunk 11:
+
+- Connector graph nodes and links now have an explicit backend contract. SharePoint
+  and OneNote nodes emit Graphify-compatible `file_type`, `source_file`,
+  `_origin`, and connector metadata, connector ingest normalizes incoming cloud
+  nodes before merge, and term-overlap relationships are written as canonical
+  `links` with `source`, `target`, `relation`, and `weight`.
+
 P1 - beta confidence:
 
 - `backend/main.py` is large enough that behavior changes are hard to review.
@@ -198,8 +206,8 @@ Baseline evidence gathered on 2026-06-16:
   fields used in current recommendation/action records.
 - Existing tests: `tests/` now covers graph schema normalization, Settings
   counts, graph upload, graph activation, API-key middleware, Graphify service
-  errors, runtime readiness, connector ingest compatibility, and clean
-  empty-state file writes.
+  errors, runtime readiness, connector ingest compatibility and connector
+  graph node/link contracts, and clean empty-state file writes.
 
 ## 5. Chunked Implementation Plan
 
@@ -1002,6 +1010,10 @@ Token/context warning: Avoid broad dashboard redesign.
 
 ### Chunk 11: Connector Graph Normalization
 
+Status: **task complete** — 2026-06-16T22:00:00-06:00
+
+Completion target: Task complete
+
 Goal: Make connector data compatible with local Graphify graph data.
 
 Why this matters: Cloud connector ingest currently uses an internal `edges`
@@ -1031,8 +1043,40 @@ graphify update . --no-cluster
 
 Acceptance criteria:
 
-- Connector-created relationships appear in graph counts.
-- Connector nodes remain grouped/labeled correctly in UI.
+- [x] Connector-created relationships appear in graph counts.
+- [x] Connector nodes remain grouped/labeled correctly in UI.
+
+Implementation notes:
+
+- `backend/connectors/base.py` now defines connector graph node and link helpers.
+  Cloud nodes keep the simple `source` filter value (`sharepoint` or `onenote`)
+  and also include Graphify-compatible `source_file`, `file_type`, `_origin`,
+  and metadata fields for Map and Settings compatibility.
+- `backend/connectors/sharepoint.py` and `backend/connectors/onenote.py` now
+  use the shared node helper while preserving existing source metadata such as
+  SharePoint site/drive/file details and OneNote notebook/section/page details.
+- `backend/connectors/ingest.py` normalizes incoming connector nodes before
+  merge, normalizes the existing graph before merge, and emits only canonical
+  `links` for term-overlap relationships.
+- `tests/test_connector_ingest.py` covers adapter node contracts, canonical
+  link/count behavior, term-overlap merge fixtures, and the Map-facing
+  `/graph/full` node shape. Microsoft auth and external connector sync were not
+  initiated.
+
+Validation evidence:
+
+```bash
+bash scripts/governance-preflight.sh
+# passed with 0 warnings
+backend/.venv/bin/python -m pytest tests/test_connector_ingest.py
+# 4 passed, 2 known FastAPI deprecation warnings
+backend/.venv/bin/python -m compileall -q backend
+# passed
+graphify update . --no-cluster
+# rebuilt 1194 nodes, 38275 edges
+backend/.venv/bin/python -m pytest
+# 48 passed, 3 known FastAPI/TestClient deprecation warnings
+```
 
 Rollback note: Connector-only rollback should not affect local demo graph routes.
 

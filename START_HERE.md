@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T21:37:46-06:00
-Status: stabilization Chunk 10 task complete; current-build pathway archived
+Last Updated: 2026-06-16T22:00:00-06:00
+Status: stabilization Chunk 11 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -57,8 +57,12 @@ be verified, and operator docs document migration order plus live-migration
 approval boundaries. Chunk 10 is task complete: Command Center now shows a
 compact Workspace Readiness panel backed by `GET /runtime/status`, including
 Ready/Partial/Not Ready state, backend, Graphify, Ollama, active graph, auth,
-storage, connector status, warnings, and next best action. The recommended next
-implementation chunk is Chunk 11: Connector Graph Normalization.
+storage, connector status, warnings, and next best action. Chunk 11 is task
+complete: SharePoint and OneNote graph nodes now use a shared connector contract
+with Graphify-compatible grouping fields, connector ingest normalizes cloud
+nodes before merge, and connector relationships are canonical `links` that
+appear in graph counts and Map full-graph output. The recommended next
+implementation chunk is Chunk 12: Token-Saving Repo Cleanup and Agent Docs.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is

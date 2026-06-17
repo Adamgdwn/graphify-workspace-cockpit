@@ -295,13 +295,13 @@
     "semantic_hash": ""
   },
   "backend/connectors/base.py": {
-    "mtime": 1781477292.309506,
-    "ast_hash": "b22ba0de54d5742dd8ff73662a428c80",
+    "mtime": 1781668774.089928,
+    "ast_hash": "908422b96cc1e4e7192eb109a51ed483",
     "semantic_hash": ""
   },
   "backend/connectors/ingest.py": {
-    "mtime": 1781660086.121755,
-    "ast_hash": "208a571ad4f5ea2382c38859d83d0f70",
+    "mtime": 1781668672.671845,
+    "ast_hash": "a1482876535e26dc1f93d5cb695e41ce",
     "semantic_hash": ""
   },
   "backend/connectors/microsoft_auth.py": {
@@ -310,13 +310,13 @@
     "semantic_hash": ""
   },
   "backend/connectors/onenote.py": {
-    "mtime": 1781477331.0699306,
-    "ast_hash": "825a60cd947da403ad1f0d4b4d461d28",
+    "mtime": 1781668661.3897243,
+    "ast_hash": "4300a4b75ab692fef900968c75fca0dd",
     "semantic_hash": ""
   },
   "backend/connectors/sharepoint.py": {
-    "mtime": 1781477323.051803,
-    "ast_hash": "c2da6606e7e51c50acc69a36c69c4631",
+    "mtime": 1781668650.7106104,
+    "ast_hash": "66a9e8bc1e049e23c7127e62c5c52fdc",
     "semantic_hash": ""
   },
   "frontend/src/components/AICopilot.tsx": {
@@ -415,8 +415,8 @@
     "semantic_hash": ""
   },
   "tests/test_connector_ingest.py": {
-    "mtime": 1781653571.9520397,
-    "ast_hash": "f48f4b1476ad85094e54ac5531424922",
+    "mtime": 1781668747.0056386,
+    "ast_hash": "ff666bdf4905f2d913439eb74f52bba2",
     "semantic_hash": ""
   },
   "tests/test_graph_schema.py": {
@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781667499.4855897,
-    "ast_hash": "b090cc25dacb32fb15e0471d298996b5",
+    "mtime": 1781667523.7848413,
+    "ast_hash": "a19e085e8143c2d51a540955d546abd5",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {
