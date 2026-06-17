@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { API } from "../config";
+import { apiErrorMessage, apiFetch } from "../api/client";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
@@ -437,8 +437,8 @@ function RecCard({
       setPacketLoading(true);
       setPacketError(null);
       try {
-        const r = await fetch(`${API}/decision-packets/recommendations/${rec.id}`);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const r = await apiFetch(`/decision-packets/recommendations/${rec.id}`);
+        if (!r.ok) throw new Error(await apiErrorMessage(r));
         const data: DecisionPacket = await r.json();
         if (!cancelled) setPacket(data);
       } catch (e) {
@@ -616,9 +616,9 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
     try {
       const headers: Record<string, string> = {};
       if (etagRef.current) headers["If-None-Match"] = etagRef.current;
-      const r = await fetch(`${API}/recommendations`, { headers });
+      const r = await apiFetch(`/recommendations`, { headers });
       if (r.status === 304) return;
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       etagRef.current = r.headers.get("ETag") ?? "";
       setRecs(await r.json());
       setError(null);
@@ -639,14 +639,13 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
     setGenerating(mode);
     setError(null);
     try {
-      const r = await fetch(`${API}/recommendations/generate`, {
+      const r = await apiFetch(`/recommendations/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode }),
       });
       if (!r.ok) {
-        const detail = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(detail?.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       const newRec: Recommendation = await r.json();
       setRecs((prev) => [newRec, ...prev]);
@@ -663,12 +662,12 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
 
   async function setStatus(id: string, status: RecStatus) {
     try {
-      const r = await fetch(`${API}/recommendations/${id}`, {
+      const r = await apiFetch(`/recommendations/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       const updated: Recommendation = await r.json();
       setRecs((prev) => prev.map((rec) => (rec.id === id ? updated : rec)));
       addToast(`Recommendation ${status}`, "success");
@@ -684,10 +683,9 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
     setQueuing(id);
     setError(null);
     try {
-      const r = await fetch(`${API}/recommendations/${id}/queue`, { method: "POST" });
+      const r = await apiFetch(`/recommendations/${id}/queue`, { method: "POST" });
       if (!r.ok) {
-        const detail = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(detail?.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       setQueuedIds((prev) => new Set([...prev, id]));
       addToast("Action queued — check Work Queue", "success");

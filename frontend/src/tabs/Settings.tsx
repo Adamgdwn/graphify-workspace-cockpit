@@ -1,4 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  API_AUTH_ERROR_MESSAGE,
+  apiErrorMessage,
+  apiFetch,
+  clearStoredApiKey,
+  getStoredApiKey,
+  setStoredApiKey,
+} from "../api/client";
 import { API } from "../config";
 import { useToast } from "../components/Toast";
 
@@ -102,18 +110,9 @@ interface ClusterSelectionData {
   available_clusters: ClusterOption[];
 }
 
-function apiDetailMessage(detail: unknown, fallback: string): string {
-  if (typeof detail === "string") return detail;
-  if (detail && typeof detail === "object") {
-    const body = detail as { code?: unknown; message?: unknown };
-    const message = typeof body.message === "string" ? body.message : fallback;
-    return typeof body.code === "string" ? `${body.code}: ${message}` : message;
-  }
-  return fallback;
-}
-
 export function Settings() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
   const [graphs, setGraphs] = useState<GraphEntry[]>([]);
   const [org, setOrg] = useState<OrgSettings | null>(null);
@@ -159,66 +158,127 @@ export function Settings() {
   const [runningSemantic, setRunningSemantic] = useState(false);
   const semanticPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // API key
+  const [apiKeyInput, setApiKeyInput] = useState(() => getStoredApiKey());
+  const [hasStoredApiKey, setHasStoredApiKey] = useState(() => getStoredApiKey().length > 0);
+  const [apiKeyStatus, setApiKeyStatus] = useState<string | null>(null);
+  const [testingApiKey, setTestingApiKey] = useState(false);
+
+  async function loadJson<T>(path: string): Promise<T> {
+    const response = await apiFetch(path);
+    if (!response.ok) throw new Error(await apiErrorMessage(response));
+    return response.json() as Promise<T>;
+  }
+
   const loadConnectors = useCallback(() => {
-    fetch(`${API}/connectors`)
-      .then((r) => r.json())
+    loadJson<ConnectorInfo[]>(`/connectors`)
       .then(setConnectors)
-      .catch(() => {});
+      .catch(() => setConnectors([]));
   }, []);
 
   function loadAll() {
-    fetch(`${API}/settings`)
-      .then((r) => r.json())
-      .then(setSettings)
-      .catch(() => {});
-    fetch(`${API}/status/ollama`)
-      .then((r) => r.json())
+    loadJson<AppSettings>(`/settings`)
+      .then((data) => {
+        setSettings(data);
+        setSettingsLoadError(null);
+      })
+      .catch((err: unknown) => {
+        setSettings(null);
+        setSettingsLoadError(err instanceof Error ? err.message : "Settings unavailable");
+      });
+    loadJson<OllamaStatus>(`/status/ollama`)
       .then(setOllama)
-      .catch(() => {});
-    fetch(`${API}/graphs`)
-      .then((r) => r.json())
+      .catch(() => setOllama(null));
+    loadJson<GraphEntry[]>(`/graphs`)
       .then(setGraphs)
-      .catch(() => {});
-    fetch(`${API}/settings/org`)
-      .then((r) => r.json())
+      .catch(() => setGraphs([]));
+    loadJson<OrgSettings>(`/settings/org`)
       .then(setOrg)
-      .catch(() => {});
-    fetch(`${API}/graph/rebuild/status`)
-      .then((r) => r.json())
+      .catch(() => setOrg(null));
+    loadJson<RebuildStatus>(`/graph/rebuild/status`)
       .then(setRebuildStatus)
-      .catch(() => {});
-    fetch(`${API}/cluster-selection`)
-      .then((r) => r.json())
+      .catch(() => setRebuildStatus(null));
+    loadJson<ClusterSelectionData>(`/cluster-selection`)
       .then(setClusterSel)
-      .catch(() => {});
-    fetch(`${API}/chat-config`)
-      .then((r) => r.json())
+      .catch(() => setClusterSel(null));
+    loadJson<ChatConfig>(`/chat-config`)
       .then((d: ChatConfig) => { setChatConfig(d); setChatDraft(d); })
-      .catch(() => {});
-    fetch(`${API}/graph/scan-dirs`)
-      .then((r) => r.json())
+      .catch(() => { setChatConfig(null); setChatDraft(null); });
+    loadJson<{ dirs: string[] }>(`/graph/scan-dirs`)
       .then((d: { dirs: string[] }) => setScanDirs(d.dirs))
-      .catch(() => {});
-    fetch(`${API}/graph/semantic-pass/status`)
-      .then((r) => r.json())
+      .catch(() => setScanDirs([]));
+    loadJson<typeof semanticStatus>(`/graph/semantic-pass/status`)
       .then(setSemanticStatus)
-      .catch(() => {});
+      .catch(() => setSemanticStatus(null));
     loadConnectors();
+  }
+
+  async function handleSaveApiKey(e: FormEvent) {
+    e.preventDefault();
+    const key = apiKeyInput.trim();
+    if (!key) {
+      clearStoredApiKey();
+      setHasStoredApiKey(false);
+      setApiKeyStatus("API key cleared.");
+      addToast("API key cleared", "info");
+      loadAll();
+      return;
+    }
+
+    setStoredApiKey(key);
+    setApiKeyInput(key);
+    setHasStoredApiKey(true);
+    setApiKeyStatus("API key saved in this browser.");
+    addToast("API key saved", "success");
+    loadAll();
+  }
+
+  async function handleTestApiKey() {
+    const key = apiKeyInput.trim();
+    if (!key) {
+      setApiKeyStatus("Enter an API key to test.");
+      return;
+    }
+
+    setTestingApiKey(true);
+    try {
+      const response = await apiFetch(`/settings`, { headers: { "X-API-Key": key } });
+      if (!response.ok) throw new Error(await apiErrorMessage(response));
+      const data = await response.json() as AppSettings;
+      setSettings(data);
+      setSettingsLoadError(null);
+      setApiKeyStatus("API key accepted.");
+      addToast("API key accepted", "success");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : API_AUTH_ERROR_MESSAGE;
+      setApiKeyStatus(message);
+      addToast(message, "error");
+    } finally {
+      setTestingApiKey(false);
+    }
+  }
+
+  function handleClearApiKey() {
+    clearStoredApiKey();
+    setApiKeyInput("");
+    setHasStoredApiKey(false);
+    setApiKeyStatus("API key cleared.");
+    addToast("API key cleared", "info");
+    loadAll();
   }
 
   async function handleRebuild() {
     setRebuilding(true);
     try {
-      const r = await fetch(`${API}/graph/rebuild`, { method: "POST" });
+      const r = await apiFetch(`/graph/rebuild`, { method: "POST" });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: unknown };
-        throw new Error(apiDetailMessage(d.detail, `HTTP ${r.status}`));
+        throw new Error(await apiErrorMessage(r));
       }
       addToast("Graph rebuild started", "info");
       if (rebuildPollRef.current) clearInterval(rebuildPollRef.current);
       rebuildPollRef.current = setInterval(async () => {
         try {
-          const sr = await fetch(`${API}/graph/rebuild/status`);
+          const sr = await apiFetch(`/graph/rebuild/status`);
           const sd: RebuildStatus = await sr.json();
           setRebuildStatus(sd);
           if (sd.status === "complete") {
@@ -248,12 +308,12 @@ export function Settings() {
   async function applyClusterSel(sel: { sources: string[]; clusters: string[] | null }) {
     setUpdatingSel(true);
     try {
-      const r = await fetch(`${API}/cluster-selection`, {
+      const r = await apiFetch(`/cluster-selection`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sel),
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       const data = await r.json() as ClusterSelectionState;
       setClusterSel((prev) => prev ? { ...prev, selection: data } : null);
       addToast("Knowledge sources updated", "info");
@@ -300,14 +360,13 @@ export function Settings() {
     if (!path) return;
     setAddingDir(true);
     try {
-      const r = await fetch(`${API}/graph/scan-dirs`, {
+      const r = await apiFetch(`/graph/scan-dirs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: string };
-        addToast(d.detail ?? `Error ${r.status}`, "error");
+        addToast(await apiErrorMessage(r), "error");
       } else {
         const d = await r.json() as { dirs: string[] };
         setScanDirs(d.dirs);
@@ -323,7 +382,7 @@ export function Settings() {
 
   async function handleRemoveScanDir(path: string) {
     try {
-      const r = await fetch(`${API}/graph/scan-dirs`, {
+      const r = await apiFetch(`/graph/scan-dirs`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
@@ -341,20 +400,19 @@ export function Settings() {
   async function handleRunSemanticPass() {
     setRunningSemantic(true);
     try {
-      const r = await fetch(`${API}/graph/semantic-pass`, {
+      const r = await apiFetch(`/graph/semantic-pass`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: semanticModel, threshold: 0.78 }),
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(d.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       addToast("Semantic analysis started", "info");
       if (semanticPollRef.current) clearInterval(semanticPollRef.current);
       semanticPollRef.current = setInterval(async () => {
         try {
-          const sr = await fetch(`${API}/graph/semantic-pass/status`);
+          const sr = await apiFetch(`/graph/semantic-pass/status`);
           const sd = await sr.json();
           setSemanticStatus(sd);
           if (sd.status === "complete") {
@@ -380,12 +438,12 @@ export function Settings() {
     if (!chatDraft) return;
     setSavingChat(true);
     try {
-      const r = await fetch(`${API}/chat-config`, {
+      const r = await apiFetch(`/chat-config`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(chatDraft),
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       const saved = await r.json() as ChatConfig;
       setChatConfig(saved);
       setChatDraft(saved);
@@ -406,10 +464,9 @@ export function Settings() {
     setAuthState("started");
     setAuthFlow(null);
     try {
-      const r = await fetch(`${API}/connectors/microsoft/auth`, { method: "POST" });
+      const r = await apiFetch(`/connectors/microsoft/auth`, { method: "POST" });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(d.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       const flow: DeviceFlow = await r.json();
       setAuthFlow(flow);
@@ -418,7 +475,7 @@ export function Settings() {
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(async () => {
         try {
-          const pr = await fetch(`${API}/connectors/microsoft/auth/poll`, { method: "POST" });
+          const pr = await apiFetch(`/connectors/microsoft/auth/poll`, { method: "POST" });
           const pd = await pr.json() as { status: string; detail?: string };
           if (pd.status === "complete") {
             clearInterval(pollRef.current!);
@@ -446,8 +503,8 @@ export function Settings() {
 
   async function handleRevoke() {
     try {
-      const r = await fetch(`${API}/connectors/microsoft/auth`, { method: "DELETE" });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const r = await apiFetch(`/connectors/microsoft/auth`, { method: "DELETE" });
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       setAuthState("idle");
       addToast("Microsoft account disconnected", "info");
       loadConnectors();
@@ -459,16 +516,15 @@ export function Settings() {
   async function handleSync(connectorId: string) {
     setSyncing(connectorId);
     try {
-      const r = await fetch(`${API}/connectors/${connectorId}/sync`, { method: "POST" });
+      const r = await apiFetch(`/connectors/${connectorId}/sync`, { method: "POST" });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(d.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       addToast(`${connectorId} sync started`, "info");
       // Poll for completion
       const poll = setInterval(async () => {
         try {
-          const sr = await fetch(`${API}/connectors/${connectorId}/status`);
+          const sr = await apiFetch(`/connectors/${connectorId}/status`);
           const sd = await sr.json() as ConnectorSync;
           if (sd.status !== "syncing") {
             clearInterval(poll);
@@ -510,9 +566,9 @@ export function Settings() {
     const body = new FormData();
     body.append("file", file);
     try {
-      const r = await fetch(`${API}/graph/upload`, { method: "POST", body });
+      const r = await apiFetch(`/graph/upload`, { method: "POST", body });
+      if (!r.ok) throw new Error(await apiErrorMessage(r, "Upload failed"));
       const data = await r.json();
-      if (!r.ok) throw new Error(data.detail ?? "Upload failed");
       setUploadMsg(`Activated ${data.filename} (${data.node_count} nodes)`);
       addToast(`Graph activated — ${data.node_count} nodes`, "success");
       if (fileRef.current) fileRef.current.value = "";
@@ -530,10 +586,9 @@ export function Settings() {
     setActivating(name);
     setUploadError(null);
     try {
-      const r = await fetch(`${API}/graphs/${encodeURIComponent(name)}/activate`, { method: "POST" });
+      const r = await apiFetch(`/graphs/${encodeURIComponent(name)}/activate`, { method: "POST" });
       if (!r.ok) {
-        const data = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(data.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       addToast(`Graph "${name}" activated`, "success");
       loadAll();
@@ -1039,26 +1094,81 @@ export function Settings() {
       {/* API */}
       <section className="settings-section">
         <div className="settings-section-title">API</div>
-        {settings ? (
-          <div className="settings-grid">
+        <div className="settings-grid">
+          {settings && (
             <div className="settings-row">
               <span className="settings-label">Version</span>
               <span className="settings-value">{settings.version}</span>
             </div>
-            <div className="settings-row">
-              <span className="settings-label">Auth</span>
-              <span className="settings-value">
-                {settings.api_key_required ? "API key required" : "No auth (localhost only)"}
-              </span>
-            </div>
-            <div className="settings-row">
-              <span className="settings-label">Backend URL</span>
-              <span className="settings-value settings-mono">{API}</span>
-            </div>
+          )}
+          <div className="settings-row">
+            <span className="settings-label">Auth</span>
+            <span className="settings-value">
+              {settings
+                ? settings.api_key_required
+                  ? "API key required"
+                  : "No auth (localhost only)"
+                : settingsLoadError === API_AUTH_ERROR_MESSAGE
+                ? API_AUTH_ERROR_MESSAGE
+                : "Unknown"}
+            </span>
           </div>
-        ) : (
-          <p className="settings-dim">Loading…</p>
+          <div className="settings-row">
+            <span className="settings-label">Backend URL</span>
+            <span className="settings-value settings-mono">{API}</span>
+          </div>
+          <div className="settings-row">
+            <span className="settings-label">Stored key</span>
+            <span className="settings-value">
+              {hasStoredApiKey ? "Saved locally" : "Not saved"}
+            </span>
+          </div>
+          <div className="settings-row" style={{ alignItems: "flex-start" }}>
+            <span className="settings-label" style={{ paddingTop: 7 }}>API key</span>
+            <form className="settings-upload-form" onSubmit={handleSaveApiKey} style={{ flex: 1, gap: 8 }}>
+              <input
+                className="settings-mono-input"
+                style={{ flex: 1, minWidth: 180 }}
+                type="password"
+                value={apiKeyInput}
+                onChange={(event) => setApiKeyInput(event.target.value)}
+                placeholder={hasStoredApiKey ? "Saved API key" : "Paste API key"}
+                autoComplete="off"
+                aria-label="Backend API key"
+              />
+              <button type="submit" className="settings-upload-btn">
+                Save
+              </button>
+              <button
+                type="button"
+                className="settings-upload-btn"
+                onClick={handleTestApiKey}
+                disabled={testingApiKey || !apiKeyInput.trim()}
+              >
+                {testingApiKey ? "Testing…" : "Test"}
+              </button>
+              <button
+                type="button"
+                className="settings-refresh-btn"
+                onClick={handleClearApiKey}
+                disabled={!hasStoredApiKey && !apiKeyInput}
+              >
+                Clear
+              </button>
+            </form>
+          </div>
+        </div>
+        {settingsLoadError && !settings && (
+          <p className="settings-err">{settingsLoadError}</p>
         )}
+        {apiKeyStatus && (
+          <p className={apiKeyStatus === API_AUTH_ERROR_MESSAGE || apiKeyStatus.startsWith("Enter") ? "settings-err" : "settings-ok"}>
+            {apiKeyStatus}
+          </p>
+        )}
+        <p className="settings-dim" style={{ marginTop: 8 }}>
+          Stored in this browser and sent as <code>X-API-Key</code>.
+        </p>
       </section>
 
       {/* Connected Sources */}

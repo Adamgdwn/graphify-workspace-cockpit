@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { API } from "../config";
+import { apiErrorMessage, apiFetch } from "../api/client";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
 export type DashboardDestination = "map" | "recommendations" | "work-queue" | "settings";
@@ -73,8 +73,8 @@ interface DashboardProps {
 const FRESH_HOURS = 24;
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const response = await fetch(`${API}${path}`);
-  if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+  const response = await apiFetch(`${path}`);
+  if (!response.ok) throw new Error(`${path}: ${await apiErrorMessage(response)}`);
   return response.json() as Promise<T>;
 }
 

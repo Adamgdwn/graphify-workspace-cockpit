@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T18:19:44-06:00
-Status: stabilization Chunk 3 task complete; current-build pathway archived
+Last Updated: 2026-06-16T18:46:30-06:00
+Status: stabilization Chunk 4 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -33,8 +33,11 @@ exist for this slice. Chunk 2 is task complete: Settings now calls
 graphs plus useful failures, and launcher-compatible smoke validation passed.
 Chunk 3 is task complete: Ask/Rebuild now route through a Graphify service
 wrapper, structured Graphify errors and readiness status are exposed in backend
-and Settings, and Docker backend build installs `graphifyy`. The recommended
-next implementation chunk is Chunk 4: Frontend API client and API key support.
+and Settings, and Docker backend build installs `graphifyy`. Chunk 4 is task
+complete: frontend backend calls now use a shared API client, Settings can save,
+test, and clear the browser-local API key, protected-mode 401/403 copy is
+normalized, and authenticated plus unauthenticated smoke validation passed. The
+recommended next implementation chunk is Chunk 5: Graph Upload Hardening.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -44,8 +47,9 @@ Open owner-review flags before remaining implementation:
   `graphifyy`, while missing custom runtimes report `GRAPHIFY_MISSING` without
   breaking the rest of the cockpit UI.
 - Do not run live Supabase migrations without explicit owner approval.
-- The planned frontend API-key support stores the key in browser localStorage
-  unless Adam selects a stronger hosted auth pattern.
+- API-key browser storage is implemented with localStorage for this beta pass;
+  select a stronger hosted auth/session pattern before broader or untrusted
+  production exposure.
 
 ## Where Things Live
 

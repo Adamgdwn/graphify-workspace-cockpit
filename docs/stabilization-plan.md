@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T18:19:44-06:00
-Status: active plan - Chunk 3 task complete; next recommended chunk is Chunk 4 Frontend API client and API key support
+Last Updated: 2026-06-16T18:46:30-06:00
+Status: active plan - Chunk 4 task complete; next recommended chunk is Chunk 5 Graph Upload Hardening
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -38,7 +38,6 @@ Preserve the current product while hardening it. The seven-tab workflow
 
 P0 - blocks hosted beta:
 
-- Frontend cannot send the backend API key, so protected hosted mode breaks.
 - Graph upload accepts raw filenames and weak validation.
 - Caddy handles the frontend catch-all before `/api/*`, so hosted API routing can fail.
 - Clean first-run JSON state writes are scattered and not uniformly parent-safe or atomic.
@@ -65,6 +64,14 @@ Resolved in Chunk 3:
   expose Graphify status, Settings displays the runtime state, and the Docker
   backend image installs `graphifyy` through `backend/requirements.txt`.
 
+Resolved in Chunk 4:
+
+- Frontend backend calls now go through `frontend/src/api/client.ts`, which
+  prefixes `VITE_API_URL`, sends a browser-stored `X-API-Key` when present,
+  preserves `FormData` multipart handling, and normalizes 401/403 copy to
+  "API key required or invalid." Settings now lets beta users save, test, and
+  clear the key locally even when protected `/settings` calls are unauthorized.
+
 P1 - beta confidence:
 
 - Supabase migration does not include newer recommendation/action fields such as
@@ -88,8 +95,9 @@ the relevant implementation chunk proceeds:
 - Graphify runtime: resolved for this stabilization pass by installing
   `graphifyy` in Docker/runtime and keeping a clear `GRAPHIFY_MISSING`
   readiness/error mode for custom or broken runtimes.
-- API-key browser storage: accept localStorage for the beta, or select a
-  stronger hosted auth/session pattern.
+- API-key browser storage: localStorage accepted for this beta pass through
+  Chunk 4 implementation; select a stronger hosted auth/session pattern before
+  broader or untrusted production exposure.
 - Supabase migration policy: allow a new migration file only, or approve live
   migration application separately.
 - CI expansion: add backend `pytest` and frontend production build to CI once
@@ -383,6 +391,10 @@ Token/context warning: Avoid backend route splitting here.
 
 ### Chunk 4: Frontend API Client and API Key Support
 
+Status: **task complete** — 2026-06-16T18:46:30-06:00
+
+Completion target: Task complete
+
 Goal: Make hosted secure mode usable from the browser UI.
 
 Why this matters: With `API_KEY` set, the backend is protected but the frontend
@@ -414,16 +426,45 @@ Validation commands:
 source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck
 source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build
 API_KEY=testkey uvicorn backend.main:app --host 127.0.0.1 --port 8000
-source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
+source "$HOME/.nvm/nvm.sh" && SMOKE_API_KEY=testkey node scripts/demo-path-smoke.mjs
 ```
+
+Implementation completed:
+
+- Added `frontend/src/api/client.ts` with `apiFetch`, localStorage API-key
+  helpers, and shared 401/403 copy.
+- Replaced direct frontend backend `fetch` calls with `apiFetch` across App,
+  the AI assistant, and all seven tabs.
+- Added Settings API controls to save, test, and clear the API key locally.
+- Kept upload calls on `FormData` without forcing a JSON content type.
+- Updated `scripts/demo-path-smoke.mjs` to accept `SMOKE_API_KEY` or `API_KEY`
+  without printing the secret value.
+- Updated hosted setup docs in `README.md` and `docs/deployment-guide.md`.
+
+Validation completed:
+
+- Passed: `bash scripts/governance-preflight.sh` with 0 warnings.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`; Vite
+  still reports the existing large chunk warning.
+- Passed protected backend check: no-key `GET /settings` returned 401, keyed
+  `GET /settings` returned 200 with `api_key_required: true`.
+- Passed authenticated smoke:
+  `API_URL=http://127.0.0.1:8000 FRONTEND_URL=http://localhost:5173 SMOKE_API_KEY=testkey node scripts/demo-path-smoke.mjs`
+  — 8 checks passed.
+- Passed unauthenticated local smoke:
+  `API_URL=http://127.0.0.1:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs`
+  — 8 checks passed.
+- Passed: `graphify update . --no-cluster` rebuilt `graphify-out/graph.json`
+  with 1101 nodes and 24121 edges.
 
 Acceptance criteria:
 
-- Hosted frontend can call authenticated backend.
-- Uploads still work because multipart boundaries are not broken.
-- Unauthorized responses show clear user-facing copy.
-- Existing unauthenticated local dev still works when backend `API_KEY` is unset.
-- Seven-tab browser smoke passes with the new API client.
+- [x] Hosted frontend can call authenticated backend.
+- [x] Uploads still work because multipart boundaries are not broken.
+- [x] Unauthorized responses show clear user-facing copy.
+- [x] Existing unauthenticated local dev still works when backend `API_KEY` is unset.
+- [x] Seven-tab browser smoke passes with the new API client.
 
 Rollback note: Revert to direct fetch only if local UI is blocked; keep backend
 auth unchanged.

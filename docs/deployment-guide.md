@@ -122,6 +122,10 @@ curl -H "X-API-Key: your-generated-key-here" http://localhost:8000/decisions
 
 The `/health` endpoint is always open without auth.
 
+The browser UI can use the same key. Open Settings → API, paste the key, and use
+Test to confirm it. The key is stored in that browser's localStorage and sent as
+`X-API-Key` on backend requests, including graph uploads.
+
 For LAN use where all devices are trusted, the simplest approach is SSH port
 forwarding to access a remote server. Leave `API_KEY` unset for fully-trusted
 private networks.

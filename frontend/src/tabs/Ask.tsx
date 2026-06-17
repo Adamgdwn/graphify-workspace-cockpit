@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { API } from "../config";
+import { apiErrorMessage, apiFetch } from "../api/client";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
@@ -22,16 +22,6 @@ interface AskResponse {
   answer: string;
   evidence: EvidenceNode[];
   suggestions: string[];
-}
-
-function apiDetailMessage(detail: unknown, fallback: string): string {
-  if (typeof detail === "string") return detail;
-  if (detail && typeof detail === "object") {
-    const body = detail as { code?: unknown; message?: unknown };
-    const message = typeof body.message === "string" ? body.message : fallback;
-    return typeof body.code === "string" ? `${body.code}: ${message}` : message;
-  }
-  return fallback;
 }
 
 const MODE_LABELS: Record<Mode, string> = {
@@ -87,14 +77,13 @@ export function Ask({ focusTrigger = 0, askRef, onEvidenceNavigate }: AskProps) 
       } else if (m === "explain") {
         body.node_a = a || q;
       }
-      const res = await fetch(`${API}/ask`, {
+      const res = await apiFetch(`/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const body = await res.json().catch(() => ({ detail: res.statusText })) as { detail?: unknown };
-        throw new Error(apiDetailMessage(body.detail, res.statusText));
+        throw new Error(await apiErrorMessage(res));
       }
       setResponse(await res.json());
     } catch (e) {

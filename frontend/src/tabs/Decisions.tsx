@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { API } from "../config";
+import { apiErrorMessage, apiFetch } from "../api/client";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
 import {
@@ -68,9 +68,9 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
     try {
       const headers: Record<string, string> = {};
       if (etagRef.current) headers["If-None-Match"] = etagRef.current;
-      const r = await fetch(`${API}/decisions`, { headers });
+      const r = await apiFetch(`/decisions`, { headers });
       if (r.status === 304) return;
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       etagRef.current = r.headers.get("ETag") ?? "";
       setDecisions(await r.json());
       setError(null);
@@ -83,7 +83,7 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
 
   useEffect(() => {
     fetchDecisions();
-    fetch(`${API}/graph/summary`)
+    apiFetch(`/graph/summary`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (data?.nodes) setAreas(data.nodes.map((n: { id: string }) => n.id));
@@ -123,12 +123,12 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
     setSaving(true);
     try {
       if (editId) {
-        const r = await fetch(`${API}/decisions/${editId}`, {
+        const r = await apiFetch(`/decisions/${editId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ classification: form.classification, rationale: form.rationale }),
         });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        if (!r.ok) throw new Error(await apiErrorMessage(r));
         const updated: DecisionRecord = await r.json();
         onActiveContextChange?.({
           kind: "decision",
@@ -140,7 +140,7 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
         });
         addToast("Decision updated", "success");
       } else {
-        const r = await fetch(`${API}/decisions`, {
+        const r = await apiFetch(`/decisions`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -150,7 +150,7 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
             rationale: form.rationale,
           }),
         });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        if (!r.ok) throw new Error(await apiErrorMessage(r));
         const created: DecisionRecord = await r.json();
         onActiveContextChange?.({
           kind: "decision",
@@ -175,7 +175,7 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
 
   async function handleRetire(id: string) {
     try {
-      await fetch(`${API}/decisions/${id}`, {
+      await apiFetch(`/decisions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "retired" }),
@@ -192,12 +192,12 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
 
   async function handleReactivate(id: string) {
     try {
-      const r = await fetch(`${API}/decisions/${id}`, {
+      const r = await apiFetch(`/decisions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "active" }),
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       const decision: DecisionRecord = await r.json();
       onActiveContextChange?.({
         kind: "decision",

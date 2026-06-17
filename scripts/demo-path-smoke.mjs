@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 const apiUrl = (process.env.API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
 const frontendUrl = (process.env.FRONTEND_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
 const askQuestion = process.env.SMOKE_ASK_QUESTION ?? "What projects are in this workspace?";
+const smokeApiKey = process.env.SMOKE_API_KEY ?? process.env.API_KEY ?? "";
 
 const checks = [];
 
@@ -31,6 +32,7 @@ async function fetchJson(path, options = {}) {
       signal: controller.signal,
       headers: {
         ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(smokeApiKey ? { "X-API-Key": smokeApiKey } : {}),
         ...(options.headers ?? {}),
       },
     });
@@ -146,6 +148,7 @@ async function main() {
   console.log(`Demo path smoke check`);
   console.log(`API_URL=${apiUrl}`);
   console.log(`FRONTEND_URL=${frontendUrl}`);
+  console.log(`SMOKE_API_KEY=${smokeApiKey ? "set" : "unset"}`);
 
   try {
     await checkBackendContract();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { API } from "../config";
+import { apiErrorMessage, apiFetch } from "../api/client";
 import { useToast } from "../components/Toast";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -212,7 +212,7 @@ export function WorkQueue() {
 
   const pollMission = useCallback(async (id: string) => {
     try {
-      const r = await fetch(`${API}/missions/${id}`);
+      const r = await apiFetch(`/missions/${id}`);
       if (!r.ok) return;
       const m: Mission = await r.json();
       setMissions((prev) => prev.map((x) => (x.id === id ? m : x)));
@@ -252,7 +252,7 @@ export function WorkQueue() {
     try {
       const headers: Record<string, string> = {};
       if (actionEtagRef.current) headers["If-None-Match"] = actionEtagRef.current;
-      const r = await fetch(`${API}/actions`, { headers });
+      const r = await apiFetch(`/actions`, { headers });
       if (r.status === 304) return;
       if (!r.ok) return;
       actionEtagRef.current = r.headers.get("ETag") ?? "";
@@ -265,7 +265,7 @@ export function WorkQueue() {
   useEffect(() => {
     async function load() {
       try {
-        const r = await fetch(`${API}/missions`);
+        const r = await apiFetch(`/missions`);
         if (!r.ok) return;
         const list: Mission[] = await r.json();
         setMissions(list);
@@ -292,14 +292,13 @@ export function WorkQueue() {
     setStarting(type);
     setError(null);
     try {
-      const r = await fetch(`${API}/missions`, {
+      const r = await apiFetch(`/missions`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ type }),
       });
       if (!r.ok) {
-        const detail = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(detail?.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       const m: Mission = await r.json();
       setMissions((prev) => [m, ...prev]);
@@ -317,7 +316,7 @@ export function WorkQueue() {
 
   async function cancelMission(id: string) {
     try {
-      const r = await fetch(`${API}/missions/${id}/cancel`, { method: "POST" });
+      const r = await apiFetch(`/missions/${id}/cancel`, { method: "POST" });
       if (!r.ok) return;
       const m: Mission = await r.json();
       setMissions((prev) => prev.map((x) => (x.id === id ? m : x)));
@@ -336,10 +335,9 @@ export function WorkQueue() {
     setActionWorking(id);
     setActionError(null);
     try {
-      const r = await fetch(`${API}/actions/${id}/dry-run`, { method: "POST" });
+      const r = await apiFetch(`/actions/${id}/dry-run`, { method: "POST" });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(d.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       const updated: QueuedAction = await r.json();
       setActions((prev) => prev.map((a) => (a.id === id ? updated : a)));
@@ -358,14 +356,13 @@ export function WorkQueue() {
     setActionWorking(id);
     setActionError(null);
     try {
-      const r = await fetch(`${API}/actions/${id}/execute`, {
+      const r = await apiFetch(`/actions/${id}/execute`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
         body:    JSON.stringify({ confirmed: true }),
       });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(d.detail ?? `HTTP ${r.status}`);
+        throw new Error(await apiErrorMessage(r));
       }
       const updated: QueuedAction = await r.json();
       setActions((prev) => prev.map((a) => (a.id === id ? updated : a)));
@@ -381,8 +378,8 @@ export function WorkQueue() {
 
   async function handleUaosExport() {
     try {
-      const r = await fetch(`${API}/actions?format=uaos`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const r = await apiFetch(`/actions?format=uaos`);
+      if (!r.ok) throw new Error(await apiErrorMessage(r));
       const data = await r.json();
       downloadJson(data, "uaos-handoff.json");
       addToast("UAOS handoff exported", "info");

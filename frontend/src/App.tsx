@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { API } from "./config";
+import { apiFetch } from "./api/client";
 import { AICopilot } from "./components/AICopilot";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { HelpModal } from "./components/HelpModal";
@@ -46,12 +46,12 @@ export default function App() {
   useEffect(() => {
     async function checkStatus() {
       try {
-        const r = await fetch(`${API}/health`);
+        const r = await apiFetch(`/health`);
         if (!r.ok) { setConnStatus("offline"); return; }
         const d = await r.json();
         setDemoMode(!!d.demo_mode);
 
-        const ol = await fetch(`${API}/status/ollama`);
+        const ol = await apiFetch(`/status/ollama`);
         const olData = await ol.json();
         setConnStatus(olData.connected ? "ok" : "degraded");
       } catch {

@@ -155,12 +155,13 @@ exist inside the container.
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed frontend origins; include the exact `localhost` or `127.0.0.1` URL you use |
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama server URL — `host.docker.internal` reaches the host machine |
 | `VITE_API_URL` | `http://localhost:8000` | Backend URL the browser sends requests to (build-time) |
+| `API_KEY` | unset | Required before exposing the backend beyond trusted localhost use |
 
 To use your own graph with Docker, either:
 - Set `GRAPH_PATH` to a path inside the container and mount the file
 - Or use the graph upload API
 
-> **Security note:** When you run this on a non-local host, set `API_KEY` and use HTTPS before exposing the backend to a network.
+> **Security note:** When you run this on a non-local host, set `API_KEY` and use HTTPS before exposing the backend to a network. In the browser, open Settings → API to save, test, or clear the key locally; the UI sends it as `X-API-Key` on backend requests.
 
 ---
 
@@ -195,6 +196,10 @@ API_KEY         Optional API key for non-local deployments
 ```
 VITE_API_URL    Backend API URL (default: http://localhost:8000)
 ```
+
+When `API_KEY` is set, the frontend can store the key in browser localStorage
+from Settings → API. Leave `API_KEY` unset only for fully trusted local
+development.
 
 ---
 

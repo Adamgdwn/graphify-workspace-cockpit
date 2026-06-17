@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { API } from "../config";
+import { apiErrorMessage, apiFetch } from "../api/client";
 import cytoscape from "cytoscape";
 import type { Core } from "cytoscape";
 // @ts-ignore
@@ -952,7 +952,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
 
   // Fetch decisions (non-critical — silently ignored if backend down)
   useEffect(() => {
-    fetch(`${API}/decisions`)
+    apiFetch(`/decisions`)
       .then((r) => (r.ok ? r.json() : []))
       .then((list: Array<{ target_id: string; classification: string; status: string }>) => {
         const map: Record<string, string> = {};
@@ -966,7 +966,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
 
   // Fetch cluster/source selection data
   useEffect(() => {
-    fetch(`${API}/cluster-selection`)
+    apiFetch(`/cluster-selection`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data) return;
@@ -979,7 +979,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
 
   // Load semantic edges on mount
   useEffect(() => {
-    fetch(`${API}/graph/semantic-edges`)
+    apiFetch(`/graph/semantic-edges`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!d) return;
@@ -991,7 +991,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
 
   // Load durable overlap review status on mount
   useEffect(() => {
-    fetch(`${API}/overlap/status`)
+    apiFetch(`/overlap/status`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d: { pairs?: Record<string, OverlapStatusRecord> } | null) => {
         const pairs = d?.pairs ?? {};
@@ -1075,10 +1075,9 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     setPathNoRoute(false);
     try {
       const qs = project ? `?project=${encodeURIComponent(project)}` : "";
-      const res = await fetch(`${API}/graph/summary${qs}`);
+      const res = await apiFetch(`/graph/summary${qs}`);
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error((body as any).detail ?? `HTTP ${res.status}`);
+        throw new Error(await apiErrorMessage(res));
       }
       const data: GraphSummary = await res.json();
       setSummary(data);
@@ -1096,8 +1095,8 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     if (fullGraph) return; // already loaded
     setFullLoading(true);
     try {
-      const res = await fetch(`${API}/graph/full`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await apiFetch(`/graph/full`);
+      if (!res.ok) throw new Error(await apiErrorMessage(res));
       const data: FullGraph = await res.json();
       setFullGraph(data);
     } catch (e) {
@@ -1496,7 +1495,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     };
     setOverlapStatuses((current) => ({ ...current, [key]: record }));
     try {
-      const res = await fetch(`${API}/overlap/status/${encodeURIComponent(key)}`, {
+      const res = await apiFetch(`/overlap/status/${encodeURIComponent(key)}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1521,7 +1520,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     const triage = triageResults[triageKey];
     setCreatingTask(key);
     try {
-      const res = await fetch(`${API}/recommendations/from-overlap`, {
+      const res = await apiFetch(`/recommendations/from-overlap`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1561,7 +1560,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     const key = overlapKey(group);
     setTriaging((t) => ({ ...t, [key]: true }));
     try {
-      const res = await fetch(`${API}/overlap/triage`, {
+      const res = await apiFetch(`/overlap/triage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1658,7 +1657,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     }
     setSelectedClusters(next);
     try {
-      await fetch(`${API}/cluster-selection`, {
+      await apiFetch(`/cluster-selection`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sources: clusterData.selection.sources, clusters: next ? [...next] : null }),

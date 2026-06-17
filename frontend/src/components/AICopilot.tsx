@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { API } from "../config";
+import { apiErrorMessage, apiFetch } from "../api/client";
 
 interface Vec2 { x: number; y: number; }
 interface Size { w: number; h: number; }
@@ -122,12 +122,12 @@ export function AICopilot({ onNavigateSettings }: AICopilotProps) {
     setStreaming(true);
 
     try {
-      const r = await fetch(`${API}/chat`, {
+      const r = await apiFetch(`/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, history, include_graph_context: true }),
       });
-      if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+      if (!r.ok || !r.body) throw new Error(await apiErrorMessage(r));
 
       const reader = r.body.getReader();
       const dec    = new TextDecoder();
@@ -170,11 +170,12 @@ export function AICopilot({ onNavigateSettings }: AICopilotProps) {
         if (last?.role === "assistant") next[next.length - 1] = { ...last, nodesUsed };
         return next;
       });
-    } catch {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Connection error — is Ollama running?";
       setMsgs(prev => {
         const next = [...prev];
         const last = next[next.length - 1];
-        if (last?.role === "assistant") next[next.length - 1] = { ...last, content: "Connection error — is Ollama running?" };
+        if (last?.role === "assistant") next[next.length - 1] = { ...last, content: message };
         return next;
       });
     } finally {
