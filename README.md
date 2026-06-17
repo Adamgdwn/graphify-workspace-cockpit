@@ -23,7 +23,7 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 
 | Surface | What it does |
 |---------|--------------|
-| **Command** | First-screen attention view for pending recommendations, accepted-but-not-queued work, dry-run-ready actions, untriaged overlaps, and graph freshness |
+| **Command** | First-screen readiness and attention view for runtime state, pending recommendations, accepted-but-not-queued work, dry-run-ready actions, untriaged overlaps, and graph freshness |
 | **Ask** | Natural language questions answered from your graph (`graphify query/path/explain`) with optional local Ollama synthesis |
 | **Map** | Interactive project-level relationship map — click to inspect, filter by type/theme/decision, drill down on demand |
 | **Decisions** | Durable ledger of human decisions about workspace areas: invest, client-ready, monitor, archive, or paused |

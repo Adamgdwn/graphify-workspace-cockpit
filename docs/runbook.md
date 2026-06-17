@@ -42,6 +42,18 @@ named in `storage.required_migration` after owner approval before using
 Supabase mode for hosted beta. Check Ollama separately with
 `curl http://localhost:8000/status/ollama`.
 
+For first-use workspace readiness, use the Command tab or query the protected
+runtime endpoint with the same API key headers used by the app:
+
+```bash
+curl http://localhost:8000/runtime/status
+```
+
+The response reports `state` (`ready`, `partial`, or `not_ready`), backend,
+Graphify, Ollama, active graph, auth, storage, connector status, warnings, and
+the next best action. Treat `not_ready` as a setup blocker; treat `partial` as a
+runtime warning state that should be reviewed before hosted beta use.
+
 ## Demo Readiness Check
 
 With both processes running, use the lightweight smoke gate before recording or

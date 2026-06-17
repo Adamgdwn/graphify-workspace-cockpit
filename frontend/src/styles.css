@@ -185,6 +185,109 @@ body {
   font-size: 0.82rem;
 }
 
+.dash-readiness {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 13px 14px;
+  border: 1px solid #2a2d3a;
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: #151923;
+}
+
+.dash-readiness-ready {
+  border-left-color: #4ade80;
+}
+
+.dash-readiness-partial {
+  border-left-color: #f5d280;
+}
+
+.dash-readiness-not_ready {
+  border-left-color: #f87171;
+}
+
+.dash-readiness-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.dash-readiness-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  color: #c8cfe0;
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.dash-readiness-label {
+  color: #eef2ff;
+  font-weight: 750;
+}
+
+.dash-readiness-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.dash-readiness-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid rgba(74, 222, 128, 0.22);
+  border-radius: 999px;
+  background: rgba(74, 222, 128, 0.06);
+  color: #a7f3d0;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.dash-readiness-chip-warn {
+  border-color: rgba(245, 210, 128, 0.28);
+  background: rgba(245, 210, 128, 0.08);
+  color: #f5d280;
+}
+
+.dash-readiness-chip-label {
+  color: #eef2ff;
+  font-weight: 650;
+}
+
+.dash-readiness-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  color: #8993ad;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.dash-readiness-action {
+  flex: 0 0 auto;
+  padding: 8px 11px;
+  border: 1px solid #39405c;
+  border-radius: 6px;
+  background: #171b27;
+  color: #d7def2;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.dash-readiness-action:hover {
+  border-color: #6b8cff;
+  color: #eef2ff;
+}
+
 .dash-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -3526,6 +3629,26 @@ body {
   }
 
   .dash-refresh {
+    width: 100%;
+  }
+
+  .dash-readiness {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dash-readiness-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .dash-readiness-chip {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .dash-readiness-action {
     width: 100%;
   }
 

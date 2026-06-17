@@ -39,7 +39,7 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and HTTPS
 
 | Tab | Purpose |
 |-----|---------|
-| **Command** | First-screen decision command center. Shows pending recommendations, accepted-but-not-queued recommendations, dry-run-ready actions, untriaged overlaps, graph freshness, and semantic freshness. |
+| **Command** | First-screen decision command center. Shows workspace readiness, pending recommendations, accepted-but-not-queued recommendations, dry-run-ready actions, untriaged overlaps, graph freshness, and semantic freshness. |
 | **Ask** | Ask natural language questions about your workspace graph. Answers are backed by `graphify query/path/explain` with optional Ollama synthesis. Evidence nodes link directly to map view. |
 | **Map** | Interactive Cytoscape.js graph at project/cluster level. Click any node to inspect. Filter by type, theme, or decision status. Use Explore / Trace / Overlap / Review modes to move between browsing, path tracing, semantic overlap review, and evidence review. |
 | **Decisions** | Record durable human decisions about workspace areas. Classifications: invest, client-ready, monitor, archive, paused. Decision badges appear on Map nodes. |

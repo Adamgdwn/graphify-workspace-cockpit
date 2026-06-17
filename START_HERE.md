@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T21:14:29-06:00
-Status: stabilization Chunk 9 task complete; current-build pathway archived
+Last Updated: 2026-06-16T21:37:46-06:00
+Status: stabilization Chunk 10 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -54,8 +54,11 @@ backend compile checks, frontend typecheck, and frontend production build. Chunk
 `db/migrations/002_recommendation_action_plans.sql`, backend health/settings
 surface `storage.ready` and the required migration when schema columns cannot
 be verified, and operator docs document migration order plus live-migration
-approval boundaries. The recommended next implementation chunk is Chunk 10:
-Workspace Readiness Panel.
+approval boundaries. Chunk 10 is task complete: Command Center now shows a
+compact Workspace Readiness panel backed by `GET /runtime/status`, including
+Ready/Partial/Not Ready state, backend, Graphify, Ollama, active graph, auth,
+storage, connector status, warnings, and next best action. The recommended next
+implementation chunk is Chunk 11: Connector Graph Normalization.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is

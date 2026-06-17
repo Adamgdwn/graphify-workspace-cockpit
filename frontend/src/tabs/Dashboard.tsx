@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiErrorMessage, apiFetch } from "../api/client";
+import { API_AUTH_ERROR_MESSAGE, apiErrorMessage, apiFetch } from "../api/client";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
 export type DashboardDestination = "map" | "recommendations" | "work-queue" | "settings";
@@ -65,6 +65,46 @@ interface OrgSettings {
   graph_stats?: { raw_node_count: number; estimated_tokens_saved_per_query: number };
 }
 
+type ReadinessState = "ready" | "partial" | "not_ready";
+
+interface RuntimeAction {
+  label: string;
+  destination?: DashboardDestination;
+}
+
+interface RuntimeWarning {
+  code: string;
+  severity: "warning" | "error";
+  message: string;
+  action?: RuntimeAction;
+}
+
+interface RuntimeStatus {
+  state: ReadinessState;
+  summary: string;
+  backend: { online: boolean; version: string };
+  graph: {
+    valid: boolean;
+    exists: boolean;
+    name: string;
+    node_count: number;
+    link_count: number;
+    error?: string | null;
+  };
+  graphify: { available: boolean; code?: string | null; message?: string | null };
+  ollama: { connected: boolean; models: string[]; url: string };
+  auth: { api_key_required: boolean };
+  connectors: {
+    configured_count: number;
+    authenticated_count: number;
+    syncing_count: number;
+    error_count: number;
+    error?: string | null;
+  };
+  warnings: RuntimeWarning[];
+  next_best_action: RuntimeAction;
+}
+
 interface DashboardProps {
   onNavigate: (destination: DashboardDestination) => void;
   onNavigateMapContext: (context: ActiveCockpitContext) => void;
@@ -128,6 +168,96 @@ function AttentionCard({
   );
 }
 
+function ReadinessPanel({
+  status,
+  error,
+  onNavigate,
+}: {
+  status: RuntimeStatus | null;
+  error: string | null;
+  onNavigate: (destination: DashboardDestination) => void;
+}) {
+  const authError = Boolean(error?.includes(API_AUTH_ERROR_MESSAGE));
+  const state = status?.state ?? (error ? "not_ready" : "partial");
+  const label = state === "ready" ? "Ready" : state === "partial" ? "Partial" : "Not Ready";
+  const summary = status?.summary ?? (
+    authError
+      ? "API key required before runtime readiness can be checked."
+      : error
+        ? "Runtime readiness could not be checked."
+        : "Checking runtime readiness..."
+  );
+  const warnings = status?.warnings ?? (
+    error
+      ? [{
+          code: authError ? "AUTH_REQUIRED" : "RUNTIME_STATUS_UNAVAILABLE",
+          severity: "error" as const,
+          message: authError ? API_AUTH_ERROR_MESSAGE : error,
+          action: { label: "Open Settings", destination: "settings" as const },
+        }]
+      : []
+  );
+  const action = status?.next_best_action ?? (
+    error ? { label: "Open Settings", destination: "settings" as const } : null
+  );
+  const chips = status
+    ? [
+        { label: "Backend", ok: status.backend.online, detail: status.backend.version },
+        {
+          label: "Graph",
+          ok: status.graph.valid,
+          detail: status.graph.valid
+            ? `${status.graph.node_count.toLocaleString()} nodes / ${status.graph.link_count.toLocaleString()} links`
+            : status.graph.exists ? "Invalid" : "Missing",
+        },
+        { label: "Graphify", ok: status.graphify.available, detail: status.graphify.available ? "Available" : "Missing" },
+        {
+          label: "Ollama",
+          ok: status.ollama.connected,
+          detail: status.ollama.connected ? `${status.ollama.models.length} model${status.ollama.models.length === 1 ? "" : "s"}` : "Offline",
+        },
+        { label: "Auth", ok: true, detail: status.auth.api_key_required ? "Required" : "Local" },
+        {
+          label: "Connectors",
+          ok: !status.connectors.error && status.connectors.error_count === 0
+            && status.connectors.authenticated_count >= status.connectors.configured_count,
+          detail: status.connectors.configured_count
+            ? `${status.connectors.authenticated_count}/${status.connectors.configured_count} connected`
+            : "Optional",
+        },
+      ]
+    : [{ label: "Runtime", ok: false, detail: error ? "Unavailable" : "Checking" }];
+
+  return (
+    <section className={`dash-readiness dash-readiness-${state}`}>
+      <div className="dash-readiness-main">
+        <div className="dash-readiness-heading">
+          <span className="dash-readiness-label">{label}</span>
+          <span>{summary}</span>
+        </div>
+        <div className="dash-readiness-chips">
+          {chips.map((chip) => (
+            <span key={chip.label} className={`dash-readiness-chip${chip.ok ? "" : " dash-readiness-chip-warn"}`}>
+              <span className="dash-readiness-chip-label">{chip.label}</span>
+              <span>{chip.detail}</span>
+            </span>
+          ))}
+        </div>
+        <div className="dash-readiness-warnings">
+          {warnings.length
+            ? warnings.slice(0, 2).map((warning) => <span key={warning.code}>{warning.message}</span>)
+            : <span>No runtime warnings detected.</span>}
+        </div>
+      </div>
+      {action?.destination && (
+        <button type="button" className="dash-readiness-action" onClick={() => onNavigate(action.destination!)}>
+          {action.label}
+        </button>
+      )}
+    </section>
+  );
+}
+
 export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [actions, setActions] = useState<QueuedAction[]>([]);
@@ -137,6 +267,8 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
   const [semantic, setSemantic] = useState<JobFreshness>({ status: "idle", last_run: null });
   const [semanticEdges, setSemanticEdges] = useState<SemanticEdges>({ edges: [], created_at: null });
   const [org, setOrg] = useState<OrgSettings>({});
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus | null>(null);
+  const [runtimeStatusError, setRuntimeStatusError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -152,6 +284,7 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
       fetchJson<JobFreshness>("/graph/semantic-pass/status"),
       fetchJson<SemanticEdges>("/graph/semantic-edges"),
       fetchJson<OrgSettings>("/settings/org"),
+      fetchJson<RuntimeStatus>("/runtime/status"),
     ]);
 
     const failures = results.filter((result) => result.status === "rejected");
@@ -163,6 +296,13 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
     if (results[5].status === "fulfilled") setSemantic(results[5].value);
     if (results[6].status === "fulfilled") setSemanticEdges(results[6].value);
     if (results[7].status === "fulfilled") setOrg(results[7].value);
+    if (results[8].status === "fulfilled") {
+      setRuntimeStatus(results[8].value);
+      setRuntimeStatusError(null);
+    } else {
+      setRuntimeStatus(null);
+      setRuntimeStatusError(results[8].reason instanceof Error ? results[8].reason.message : "Runtime status unavailable");
+    }
     if (failures.length) setError(`${failures.length} dashboard source${failures.length === 1 ? "" : "s"} could not be refreshed.`);
     setLoading(false);
   }, []);
@@ -189,13 +329,15 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
   const semanticLastRun = semantic.last_run ?? semanticEdges.created_at ?? null;
   const graphNeedsAttention = needsFreshnessAttention(rebuild.status, rebuild.last_run);
   const semanticNeedsAttention = needsFreshnessAttention(semantic.status, semanticLastRun);
+  const runtimeNeedsAttention = Boolean(runtimeStatusError || (runtimeStatus && runtimeStatus.state !== "ready"));
   const attentionTotal =
     pendingRecommendations.length +
     acceptedNotQueued.length +
     dryRunReadyActions.length +
     untriagedOverlaps.length +
     (graphNeedsAttention ? 1 : 0) +
-    (semanticNeedsAttention ? 1 : 0);
+    (semanticNeedsAttention ? 1 : 0) +
+    (runtimeNeedsAttention ? 1 : 0);
 
   function openTopUntriagedOverlap() {
     const group = untriagedOverlaps[0];
@@ -230,6 +372,8 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
           {loading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
+
+      <ReadinessPanel status={runtimeStatus} error={runtimeStatusError} onNavigate={onNavigate} />
 
       {error && <div className="dash-error">{error}</div>}
 

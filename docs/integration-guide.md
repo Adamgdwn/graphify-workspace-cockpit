@@ -254,6 +254,30 @@ crossed — even if all other validation checks pass.
 
 ---
 
+## Runtime Readiness Endpoint
+
+```
+GET /runtime/status
+```
+
+Requires the same `Authorization: Bearer <key>` or `X-API-Key: <key>` header
+as other non-health endpoints when `API_KEY` is configured.
+
+The response includes:
+
+- `state`: `ready`, `partial`, or `not_ready`
+- `backend`, `graphify`, `ollama`, `graph`, `auth`, `storage`, and
+  `connectors` status objects
+- structured `warnings`
+- `next_best_action` for the cockpit UI
+
+Use this endpoint for setup and hosted-beta readiness checks. `not_ready`
+means the active graph is missing or invalid. `partial` means the core
+workspace can load, but Graphify, Ollama, storage, or connector status needs
+operator attention.
+
+---
+
 ## Cloud Connectors (SharePoint + OneNote)
 
 The cockpit can ingest cloud knowledge sources into the active graph. Cloud

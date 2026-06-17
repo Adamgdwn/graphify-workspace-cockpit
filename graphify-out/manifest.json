@@ -1,7 +1,7 @@
 {
   "backend/main.py": {
-    "mtime": 1781665974.6447232,
-    "ast_hash": "e87f6528f88ea9824294c613c183c50d",
+    "mtime": 1781667039.406793,
+    "ast_hash": "3eefd26f55441095b4d2ea85b9023446",
     "semantic_hash": ""
   },
   "db/migrations/001_initial.sql": {
@@ -120,13 +120,13 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1781664456.9304001,
-    "ast_hash": "3c64d50d910e0670e3eff94c05b8c880",
+    "mtime": 1781667246.4009223,
+    "ast_hash": "1b00f19ab080b49e66502e05082ca8ff",
     "semantic_hash": ""
   },
   "START_HERE.md": {
-    "mtime": 1781666111.6831074,
-    "ast_hash": "1b696882f453302066dd0197afeacb75",
+    "mtime": 1781667508.0756786,
+    "ast_hash": "5a252495b9008d839ee1bb9f2142dac8",
     "semantic_hash": ""
   },
   "backend/prompts/recommend_archive.txt": {
@@ -210,13 +210,13 @@
     "semantic_hash": ""
   },
   "docs/integration-guide.md": {
-    "mtime": 1781666019.7901793,
-    "ast_hash": "8b2cf18a218e73931373f700c7b383ee",
+    "mtime": 1781667269.6402104,
+    "ast_hash": "04c2c0750086f7b64bd9c4e2a24fb491",
     "semantic_hash": ""
   },
   "docs/manual.md": {
-    "mtime": 1781562692.925038,
-    "ast_hash": "ffbbc4a4a47e90368ed91d705e96d223",
+    "mtime": 1781667250.7830124,
+    "ast_hash": "87b05d03f759289e22e397a67b7e7489",
     "semantic_hash": ""
   },
   "docs/model-registry.md": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "docs/runbook.md": {
-    "mtime": 1781666041.3113966,
-    "ast_hash": "eaf2f4262d2a1843af4eedbf2a234748",
+    "mtime": 1781667257.3470814,
+    "ast_hash": "689096de4509039cf552935d951ece11",
     "semantic_hash": ""
   },
   "docs/standards/README.md": {
@@ -355,8 +355,8 @@
     "semantic_hash": ""
   },
   "frontend/src/tabs/Dashboard.tsx": {
-    "mtime": 1781656783.554739,
-    "ast_hash": "dbcd96853b47db446b065c4805619c17",
+    "mtime": 1781667155.3375788,
+    "ast_hash": "ec3ef8c9bc124e5880f4aab8fa3a7afd",
     "semantic_hash": ""
   },
   "launcher/launch-cockpit.sh": {
@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781666100.5109944,
-    "ast_hash": "ae140c673a9950c7dc7996db5d49eeca",
+    "mtime": 1781667499.4855897,
+    "ast_hash": "b090cc25dacb32fb15e0471d298996b5",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {
@@ -492,6 +492,11 @@
   "tests/test_supabase_schema_contract.py": {
     "mtime": 1781665993.0749094,
     "ast_hash": "e9207acc616c2857819b7f178352cd77",
+    "semantic_hash": ""
+  },
+  "tests/test_runtime_status.py": {
+    "mtime": 1781667084.5332668,
+    "ast_hash": "0eebe43f5336b022815941a0471372de",
     "semantic_hash": ""
   }
 }

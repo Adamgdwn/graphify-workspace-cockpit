@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T21:14:29-06:00
-Status: active plan - Chunk 9 task complete; next recommended chunk is Chunk 10 Workspace Readiness Panel
+Last Updated: 2026-06-16T21:37:46-06:00
+Status: active plan - Chunk 10 task complete; next recommended chunk is Chunk 11 Connector Graph Normalization
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -117,6 +117,14 @@ Resolved in Chunk 9:
   migration when Supabase mode cannot verify those columns. Operator docs now
   document migration order, readiness interpretation, and rollback limits.
 
+Resolved in Chunk 10:
+
+- The Command Center now has a compact Workspace Readiness panel backed by
+  `GET /runtime/status`. It reports Ready, Partial, or Not Ready from backend,
+  Graphify, Ollama, active graph, API-key, storage, and connector status,
+  includes actionable warnings, and links the next best action to Settings or
+  Map.
+
 P1 - beta confidence:
 
 - `backend/main.py` is large enough that behavior changes are hard to review.
@@ -190,7 +198,8 @@ Baseline evidence gathered on 2026-06-16:
   fields used in current recommendation/action records.
 - Existing tests: `tests/` now covers graph schema normalization, Settings
   counts, graph upload, graph activation, API-key middleware, Graphify service
-  errors, connector ingest compatibility, and clean empty-state file writes.
+  errors, runtime readiness, connector ingest compatibility, and clean
+  empty-state file writes.
 
 ## 5. Chunked Implementation Plan
 
@@ -900,6 +909,10 @@ Token/context warning: Do not run live Supabase commands without owner approval.
 
 ### Chunk 10: Workspace Readiness Panel
 
+Status: **task complete** — 2026-06-16T21:37:46-06:00
+
+Completion target: Task complete
+
 Goal: Make first-use runtime state obvious.
 
 Why this matters: A beta user should know what works, what is missing, and what
@@ -933,10 +946,55 @@ source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 
 Acceptance criteria:
 
-- New user can immediately tell whether workspace is Ready, Partial, or Not Ready.
-- Missing Graphify/Ollama/auth/graph issues are visible and actionable.
-- The readiness panel does not displace or obscure existing Command Center
+- [x] New user can immediately tell whether workspace is Ready, Partial, or Not Ready.
+- [x] Missing Graphify/Ollama/auth/graph issues are visible and actionable.
+- [x] The readiness panel does not displace or obscure existing Command Center
   attention cards.
+
+Implementation notes:
+
+- Added `GET /runtime/status` with `state`, `summary`, `backend`, `graphify`,
+  `ollama`, `graph`, `auth`, `storage`, `connectors`, `warnings`, and
+  `next_best_action`.
+- Active graph missing or invalid returns `not_ready`; missing Graphify,
+  Ollama, Supabase readiness, connector auth, or connector sync errors return
+  `partial` warnings while keeping the cockpit usable.
+- Command Center now fetches runtime status and renders a compact readiness
+  band above the existing attention cards. API-key failures fall back to an
+  actionable Settings prompt.
+- README, manual, runbook, and integration guide now mention the readiness
+  surface or endpoint.
+
+Validation evidence:
+
+```bash
+bash scripts/governance-preflight.sh
+# passed with 0 warnings
+
+backend/.venv/bin/python -m pytest tests/test_runtime_status.py
+# 4 passed, 3 warnings
+
+backend/.venv/bin/python -m pytest
+# 45 passed, 3 warnings
+
+backend/.venv/bin/python -m compileall -q backend
+# passed
+
+source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck
+# passed
+
+source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build
+# passed; Vite reported the existing large chunk-size warning
+
+source "$HOME/.nvm/nvm.sh" && FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs
+# 8 smoke checks passed
+
+/snap/bin/chromium --headless --disable-gpu --no-sandbox --virtual-time-budget=5000 --dump-dom http://localhost:5173 | rg "Ready|Partial|Not Ready|Workspace runtime|Backend|Graphify|Ollama|Connectors"
+# readiness panel rendered Ready with backend, graph, Graphify, Ollama, auth, and connector chips
+
+graphify update . --no-cluster
+# rebuilt graphify-out with 1179 nodes and 36317 edges
+```
 
 Rollback note: Remove panel and endpoint if noisy; keep Graphify status in health.
 
