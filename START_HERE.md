@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T18:01:05-06:00
-Status: stabilization Chunk 2 task complete; current-build pathway archived
+Last Updated: 2026-06-16T18:19:44-06:00
+Status: stabilization Chunk 3 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -31,15 +31,18 @@ correctly, connector ingest emits canonical `links`, and backend contract tests
 exist for this slice. Chunk 2 is task complete: Settings now calls
 `POST /graphs/{name}/activate`, backend activation tests cover demo/uploaded
 graphs plus useful failures, and launcher-compatible smoke validation passed.
-The recommended next implementation chunk is Chunk 3: Graphify runtime detection
-and service wrapper.
+Chunk 3 is task complete: Ask/Rebuild now route through a Graphify service
+wrapper, structured Graphify errors and readiness status are exposed in backend
+and Settings, and Docker backend build installs `graphifyy`. The recommended
+next implementation chunk is Chunk 4: Frontend API client and API key support.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is
   low / level 1; do not auto-change governance, but use stronger review for
   hosted beta auth, uploads, deployment, Graphify execution, and Supabase mode.
-- Decide whether Docker/runtime should install `graphifyy` or expose a clear
-  Graphify-missing demo/readiness mode.
+- Graphify runtime decision is resolved for this pass: Docker/runtime installs
+  `graphifyy`, while missing custom runtimes report `GRAPHIFY_MISSING` without
+  breaking the rest of the cockpit UI.
 - Do not run live Supabase migrations without explicit owner approval.
 - The planned frontend API-key support stores the key in browser localStorage
   unless Adam selects a stronger hosted auth pattern.

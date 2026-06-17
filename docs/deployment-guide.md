@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Last Updated: 2026-06-15
+Last Updated: 2026-06-16
 
 This guide covers running the Graphify Workspace Cockpit beyond the default
 local dev setup — on a Windows machine via Docker Desktop, on a Linux server,
@@ -53,6 +53,8 @@ docker-compose up --build
 ```
 
 Docker Desktop pulls images, builds the frontend, and starts both services.
+The backend image installs `graphifyy` through `backend/requirements.txt`, so
+the Graphify CLI is available for Ask and graph rebuild inside the container.
 
 **4. Open the cockpit:**
 
@@ -86,6 +88,10 @@ docker compose up --build -d
 Access from the same machine: `http://localhost:5173`
 
 Access from another machine on the local network: `http://<server-ip>:5173`
+
+If you configure graph scan directories for Docker, mount those host paths into
+the backend container and use the in-container paths in Settings. The demo graph
+works without any additional mounts.
 
 ---
 
@@ -213,6 +219,9 @@ curl http://localhost:8000/settings         # -> active graph name + node count
 curl http://localhost:8000/status/ollama    # -> {"connected":true/false,...}
 ```
 
+The `/health` and `/settings` responses include `graphify.available`. If it is
+false, `graphify.code` is `GRAPHIFY_MISSING`.
+
 If Node is available through nvm, run the live demo smoke gate:
 
 ```bash
@@ -229,6 +238,11 @@ Open `http://localhost:5173` → confirm all seven tabs render (`Command`, `Ask`
 
 **Backend won't start:** Check `docker-compose logs backend`. Common cause:
 `GRAPH_PATH` pointing to a file that doesn't exist inside the container.
+
+**Graphify missing:** `/health` and `/settings` include `graphify.available`.
+If false, rebuild the backend image after installing dependencies or confirm the
+runtime `PATH` contains `graphify`. Ask and graph rebuild return
+`GRAPHIFY_MISSING` while the rest of the cockpit remains usable.
 
 **Ollama not connecting:** Verify Ollama is running on the host with
 `curl http://localhost:11434/api/tags`. In Docker, use

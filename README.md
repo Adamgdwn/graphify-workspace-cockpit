@@ -51,7 +51,7 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 
 - Python 3.10+ (backend)
 - Node.js 18+ and npm (frontend)
-- [Graphify](https://github.com/safishamsi/graphify): `pip install graphifyy`
+- [Graphify](https://github.com/safishamsi/graphify): `pip install graphifyy` (required for Ask and graph rebuild; demo graph browsing still works without it)
 - [Ollama](https://ollama.com) (optional — cockpit works without it, recommendations fall back to graph-only)
 
 ---
@@ -89,6 +89,10 @@ To generate a graph from your own workspace:
 pip install graphifyy
 graphify update /path/to/your/workspace
 ```
+
+The backend reports Graphify runtime status in `/health` and Settings. If the
+CLI is missing, the cockpit still loads with the active graph, but Ask and graph
+rebuild return `GRAPHIFY_MISSING` until Graphify is installed on `PATH`.
 
 **4. Set up the frontend**
 
@@ -137,6 +141,10 @@ docker-compose up --build
 - Backend API: `http://localhost:8000`
 
 State (decisions, recommendations, actions) is persisted in `workspace/state/` on the host via a Docker volume mount.
+
+The backend image installs `graphifyy` from `backend/requirements.txt`, so Ask
+and graph rebuild are available in Docker as long as any configured scan paths
+exist inside the container.
 
 **Key env vars for hosted mode:**
 

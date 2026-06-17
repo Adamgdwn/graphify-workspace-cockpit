@@ -10,6 +10,14 @@ interface AppSettings {
   edge_count: number;
   state_dir: string;
   api_key_required: boolean;
+  graphify: GraphifyStatus;
+}
+
+interface GraphifyStatus {
+  available: boolean;
+  version: string | null;
+  code: string | null;
+  message: string | null;
 }
 
 interface OllamaStatus {
@@ -44,6 +52,7 @@ interface RebuildStatus {
   status: "idle" | "running" | "complete" | "error";
   last_run: string | null;
   error?: string | null;
+  code?: string | null;
 }
 
 interface ConnectorSync {
@@ -91,6 +100,16 @@ interface ClusterSelectionData {
   selection: ClusterSelectionState;
   available_sources: string[];
   available_clusters: ClusterOption[];
+}
+
+function apiDetailMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    const body = detail as { code?: unknown; message?: unknown };
+    const message = typeof body.message === "string" ? body.message : fallback;
+    return typeof body.code === "string" ? `${body.code}: ${message}` : message;
+  }
+  return fallback;
 }
 
 export function Settings() {
@@ -192,8 +211,8 @@ export function Settings() {
     try {
       const r = await fetch(`${API}/graph/rebuild`, { method: "POST" });
       if (!r.ok) {
-        const d = await r.json().catch(() => ({})) as { detail?: string };
-        throw new Error(d.detail ?? `HTTP ${r.status}`);
+        const d = await r.json().catch(() => ({})) as { detail?: unknown };
+        throw new Error(apiDetailMessage(d.detail, `HTTP ${r.status}`));
       }
       addToast("Graph rebuild started", "info");
       if (rebuildPollRef.current) clearInterval(rebuildPollRef.current);
@@ -539,6 +558,7 @@ export function Settings() {
   }
 
   const edgesZero = settings !== null && settings.edge_count === 0;
+  const graphifyMissing = settings?.graphify.available === false;
 
   return (
     <div className="settings-pane">
@@ -564,6 +584,21 @@ export function Settings() {
               <span className="settings-label">Path</span>
               <span className="settings-value settings-mono settings-break">
                 {settings.graph_path}
+              </span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Graphify</span>
+              <span
+                className={`settings-value ${settings.graphify.available ? "settings-connected" : "settings-disconnected"}`}
+              >
+                {settings.graphify.available
+                  ? settings.graphify.version ?? "Available"
+                  : "Missing"}
+                {!settings.graphify.available && (
+                  <span className="settings-warn-tag">
+                    Install graphifyy to enable Ask and graph rebuild.
+                  </span>
+                )}
               </span>
             </div>
           </div>
@@ -645,10 +680,15 @@ export function Settings() {
             type="button"
             className="settings-upload-btn"
             onClick={handleRebuild}
-            disabled={rebuilding}
+            disabled={rebuilding || graphifyMissing}
           >
             {rebuilding ? "Rebuilding…" : "Rebuild Graph"}
           </button>
+          {graphifyMissing && (
+            <span className="settings-dim settings-warn" style={{ fontSize: 12 }}>
+              Graphify CLI missing
+            </span>
+          )}
           {rebuilding && <span className="settings-dim" style={{ fontSize: 12 }}>Running graphify update…</span>}
           {rebuildStatus && !rebuilding && rebuildStatus.status !== "idle" && (
             <span className={`settings-dim${rebuildStatus.status === "error" ? " settings-warn" : ""}`} style={{ fontSize: 12 }}>

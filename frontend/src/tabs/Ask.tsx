@@ -24,6 +24,16 @@ interface AskResponse {
   suggestions: string[];
 }
 
+function apiDetailMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object") {
+    const body = detail as { code?: unknown; message?: unknown };
+    const message = typeof body.message === "string" ? body.message : fallback;
+    return typeof body.code === "string" ? `${body.code}: ${message}` : message;
+  }
+  return fallback;
+}
+
 const MODE_LABELS: Record<Mode, string> = {
   query: "Query",
   path: "Path",
@@ -83,8 +93,8 @@ export function Ask({ focusTrigger = 0, askRef, onEvidenceNavigate }: AskProps) 
         body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const detail = await res.json().catch(() => ({ detail: res.statusText }));
-        throw new Error(detail.detail ?? res.statusText);
+        const body = await res.json().catch(() => ({ detail: res.statusText })) as { detail?: unknown };
+        throw new Error(apiDetailMessage(body.detail, res.statusText));
       }
       setResponse(await res.json());
     } catch (e) {

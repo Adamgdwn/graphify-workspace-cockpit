@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T18:01:05-06:00
-Status: active plan - Chunk 2 task complete; next recommended chunk is Chunk 3 Graphify runtime detection
+Last Updated: 2026-06-16T18:19:44-06:00
+Status: active plan - Chunk 3 task complete; next recommended chunk is Chunk 4 Frontend API client and API key support
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -41,7 +41,6 @@ P0 - blocks hosted beta:
 - Frontend cannot send the backend API key, so protected hosted mode breaks.
 - Graph upload accepts raw filenames and weak validation.
 - Caddy handles the frontend catch-all before `/api/*`, so hosted API routing can fail.
-- Graphify CLI is required by Ask/Rebuild but is not verified in the runtime image.
 - Clean first-run JSON state writes are scattered and not uniformly parent-safe or atomic.
 - Backend tests now exist, but coverage is still partial until the remaining P0
   backend contracts are added.
@@ -57,6 +56,14 @@ Resolved in Chunk 2:
 - Settings now activates listed graphs through `POST /graphs/{name}/activate`,
   refreshes state after success, preserves backend failure details, and backend
   tests cover demo/uploaded activation plus missing or invalid graph names.
+
+Resolved in Chunk 3:
+
+- Graphify runtime access now goes through `backend/services/graphify_service.py`,
+  Ask/Rebuild return structured errors such as `GRAPHIFY_MISSING`,
+  `GRAPHIFY_TIMEOUT`, and `GRAPHIFY_COMMAND_FAILED`, `/health` and `/settings`
+  expose Graphify status, Settings displays the runtime state, and the Docker
+  backend image installs `graphifyy` through `backend/requirements.txt`.
 
 P1 - beta confidence:
 
@@ -78,8 +85,9 @@ the relevant implementation chunk proceeds:
 - Governance level: keep low / level 1 for this stabilization pass, raise it, or
   explicitly accept stronger review as a compensating control without changing
   `project-control.yaml`.
-- Graphify runtime: install `graphifyy` in Docker/runtime, or ship a clear
-  Graphify-missing readiness/demo mode.
+- Graphify runtime: resolved for this stabilization pass by installing
+  `graphifyy` in Docker/runtime and keeping a clear `GRAPHIFY_MISSING`
+  readiness/error mode for custom or broken runtimes.
 - API-key browser storage: accept localStorage for the beta, or select a
   stronger hosted auth/session pattern.
 - Supabase migration policy: allow a new migration file only, or approve live
@@ -109,8 +117,9 @@ Baseline evidence gathered on 2026-06-16:
 - Frontend build command: `cd frontend && npm run build`.
 - Frontend typecheck command: `cd frontend && npm run typecheck`.
 - Backend dependencies: `backend/requirements.txt`; pytest was added in Chunk 1.
-- Graphify install docs say `pip install graphifyy`, but Docker installs only
-  `backend/requirements.txt`, which does not include Graphify.
+- Graphify runtime: `backend/requirements.txt` now includes `graphifyy>=0.8.37`;
+  the local validation environment installed `graphifyy 0.8.40`, and Docker
+  backend build verified the CLI is installed in the image.
 - Current demo graph: `workspace/demo/graph.json`, using `links`.
 - Connector ingest: `backend/connectors/ingest.py`, now normalizes existing
   graph data and emits canonical `links`.
@@ -299,6 +308,10 @@ Token/context warning: Do not bundle API-key client work into this chunk.
 
 ### Chunk 3: Graphify Runtime Detection and Service Wrapper
 
+Status: **task complete** — 2026-06-16T18:19:44-06:00
+
+Completion target: Task complete
+
 Goal: Make Graphify dependency explicit, testable, and visible.
 
 Why this matters: Ask/Rebuild currently depend on a CLI that Docker does not
@@ -332,12 +345,36 @@ docker compose build backend
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 ```
 
+Validation completed:
+
+- Passed: `bash scripts/governance-preflight.sh` with 0 warnings.
+- Passed: `backend/.venv/bin/pip install -r backend/requirements.txt`; installed
+  `graphifyy 0.8.40` under the `graphifyy>=0.8.37` requirement.
+- Passed: `backend/.venv/bin/python -m pytest tests/test_graphify_service.py`
+  — 8 tests passed.
+- Passed: `backend/.venv/bin/python -m pytest` — 21 tests passed.
+- Passed: `backend/.venv/bin/python -m compileall -q backend`.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run typecheck`.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`; Vite
+  still reports the existing large chunk warning.
+- Passed: `docker compose build backend`.
+- Passed: `bash -n scripts/start.sh && bash -n launcher/launch-cockpit.sh`.
+- Passed after starting with `bash scripts/start.sh`:
+  `source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs`
+  — 8 smoke checks passed.
+- Verified: `curl http://localhost:8000/health` exposed
+  `graph_loaded: true` and `graphify.available: true`.
+- Verified: `curl http://localhost:8000/settings` exposed Graphify runtime
+  status with version information.
+- Passed: `graphify update . --no-cluster` rebuilt `graphify-out/graph.json`
+  with 1094 nodes and 20691 edges.
+
 Acceptance criteria:
 
-- Ask/Rebuild never expose raw `FileNotFoundError` behavior.
-- UI can tell whether Graphify is available.
-- Docker/runtime expectation is documented and testable.
-- Missing Graphify does not break the rest of the cockpit UI.
+- [x] Ask/Rebuild never expose raw `FileNotFoundError` behavior.
+- [x] UI can tell whether Graphify is available.
+- [x] Docker/runtime expectation is documented and testable.
+- [x] Missing Graphify does not break the rest of the cockpit UI.
 
 Rollback note: Restore direct subprocess calls only if wrapper regressions block
 local demo, keeping docs warning in place.

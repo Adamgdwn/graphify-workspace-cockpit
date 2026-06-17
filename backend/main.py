@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import uuid
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -26,8 +25,24 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 try:
     from backend.graph_schema import GraphValidationError, count_links, normalize_graph
+    from backend.services.graphify_service import (
+        GRAPHIFY_MISSING,
+        GraphifyServiceError,
+        get_graphify_status,
+        run_graphify_ask,
+        run_graphify_merge,
+        run_graphify_update,
+    )
 except ModuleNotFoundError:
     from graph_schema import GraphValidationError, count_links, normalize_graph
+    from services.graphify_service import (
+        GRAPHIFY_MISSING,
+        GraphifyServiceError,
+        get_graphify_status,
+        run_graphify_ask,
+        run_graphify_merge,
+        run_graphify_update,
+    )
 
 _STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
 WORKSPACE_STATE = (
@@ -405,7 +420,21 @@ def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] |
 def health() -> dict:
     graph = _graph_path()
     demo_mode = Path(graph).resolve() == Path(_DEMO_GRAPH).resolve()
-    return {"status": "ok", "version": "0.1.0", "demo_mode": demo_mode}
+    graph_loaded = False
+    graph_error = None
+    try:
+        _load_graph()
+        graph_loaded = True
+    except Exception as exc:
+        graph_error = str(exc)
+    return {
+        "status": "ok",
+        "version": "0.1.0",
+        "demo_mode": demo_mode,
+        "graph_loaded": graph_loaded,
+        "graph_error": graph_error,
+        "graphify": get_graphify_status(include_version=False),
+    }
 
 
 @app.post("/ask", response_model=AskResponse)
@@ -417,33 +446,26 @@ def ask(req: AskRequest) -> AskResponse:
             detail=f"Graph not found at {graph}. Run graphify update first.",
         )
 
-    # Build CLI command
-    if req.mode == "path":
-        if not req.node_a or not req.node_b:
-            raise HTTPException(
-                status_code=422,
-                detail="Path mode requires node_a and node_b.",
-            )
-        cmd = ["graphify", "path", req.node_a, req.node_b, "--graph", graph]
-    elif req.mode == "explain":
-        target = req.node_a or req.question
-        cmd = ["graphify", "explain", target, "--graph", graph]
-    else:
-        cmd = ["graphify", "query", req.question, "--graph", graph]
+    if req.mode == "path" and (not req.node_a or not req.node_b):
+        raise HTTPException(
+            status_code=422,
+            detail="Path mode requires node_a and node_b.",
+        )
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
+        result = run_graphify_ask(
+            mode=req.mode,
+            question=req.question,
+            graph_path=graph,
+            node_a=req.node_a,
+            node_b=req.node_b,
             timeout=30,
         )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Graphify CLI timed out.")
-    except FileNotFoundError:
-        raise HTTPException(status_code=503, detail="graphify CLI not found in PATH.")
+    except GraphifyServiceError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.to_detail()) from exc
 
-    raw = (result.stdout or "") + (result.stderr or "")
+    cmd = result.command
+    raw = result.output
 
     # Parse by mode
     if req.mode == "query":
@@ -1850,6 +1872,7 @@ def get_settings() -> dict:
         "edge_count": edge_count,
         "state_dir": str(WORKSPACE_STATE),
         "api_key_required": bool(API_KEY),
+        "graphify": get_graphify_status(),
     }
 
 
@@ -2037,40 +2060,58 @@ def _graph_stats() -> dict:
 import threading as _rebuild_threading  # noqa: E402
 
 
+def _set_rebuild_error(exc: GraphifyServiceError, ts: str | None = None) -> None:
+    _REBUILD_STATUS.update({
+        "status": "error",
+        "last_run": ts or datetime.now(tz=timezone.utc).isoformat(),
+        "error": exc.message,
+        "code": exc.code,
+        "detail": exc.to_detail(),
+    })
+
+
 def _run_rebuild() -> None:
     global _graph_cache, _summary_cache
-    _REBUILD_STATUS.update({"status": "running"})
+    _REBUILD_STATUS.update({"status": "running", "error": None, "code": None, "detail": None})
     try:
         repo_root = Path(__file__).parent.parent
         scan_dirs = _load_scan_dirs()
 
         if not scan_dirs:
             # Default: scan just this repo
-            result = subprocess.run(
-                ["graphify", "update", ".", "--no-cluster"],
-                cwd=str(repo_root),
-                capture_output=True, text=True, timeout=300,
-            )
+            result = run_graphify_update(".", cwd=repo_root, timeout=300)
             ts = datetime.now(tz=timezone.utc).isoformat()
             if result.returncode != 0:
-                _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": result.stderr[:500]})
+                _REBUILD_STATUS.update({
+                    "status": "error",
+                    "last_run": ts,
+                    "error": result.stderr[:500],
+                    "code": None,
+                    "detail": None,
+                })
                 return
         else:
             # Scan each configured directory, then merge all graphs
             graph_paths: list[str] = []
+            scan_errors: list[str] = []
             for d in scan_dirs:
-                r = subprocess.run(
-                    ["graphify", "update", d, "--no-cluster"],
-                    cwd=d,
-                    capture_output=True, text=True, timeout=300,
-                )
-                if r.returncode == 0:
+                try:
+                    run_graphify_update(d, cwd=d, timeout=300)
                     candidate = Path(d) / "graphify-out" / "graph.json"
                     if candidate.exists():
                         graph_paths.append(str(candidate))
+                except GraphifyServiceError as exc:
+                    scan_errors.append(f"{Path(d).name}: {exc.code}: {exc.message}")
             ts = datetime.now(tz=timezone.utc).isoformat()
             if not graph_paths:
-                _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": "No graphs produced by configured scan directories"})
+                reason = scan_errors[0] if scan_errors else "No graphs produced by configured scan directories"
+                _REBUILD_STATUS.update({
+                    "status": "error",
+                    "last_run": ts,
+                    "error": reason,
+                    "code": None,
+                    "detail": None,
+                })
                 return
             out_path = repo_root / "graphify-out" / "merged-graph.json"
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2078,12 +2119,15 @@ def _run_rebuild() -> None:
                 import shutil
                 shutil.copy(graph_paths[0], str(out_path))
             else:
-                merge_result = subprocess.run(
-                    ["graphify", "merge-graphs"] + graph_paths + ["--out", str(out_path)],
-                    capture_output=True, text=True, timeout=300,
-                )
+                merge_result = run_graphify_merge(graph_paths, out_path=out_path, timeout=300)
                 if merge_result.returncode != 0:
-                    _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": merge_result.stderr[:500]})
+                    _REBUILD_STATUS.update({
+                        "status": "error",
+                        "last_run": ts,
+                        "error": merge_result.stderr[:500],
+                        "code": None,
+                        "detail": None,
+                    })
                     return
             # Activate the merged graph
             settings: dict = {}
@@ -2097,10 +2141,24 @@ def _run_rebuild() -> None:
 
         _graph_cache = None
         _summary_cache = {}
-        _REBUILD_STATUS.update({"status": "complete", "last_run": datetime.now(tz=timezone.utc).isoformat(), "error": None})
+        _REBUILD_STATUS.update({
+            "status": "complete",
+            "last_run": datetime.now(tz=timezone.utc).isoformat(),
+            "error": None,
+            "code": None,
+            "detail": None,
+        })
+    except GraphifyServiceError as exc:
+        _set_rebuild_error(exc)
     except Exception as exc:
         ts = datetime.now(tz=timezone.utc).isoformat()
-        _REBUILD_STATUS.update({"status": "error", "last_run": ts, "error": str(exc)})
+        _REBUILD_STATUS.update({
+            "status": "error",
+            "last_run": ts,
+            "error": str(exc),
+            "code": None,
+            "detail": None,
+        })
 
 
 @app.post("/graph/rebuild", status_code=202)
@@ -2108,6 +2166,15 @@ def trigger_rebuild() -> dict:
     """Trigger a background graphify update rebuild. Returns 202 immediately."""
     if _REBUILD_STATUS.get("status") == "running":
         raise HTTPException(status_code=409, detail="Rebuild already in progress.")
+    graphify_status = get_graphify_status(include_version=False)
+    if not graphify_status["available"]:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": graphify_status.get("code") or GRAPHIFY_MISSING,
+                "message": graphify_status.get("message") or "Graphify CLI is not available.",
+            },
+        )
     t = _rebuild_threading.Thread(target=_run_rebuild, daemon=True)
     t.start()
     return {"status": "running"}
@@ -2120,6 +2187,8 @@ def rebuild_status() -> dict:
         "status": _REBUILD_STATUS.get("status", "idle"),
         "last_run": _REBUILD_STATUS.get("last_run"),
         "error": _REBUILD_STATUS.get("error"),
+        "code": _REBUILD_STATUS.get("code"),
+        "detail": _REBUILD_STATUS.get("detail"),
     }
 
 

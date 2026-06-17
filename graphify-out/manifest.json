@@ -1,7 +1,7 @@
 {
   "backend/main.py": {
-    "mtime": 1781654365.319173,
-    "ast_hash": "ff89ec69e6dbccd5db90ab0aa1814a82",
+    "mtime": 1781655665.446339,
+    "ast_hash": "6130bafbc4d0122956ae460c602cb1e8",
     "semantic_hash": ""
   },
   "db/migrations/001_initial.sql": {
@@ -30,8 +30,8 @@
     "semantic_hash": ""
   },
   "frontend/src/tabs/Ask.tsx": {
-    "mtime": 1781545223.001554,
-    "ast_hash": "c16ea3faa355b088ae35b8d6c64a9673",
+    "mtime": 1781655386.9290714,
+    "ast_hash": "8cc724a7759b0802e49832d8adab97b2",
     "semantic_hash": ""
   },
   "frontend/src/tabs/Decisions.tsx": {
@@ -50,8 +50,8 @@
     "semantic_hash": ""
   },
   "frontend/src/tabs/Settings.tsx": {
-    "mtime": 1781654365.314173,
-    "ast_hash": "a3be0f240740002f8a4007097a88562d",
+    "mtime": 1781655386.9300716,
+    "ast_hash": "108d740e3e57b44089b007f4d550ce19",
     "semantic_hash": ""
   },
   "frontend/src/tabs/WorkQueue.tsx": {
@@ -120,13 +120,13 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1781562683.2009404,
-    "ast_hash": "e15afdee974a7ba6e0df173fa0dd84dd",
+    "mtime": 1781655386.9310715,
+    "ast_hash": "7b205142568c0c29f177539b06e16169",
     "semantic_hash": ""
   },
   "START_HERE.md": {
-    "mtime": 1781654489.2425768,
-    "ast_hash": "e4e6bf39c715b6a3f85dfc42ff02d4b4",
+    "mtime": 1781655624.8848615,
+    "ast_hash": "37959eef65790d0e10bdb95ee22b5ce4",
     "semantic_hash": ""
   },
   "backend/prompts/recommend_archive.txt": {
@@ -155,8 +155,8 @@
     "semantic_hash": ""
   },
   "backend/requirements.txt": {
-    "mtime": 1781653521.2473779,
-    "ast_hash": "aebe8d63d4e60dd2ace66295b792ca34",
+    "mtime": 1781655386.9280715,
+    "ast_hash": "5090ac992b70335748d2469439a89f52",
     "semantic_hash": ""
   },
   "docker-compose.yml": {
@@ -195,8 +195,8 @@
     "semantic_hash": ""
   },
   "docs/deployment-guide.md": {
-    "mtime": 1781554488.4963124,
-    "ast_hash": "dcb3c36df1d029ee47dc69b2af6507de",
+    "mtime": 1781655413.5143843,
+    "ast_hash": "755ff021ab70489478787b195907b14d",
     "semantic_hash": ""
   },
   "docs/domain-language.md": {
@@ -245,8 +245,8 @@
     "semantic_hash": ""
   },
   "docs/runbook.md": {
-    "mtime": 1781554575.1241715,
-    "ast_hash": "24ab885560c70d651ad696f20be6447f",
+    "mtime": 1781655386.9320714,
+    "ast_hash": "f038ca5d0267f5951119eddce68c23ab",
     "semantic_hash": ""
   },
   "docs/standards/README.md": {
@@ -430,13 +430,28 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781654489.2425768,
-    "ast_hash": "9c9c039de3883120834ecadc2c020b6a",
+    "mtime": 1781655639.944038,
+    "ast_hash": "c94bf7ab60395f54e4df4a42993f8b5f",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {
     "mtime": 1781654365.319173,
     "ast_hash": "fcf3ed2f59d1df17979cfbb6add68716",
+    "semantic_hash": ""
+  },
+  "backend/services/__init__.py": {
+    "mtime": 1781655386.9180713,
+    "ast_hash": "5b914385db779c120624a3441e852417",
+    "semantic_hash": ""
+  },
+  "backend/services/graphify_service.py": {
+    "mtime": 1781655487.4762511,
+    "ast_hash": "0e070125b5fad5450231ad5ca79d9ff3",
+    "semantic_hash": ""
+  },
+  "tests/test_graphify_service.py": {
+    "mtime": 1781655487.477251,
+    "ast_hash": "b3befba5922bf2b81b03b6e61e441118",
     "semantic_hash": ""
   }
 }

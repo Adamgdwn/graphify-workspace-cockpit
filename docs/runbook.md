@@ -1,14 +1,14 @@
 # Runbook
 
 Status: current
-Last Updated: 2026-06-15
+Last Updated: 2026-06-16
 Owner: Adam Goodwin
 
 ## What This System Does In Operation
 
 The Graphify Workspace Cockpit runs two local processes:
 
-- **Backend** — FastAPI on `http://localhost:8000`. Reads `graph.json`, runs graphify CLI subprocesses, calls Ollama for inference, writes workspace state to `workspace/state/`.
+- **Backend** — FastAPI on `http://localhost:8000`. Reads `graph.json`, runs Graphify through the backend service wrapper, calls Ollama for inference, writes workspace state to `workspace/state/`.
 - **Frontend** — Vite/React dev server on `http://localhost:5173`. Talks only to the backend.
 
 Neither process connects to the internet unless Supabase (`STORAGE_BACKEND=supabase`) or Cloud Connectors (SharePoint/OneNote) are configured.
@@ -35,7 +35,9 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and Caddy
 curl http://localhost:8000/health
 ```
 
-Response includes `status`, `graph_loaded`, `demo_mode`, and `ollama_connected`. If `graph_loaded` is false, check `GRAPH_PATH` in `backend/.env`.
+Response includes `status`, `graph_loaded`, `demo_mode`, and `graphify`. If
+`graph_loaded` is false, check `GRAPH_PATH` in `backend/.env`. Check Ollama
+separately with `curl http://localhost:8000/status/ollama`.
 
 ## Demo Readiness Check
 
@@ -68,6 +70,8 @@ Then walk the manual demo path in `docs/demo-path-checklist.md`.
 | Supabase sync failing | `SUPABASE_URL` or `SUPABASE_KEY` wrong | Check `.env`; test with `curl $SUPABASE_URL/rest/v1/decisions -H "apikey: $SUPABASE_KEY"` |
 | Cloud sync failing | MSAL token expired or wrong tenant | Re-run `POST /connectors/{connector_id}/sync` or re-authenticate from Settings |
 | Frontend won't load | Port 5173 in use or Vite didn't start | Check `launcher/frontend.log`; kill stale process on that port |
+| `GRAPHIFY_MISSING` in Ask or rebuild | Graphify CLI is not installed or not on `PATH` | Run `pip install graphifyy`, rebuild Docker if applicable, then confirm `graphify --version` |
+| `GRAPHIFY_TIMEOUT` in Ask or rebuild | Graphify CLI exceeded the route timeout | Retry on a smaller graph or inspect the configured scan directories |
 | Graph rebuild hanging | `graphify update` subprocess stalled | Check `GET /graph/rebuild/status`; kill backend and restart if stuck |
 
 ## Dependencies
