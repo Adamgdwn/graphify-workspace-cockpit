@@ -1,7 +1,7 @@
 # Workspace Scope and Signal Plan
 
-Last Updated: 2026-06-17T14:54:17-06:00
-Status: active plan - Workspace Scope Chunk 8 task complete; owner review / next polish next
+Last Updated: 2026-06-17T16:44:43-06:00
+Status: active plan - Workspace Scope dedicated tab polish task complete; owner review / next polish next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -129,6 +129,22 @@ Observed on 2026-06-16:
   development-mode inspect requests. Headless browser verification confirmed
   the startup tree rendered with 60 checkboxes, 47 enabled selectable folders,
   and no startup root-select dropdown.
+- Post-restart recovery audit on 2026-06-17T16:27:19-06:00 found the worktree
+  clean at `aa62169 Open scoped overview after map generation`. The final
+  follow-up changes unsafe-broad startup behavior: broad workspace Overview can
+  open with a warning that Evidence/full graph is capped, while missing scope
+  still uses the picker. Local generated graph/state files parsed cleanly; the
+  active merged graph has 41,391 nodes, 72,717 links, zero duplicate node ids,
+  and zero missing link targets. Validation passed with backend tests, backend
+  compile, frontend typecheck/build, state JSON parsing, and `git diff --check`.
+- Workspace Scope dedicated-tab polish is task complete as of
+  2026-06-17T16:44:43-06:00: the drive/folder/workspace picker and Generate Map
+  action moved into a top-level `Scope` tab. Generate Map navigates to Map after
+  the scoped rebuild completes. Map now stays focused on rendered graph
+  exploration, showing only a compact link to Workspace Scope when no saved
+  scope exists. Settings also links to Workspace Scope instead of duplicating
+  the picker. Validation passed with frontend typecheck/build, headless Chromium
+  tab-flow smoke, `git diff --check`, and `graphify update . --no-cluster`.
 
 ## Target Mental Model
 
@@ -870,6 +886,37 @@ Validation:
   nodes and one overview group, restored the prior broad smoke profile and
   active merged graph, restarted backend to clear cache, and reverified the
   restored broad summary at 22,613 visible nodes across four groups.
+
+Post-restart recovery note:
+
+- On 2026-06-17T16:27:19-06:00, after an owner-reported machine shutdown, the
+  worktree was clean at `aa62169 Open scoped overview after map generation`.
+  This commit is a small post-correction follow-up in `frontend/src/tabs/Map.tsx`
+  that opens the broad Overview with a warning instead of forcing the scope
+  picker when the active graph exceeds the Evidence/full-graph browser cap.
+- Local generated graph/state files were intact: `graphify-out/merged-graph.json`
+  parsed cleanly with 41,391 nodes, 72,717 links, zero duplicate node ids, and
+  zero missing link targets; all `workspace/state/*.json` files parsed.
+- Validation passed: `backend/.venv/bin/python -m pytest tests`,
+  `backend/.venv/bin/python -m compileall backend tests`, `source
+  /home/adamgoodwin/.nvm/nvm.sh && npm --prefix frontend run typecheck`,
+  `source /home/adamgoodwin/.nvm/nvm.sh && npm --prefix frontend run build`,
+  and `git diff --check`.
+
+Dedicated Scope tab polish:
+
+- On 2026-06-17T16:44:43-06:00, moved the main drive/folder/workspace selector
+  out of Map and Settings into a new top-level `Scope` tab.
+- Added `frontend/src/tabs/WorkspaceScope.tsx`; wired App navigation so
+  Generate Map returns to Map after the rebuild completes.
+- Map no longer renders `WorkspaceScopePicker`; missing scope now shows a
+  compact `Open Workspace Scope` action.
+- Settings now points to Workspace Scope instead of embedding another picker.
+- Validation passed: `source /home/adamgoodwin/.nvm/nvm.sh && npm --prefix
+  frontend run typecheck`, `source /home/adamgoodwin/.nvm/nvm.sh && npm
+  --prefix frontend run build`, headless Chromium smoke confirming Scope owns
+  the picker while Map and Settings do not, `git diff --check`, and
+  `graphify update . --no-cluster`.
 
 ## Non-Goals
 

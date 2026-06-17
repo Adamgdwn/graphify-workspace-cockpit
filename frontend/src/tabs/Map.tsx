@@ -9,7 +9,6 @@ import layoutUtilities from "cytoscape-layout-utilities";
 import { DECISION_CLASSIFICATIONS } from "../domain/decision";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
-import { WorkspaceScopePicker, type WorkspaceScopeProfile } from "../components/WorkspaceScopePicker";
 
 // ── Extension registration (once per page lifetime) ───────────────────────
 
@@ -754,11 +753,11 @@ const FULL_CY_STYLE: object[] = [
 
 interface MapProps {
   activeContext?: ActiveCockpitContext | null;
-  onNavigateSettings?: () => void;
+  onNavigateScope?: () => void;
   onActiveContextChange?: ActiveCockpitContextHandler;
 }
 
-export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, onActiveContextChange }: MapProps) {
+export function Map({ activeContext, onNavigateScope, onActiveContextChange }: MapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const appliedContextKeyRef = useRef<string | null>(null);
@@ -819,7 +818,6 @@ export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, on
   const [focusNotice, setFocusNotice] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const [scopeGate, setScopeGate] = useState<ScopeGateState>("checking");
   const [scopeGateReason, setScopeGateReason] = useState("Choose folders before generating a workspace map.");
-  const [workspaceProfile, setWorkspaceProfile] = useState<WorkspaceScopeProfile | null>(null);
 
   const showSemanticRef = useRef(false);
   const semanticEdgesRef = useRef<Array<{ source: string; target: string; similarity: number }>>([]);
@@ -1162,12 +1160,11 @@ export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, on
       try {
         const response = await apiFetch(`/workspace-scope`);
         if (!response.ok) throw new Error(await apiErrorMessage(response));
-        const data = await response.json() as { profile: WorkspaceScopeProfile | null };
+        const data = await response.json() as { profile: unknown | null };
         if (cancelled) return;
-        setWorkspaceProfile(data.profile);
         if (!data.profile) {
           setScopeGate("setup");
-          setScopeGateReason("No workspace scope is selected yet. Select folders, then generate the map.");
+          setScopeGateReason("No workspace scope is selected yet. Select folders in Workspace Scope, then generate the map.");
           return;
         }
         setScopeGate("ready");
@@ -1787,19 +1784,6 @@ export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, on
   const excludedFromScopeCount = excludedNodeCount(fullGraph, summary);
   const broadEvidenceDisabled = !fullGraph && (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
 
-  function handleScopeGenerated() {
-    setScopeGate("ready");
-    setScopeGateReason("");
-    setFullGraph(null);
-    setViewMode("summary");
-    setMapMode("explore");
-    setShowLowSignal(false);
-    setShowOverlap(false);
-    setShowSemantic(false);
-    setBreadcrumb([]);
-    void fetchSummary();
-  }
-
   if (scopeGate === "checking") {
     return (
       <div className="map-pane">
@@ -1817,22 +1801,14 @@ export function Map({ activeContext, onNavigateSettings: _onNavigateSettings, on
   if (scopeGate === "setup") {
     return (
       <div className="map-pane">
-        <div className="map-scope-gate">
-          <WorkspaceScopePicker
-            mode="startup"
-            title="Generate Workspace Map"
-            intro={scopeGateReason}
-            generateLabel="Generate Map"
-            autoInspectSavedProfile
-            restoreSavedSelection={false}
-            onGenerated={handleScopeGenerated}
-            onProfileSaved={setWorkspaceProfile}
-          />
-          {workspaceProfile && (
-            <p className="settings-dim map-scope-existing">
-              Current saved profile: <span className="settings-mono">{workspaceProfile.profile_name}</span>
-            </p>
-          )}
+        <div className="map-startup-shell">
+          <div className="map-overlay map-startup-overlay map-scope-empty">
+            <span className="map-empty-title">Generate a workspace map first</span>
+            <span className="map-overlay-sub">{scopeGateReason}</span>
+            <button type="button" className="settings-upload-btn" onClick={onNavigateScope}>
+              Open Workspace Scope
+            </button>
+          </div>
         </div>
       </div>
     );

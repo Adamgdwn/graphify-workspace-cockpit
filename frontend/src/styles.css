@@ -741,21 +741,23 @@ body {
   min-height: 100%;
 }
 
-.map-scope-gate {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 22px;
+.map-scope-empty {
+  gap: 12px;
+  text-align: center;
 }
 
-.map-scope-gate .scope-picker-startup {
+.map-empty-title {
+  color: #e8eaf0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.workspace-scope-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   max-width: 1320px;
   margin: 0 auto;
-}
-
-.map-scope-existing {
-  max-width: 1320px;
-  margin: 10px auto 0;
 }
 
 /* Toolbar */

@@ -8,8 +8,11 @@ import {
   setStoredApiKey,
 } from "../api/client";
 import { API } from "../config";
-import { WorkspaceScopePicker } from "../components/WorkspaceScopePicker";
 import { useToast } from "../components/Toast";
+
+interface SettingsProps {
+  onNavigateScope: () => void;
+}
 
 interface AppSettings {
   version: string;
@@ -111,7 +114,7 @@ interface ClusterSelectionData {
   available_clusters: ClusterOption[];
 }
 
-export function Settings() {
+export function Settings({ onNavigateScope }: SettingsProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
   const [ollama, setOllama] = useState<OllamaStatus | null>(null);
@@ -620,12 +623,17 @@ export function Settings() {
     <div className="settings-pane">
       <h2 className="settings-heading">Settings</h2>
 
-      <WorkspaceScopePicker
-        mode="settings"
-        intro="Choose a parent folder, inspect the bounded repo tree, select folders, and generate a scoped map from that selection."
-        onGenerated={loadAll}
-        onProfileSaved={loadAll}
-      />
+      <section className="settings-section">
+        <div className="settings-section-title">Workspace Scope</div>
+        <p className="settings-dim">
+          Drive, folder, and workspace selection now lives in its own tab. Generate a scoped map there, then review it on Map.
+        </p>
+        <div className="scope-actions">
+          <button type="button" className="settings-upload-btn" onClick={onNavigateScope}>
+            Open Workspace Scope
+          </button>
+        </div>
+      </section>
 
       {/* Active Graph */}
       <section className="settings-section">

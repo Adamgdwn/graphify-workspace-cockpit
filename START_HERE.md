@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-17T14:54:17-06:00
-Status: workspace scope zero-start folder picker task complete; owner review / next polish next; current-build pathway archived
+Last Updated: 2026-06-17T16:44:43-06:00
+Status: workspace scope dedicated tab polish task complete; owner review / next polish next; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -179,6 +179,24 @@ while inspection loads, and de-duplicates development-mode inspection requests.
 Headless browser verification confirmed the Map startup tree rendered with 60
 checkboxes, 47 enabled selectable folder rows, and no startup root-select
 dropdown.
+
+Post-restart recovery audit on 2026-06-17T16:27:19-06:00 found the worktree
+clean at `aa62169 Open scoped overview after map generation`. That final
+follow-up lets the broad workspace Overview open with a browser-cap warning
+instead of forcing the picker immediately; Evidence/full graph remains capped.
+Local state points at `graphify-out/merged-graph.json`, which parsed cleanly
+with 41,391 nodes, 72,717 links, zero duplicate node ids, and zero missing link
+targets. Validation passed with backend tests, backend compile, frontend
+typecheck/build, state JSON parsing, and `git diff --check`.
+
+Workspace Scope dedicated-tab polish is task complete as of
+2026-06-17T16:44:43-06:00: drive/folder/workspace selection and Generate Map now
+live in their own top-level `Scope` tab. Generate Map returns to the Map tab
+after the scoped rebuild completes. Map no longer embeds the scope picker; when
+scope is missing it shows a compact action to open Workspace Scope. Settings
+now links to Workspace Scope instead of duplicating the picker. Validation
+passed with frontend typecheck/build, headless Chromium tab-flow smoke,
+`git diff --check`, and `graphify update . --no-cluster`.
 
 Continue with owner review / next polish for the knowledge-tool experience.
 
