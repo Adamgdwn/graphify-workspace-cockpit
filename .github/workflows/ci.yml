@@ -6,8 +6,8 @@ on:
   pull_request:
 
 jobs:
-  typecheck:
-    name: TypeScript typecheck
+  frontend:
+    name: Frontend typecheck and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,9 +20,11 @@ jobs:
         working-directory: frontend
       - run: npm run typecheck
         working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
 
-  backend-import:
-    name: Python import check
+  backend-tests:
+    name: Backend pytest
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +33,7 @@ jobs:
           python-version: "3.12"
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
-      - run: pip install -r requirements.txt
-        working-directory: backend
-      - run: python -c "import main"
-        working-directory: backend
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -r backend/requirements.txt
+      - run: python -m compileall -q backend
+      - run: python -m pytest

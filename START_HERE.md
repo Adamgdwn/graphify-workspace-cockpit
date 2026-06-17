@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-16T20:49:51-06:00
-Status: stabilization Chunk 7 task complete; current-build pathway archived
+Last Updated: 2026-06-16T21:00:23-06:00
+Status: stabilization Chunk 8 task complete; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -45,8 +45,12 @@ parent-safe atomic replacement through `backend/state_store.py`, clean empty
 state tests cover the main persisted file surfaces, and launcher-compatible
 smoke validation passed. Chunk 7 is task complete: Caddy now routes `/api/*`
 before the frontend catch-all, strips `/api` before proxying to the backend, and
-hosted smoke instructions cover `GET /api/health` plus `GET /`. The recommended
-next implementation chunk is Chunk 8: Minimum Backend Test Suite.
+hosted smoke instructions cover `GET /api/health` plus `GET /`. Chunk 8 is task
+complete: backend contract coverage now includes API-key middleware behavior
+alongside the graph schema, Settings counts, upload, activation, Graphify
+service, connector ingest, and clean-state tests; CI now runs backend pytest,
+backend compile checks, frontend typecheck, and frontend production build. The
+recommended next implementation chunk is Chunk 9: Supabase Schema Alignment.
 
 Open owner-review flags before remaining implementation:
 - Project is classified as `AI agent with tools` while selected governance is

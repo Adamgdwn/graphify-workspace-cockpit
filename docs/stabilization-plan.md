@@ -1,7 +1,7 @@
 # Graphify Workspace Cockpit Stabilization Plan
 
-Last Updated: 2026-06-16T20:49:51-06:00
-Status: active plan - Chunk 7 task complete; next recommended chunk is Chunk 8 Minimum Backend Test Suite
+Last Updated: 2026-06-16T21:00:23-06:00
+Status: active plan - Chunk 8 task complete; next recommended chunk is Chunk 9 Supabase Schema Alignment
 Owner: Adam Goodwin
 
 ## Startup Routing
@@ -38,8 +38,9 @@ Preserve the current product while hardening it. The seven-tab workflow
 
 P0 - blocks hosted beta:
 
-- Backend tests now exist, but coverage is still partial until the remaining P0
-  backend contracts are added.
+- No active P0 blockers remain for the file-backed hosted beta path covered by
+  Chunks 1-8. Supabase mode remains a beta-confidence gate until schema
+  alignment is completed.
 
 Resolved in Chunk 1:
 
@@ -95,6 +96,16 @@ Resolved in Chunk 7:
   runbook, and demo checklist now document `VITE_API_URL=/api` for same-origin
   Caddy hosting plus hosted smoke checks for `GET /api/health` and `GET /`.
 
+Resolved in Chunk 8:
+
+- Backend contract coverage now includes graph schema normalization, Settings
+  counts, graph upload validation and activation, graph activation, API-key
+  middleware behavior, Graphify service errors, connector ingest compatibility,
+  and clean empty-state local writes. Test fixtures now include canonical
+  `links`, legacy `edges`, and malformed graph shapes. CI now runs backend
+  `pytest`, backend compile checks, frontend TypeScript typecheck, and frontend
+  production build.
+
 P1 - beta confidence:
 
 - Supabase migration does not include newer recommendation/action fields such as
@@ -123,8 +134,8 @@ the relevant implementation chunk proceeds:
   broader or untrusted production exposure.
 - Supabase migration policy: allow a new migration file only, or approve live
   migration application separately.
-- CI expansion: add backend `pytest` and frontend production build to CI once
-  tests exist.
+- CI expansion: resolved in Chunk 8; GitHub Actions now runs backend `pytest`,
+  backend compile checks, frontend typecheck, and frontend production build.
 
 ## 3. Context-Window Strategy
 
@@ -167,8 +178,9 @@ Baseline evidence gathered on 2026-06-16:
   frontend catch-all and strips `/api` before proxying to the backend.
 - Supabase migration: `db/migrations/001_initial.sql`, missing newer optional
   JSON fields used in current records.
-- Existing tests: `tests/` now covers graph schema normalization, settings
-  counts, and connector ingest compatibility.
+- Existing tests: `tests/` now covers graph schema normalization, Settings
+  counts, graph upload, graph activation, API-key middleware, Graphify service
+  errors, connector ingest compatibility, and clean empty-state file writes.
 
 ## 5. Chunked Implementation Plan
 
@@ -720,6 +732,8 @@ Token/context warning: Do not change unrelated nginx or Docker behavior.
 
 ### Chunk 8: Minimum Backend Test Suite
 
+Status: **task complete** — 2026-06-16T21:00:23-06:00
+
 Goal: Add enough tests that release-critical paths cannot silently regress.
 
 Why this matters: Focused tests now exist from Chunks 1-6, but the hosted beta
@@ -738,12 +752,46 @@ Files likely to change: `backend/requirements.txt` or a dev requirements file,
 Exact implementation steps:
 
 1. Add pytest dependency through the least disruptive dependency path.
+   - Already complete from Chunk 1 via `backend/requirements.txt`.
 2. Add fixtures for links graph, edges graph, malformed graph.
+   - Complete: `tests/fixtures/demo_graph_links.json`,
+     `tests/fixtures/demo_graph_edges.json`, and
+     `tests/fixtures/malformed_graph.json`.
 3. Use FastAPI `TestClient` with temporary env/state isolation.
+   - Complete across backend endpoint tests; no shared harness abstraction was
+     added because existing focused helpers were sufficient.
 4. Cover schema, settings counts, upload, activation, API-key middleware, and
    clean-state writes.
+   - Complete: added `tests/test_api_key_auth.py` and reused prior focused
+     coverage from Chunks 1-6.
 5. Expand CI to run backend `pytest`.
+   - Complete in `.github/workflows/ci.yml`.
 6. Add frontend production build to CI, not only TypeScript typecheck.
+   - Complete in `.github/workflows/ci.yml`.
+
+Implementation notes:
+
+- Added API-key middleware tests for unprotected local mode, `/health` auth
+  exemption, missing or wrong key rejection, `X-API-Key` acceptance, and bearer
+  token acceptance with user mapping.
+- Added malformed graph fixture and routed the graph schema malformed-link test
+  through the fixture set.
+- Replaced the CI backend import-only job with backend dependency install,
+  `python -m compileall -q backend`, and `python -m pytest`.
+- Kept CI frontend typecheck and added `npm run build` for the production Vite
+  build.
+
+Validation evidence:
+
+- Passed: `bash scripts/governance-preflight.sh`.
+- Local environment note: the system `python` command is absent until the repo
+  virtualenv is activated; validation used `backend/.venv/bin/python`.
+- Passed: `backend/.venv/bin/python -m pytest` — 38 tests passed.
+- Passed: `backend/.venv/bin/python -m compileall -q backend`.
+- Passed: `source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build`; Vite
+  still reports the existing large bundle warning.
+- Passed: `graphify update . --no-cluster` rebuilt `graphify-out/graph.json`
+  with 1137 nodes and 32766 edges.
 
 Validation commands:
 
@@ -755,9 +803,9 @@ source "$HOME/.nvm/nvm.sh" && cd frontend && npm run build
 
 Acceptance criteria:
 
-- `python -m pytest` passes locally.
-- Tests cover all P0 backend contracts named in this plan.
-- CI runs backend pytest and frontend production build.
+- [x] `python -m pytest` passes locally through the repo virtualenv.
+- [x] Tests cover all P0 backend contracts named in this plan.
+- [x] CI runs backend pytest and frontend production build.
 
 Rollback note: Keep fixtures and tests if possible; remove only CI wiring if it
 blocks unrelated work.

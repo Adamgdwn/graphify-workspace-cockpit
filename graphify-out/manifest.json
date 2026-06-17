@@ -95,8 +95,8 @@
     "semantic_hash": ""
   },
   ".github/workflows/ci.yml": {
-    "mtime": 1781459453.460572,
-    "ast_hash": "72a7a426c7baeab65ca74799d16c97ff",
+    "mtime": 1781665185.7068021,
+    "ast_hash": "9b5f47e4b96046b1eeaff532a4f1c55e",
     "semantic_hash": ""
   },
   "AGENTS.md": {
@@ -125,8 +125,8 @@
     "semantic_hash": ""
   },
   "START_HERE.md": {
-    "mtime": 1781660292.5002546,
-    "ast_hash": "c93267ad7cdde12e47b565090d02be5b",
+    "mtime": 1781665267.4595804,
+    "ast_hash": "e842cafcb56b224ebd7b53738ce48f7a",
     "semantic_hash": ""
   },
   "backend/prompts/recommend_archive.txt": {
@@ -420,8 +420,8 @@
     "semantic_hash": ""
   },
   "tests/test_graph_schema.py": {
-    "mtime": 1781659207.1561062,
-    "ast_hash": "8523899d2b66f665098dbccde6ce42f0",
+    "mtime": 1781665185.705802,
+    "ast_hash": "47b03174721d7721d977e099249c2e8e",
     "semantic_hash": ""
   },
   "tests/test_settings_counts.py": {
@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "docs/stabilization-plan.md": {
-    "mtime": 1781660390.031436,
-    "ast_hash": "a6f59f1def7692ba09186b1022b584b3",
+    "mtime": 1781665267.4585803,
+    "ast_hash": "1a837912bbd941536eddb07bb0d9ffee",
     "semantic_hash": ""
   },
   "tests/test_graph_activation.py": {
@@ -472,6 +472,16 @@
   "tests/test_clean_state.py": {
     "mtime": 1781660198.4721158,
     "ast_hash": "4348c2daa82e79e1c6c5526157537923",
+    "semantic_hash": ""
+  },
+  "tests/fixtures/malformed_graph.json": {
+    "mtime": 1781665185.704802,
+    "ast_hash": "063473848b0dc91482934fc7874c8de4",
+    "semantic_hash": ""
+  },
+  "tests/test_api_key_auth.py": {
+    "mtime": 1781665185.705802,
+    "ast_hash": "c1a003e400202891d732a47b644537ab",
     "semantic_hash": ""
   }
 }

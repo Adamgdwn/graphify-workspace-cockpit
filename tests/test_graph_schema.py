@@ -70,7 +70,7 @@ def test_normalize_graph_deduplicates_links_and_edges() -> None:
 
 def test_normalize_graph_rejects_malformed_links() -> None:
     with pytest.raises(GraphValidationError, match="source and target"):
-        normalize_graph({"nodes": [{"id": "a"}], "links": [{"source": "a"}]})
+        normalize_graph(load_fixture("malformed_graph.json"))
 
 
 def test_normalize_graph_can_require_links_to_reference_nodes() -> None:
