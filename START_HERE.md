@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-17T11:35:38-06:00
-Status: workspace scope Chunk 7 task complete; owner review / final polish next; current-build pathway archived
+Last Updated: 2026-06-17T12:27:12-06:00
+Status: workspace scope zero-start folder picker planned; implement Chunk 8 next; current-build pathway archived
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,7 +12,7 @@ default.
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
 3. Read `docs/workspace-scope-and-signal-plan.md`.
-4. Start with owner review / final polish unless Adam redirects.
+4. Start with Workspace Scope Chunk 8 unless Adam redirects.
 5. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 6. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
@@ -138,7 +138,35 @@ workspace overview, repo/module drilldown, hidden low-signal counts, semantic
 overlap groups, and a compact scoped Ask response. The smoke pass also fixed
 duplicate raw Graphify node ids during scoped rebuild activation and made
 single-repo semantic overlap group by meaningful module areas when community
-metadata is absent. Continue with owner review / final polish.
+metadata is absent.
+
+Broad multi-root rebuild follow-up is task complete as of
+2026-06-17T12:00:36-06:00: the profile `Adam Code Broad Smoke Scope` selected
+`/home/adamgoodwin/code/agents`, `/home/adamgoodwin/code/Applications`,
+`/home/adamgoodwin/code/Tools`, and `/home/adamgoodwin/code/Infrastructure`.
+`POST /graph/rebuild` completed with four scanned roots after replacing the
+brittle Graphify CLI merge step with cockpit-side normalized composition. The
+activated graph had 40,835 raw nodes, 71,423 links, zero duplicate node ids,
+zero missing link targets, 132 repaired cross-root duplicate ids, and a default
+summary grouped into `agents`, `Applications`, `Tools`, and `Infrastructure`.
+
+Browser-freeze follow-up is task complete as of 2026-06-17T12:22:03-06:00:
+broad workspace testing showed that Evidence/full graph mode could still request
+22,613 visible nodes and slow Zen before the operator could reach Workspace
+Scope. `/graph/full` now rejects oversized default payloads with
+`413 GRAPH_FULL_TOO_LARGE`, Map disables Evidence, Low Signal, and Overlap modes
+when the visible graph is above the browser cap, and Settings shows Workspace
+Scope as the first settings card.
+
+Owner review on 2026-06-17T12:27:12-06:00 clarified the remaining product gap:
+the cockpit needs to start from zero selected folders, present a pull-down/tree
+folder picker with checkboxes, ignore standard noisy files by default, and only
+generate the map after the operator selects folders and presses Generate Map.
+This is planned as Workspace Scope Chunk 8 in
+`docs/workspace-scope-and-signal-plan.md`.
+
+Continue with Workspace Scope Chunk 8: Zero-Start Folder Picker and Generate
+Flow.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is

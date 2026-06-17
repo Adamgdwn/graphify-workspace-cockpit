@@ -300,6 +300,42 @@ def test_scoped_rebuild_repairs_duplicate_graphify_node_ids(tmp_path: Path) -> N
     assert graph["links"] == [{"source": "runtimeerror", "target": "worker", "relation": "mentions"}]
 
 
+def test_merge_graph_outputs_repairs_cross_root_duplicate_ids(tmp_path: Path) -> None:
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    out_path = tmp_path / "merged.json"
+    first.write_text(json.dumps({
+        "nodes": [
+            {"id": "main", "label": "main.py", "source_root": "/workspace/app-a"},
+            {"id": "config", "label": "config.py", "source_root": "/workspace/app-a"},
+        ],
+        "links": [{"source": "main", "target": "config", "relation": "imports"}],
+    }))
+    second.write_text(json.dumps({
+        "nodes": [
+            {"id": "main", "label": "main.py", "source_root": "/workspace/app-b"},
+            {"id": "worker", "label": "worker.py", "source_root": "/workspace/app-b"},
+        ],
+        "links": [{"source": "main", "target": "worker", "relation": "imports"}],
+    }))
+
+    main._merge_graph_outputs([str(first), str(second)], out_path)
+
+    merged = json.loads(out_path.read_text())
+    assert [node["id"] for node in merged["nodes"]] == [
+        "main",
+        "config",
+        "main__duplicate_2",
+        "worker",
+    ]
+    duplicate = next(node for node in merged["nodes"] if node["source_root"] == "/workspace/app-b")
+    assert duplicate["original_graphify_id"] == "main"
+    assert merged["links"] == [
+        {"source": "main", "target": "config", "relation": "imports"},
+        {"source": "main__duplicate_2", "target": "worker", "relation": "imports"},
+    ]
+
+
 def test_graph_full_hides_low_signal_nodes_by_default(monkeypatch, tmp_path: Path) -> None:
     graph = tmp_path / "graph.json"
     graph.write_text(json.dumps({
@@ -345,6 +381,41 @@ def test_graph_full_hides_low_signal_nodes_by_default(monkeypatch, tmp_path: Pat
     assert {node["id"] for node in expanded_body["nodes"]} == {"readme", "worker", "generated"}
     assert expanded_body["hidden_node_count"] == 0
     assert expanded_body["include_low_signal"] is True
+
+
+def test_graph_full_rejects_oversized_default_payload(monkeypatch, tmp_path: Path) -> None:
+    graph = tmp_path / "graph.json"
+    graph.write_text(json.dumps({
+        "nodes": [
+            {
+                "id": f"readme-{index}",
+                "label": f"main {index}",
+                "source_file": f"src/main-{index}.py",
+                "file_type": "code",
+            }
+            for index in range(101)
+        ],
+        "links": [],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+    client = TestClient(main.app)
+
+    response = client.get("/graph/full?max_nodes=100")
+
+    assert response.status_code == 413
+    detail = response.json()["detail"]
+    assert detail["code"] == "GRAPH_FULL_TOO_LARGE"
+    assert detail["visible_node_count"] == 101
+    assert detail["max_nodes"] == 100
 
 
 def test_graph_summary_uses_workspace_projects_then_modules(monkeypatch, tmp_path: Path) -> None:

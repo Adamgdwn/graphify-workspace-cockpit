@@ -1,7 +1,7 @@
 # Workspace Scope and Signal Plan
 
-Last Updated: 2026-06-17T11:35:38-06:00
-Status: active plan - Chunk 7 task complete; owner review / final polish next
+Last Updated: 2026-06-17T12:27:12-06:00
+Status: active plan - zero-start folder picker planned; implement Chunk 8 next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -88,6 +88,27 @@ Observed on 2026-06-16:
   runtime issues: duplicate raw Graphify node ids are repaired before scoped
   activation, and single-repo semantic overlap now groups by meaningful module
   areas when community metadata is absent.
+- Broad multi-root rebuild follow-up is task complete as of
+  2026-06-17T12:00:36-06:00: the saved profile
+  `Adam Code Broad Smoke Scope` selected `/home/adamgoodwin/code/agents`,
+  `/home/adamgoodwin/code/Applications`, `/home/adamgoodwin/code/Tools`, and
+  `/home/adamgoodwin/code/Infrastructure`; `POST /graph/rebuild` completed
+  with four scanned roots after replacing the brittle Graphify CLI merge step
+  with cockpit-side normalized composition. The activated graph had 40,835
+  raw nodes, 71,423 links, zero duplicate node ids, zero missing link targets,
+  132 repaired cross-root duplicate ids, and 209 scoped-out nodes.
+- Browser-freeze follow-up is task complete as of
+  2026-06-17T12:22:03-06:00: broad workspace testing showed that Evidence/full
+  graph mode could still request 22,613 visible nodes and slow Zen before the
+  operator could reach Workspace Scope. `/graph/full` now rejects oversized
+  default payloads with `413 GRAPH_FULL_TOO_LARGE`, Map disables Evidence,
+  Low Signal, and Overlap modes when the visible graph is above the browser
+  cap, and Settings shows Workspace Scope as the first settings card.
+- Owner review on 2026-06-17T12:27:12-06:00 clarified that the current
+  Settings flow is not the requested product shape. The cockpit needs a
+  startup pull-down/tree picker with checkboxes, zero folders selected by
+  default, a single Generate Map action, and default noisy/standard-file
+  ignoring before any graph is generated. This is now Chunk 8.
 
 ## Target Mental Model
 
@@ -147,6 +168,33 @@ evidence and drilldown material unless they are high-signal enough to surface.
 7. Protect tokens.
    Ask, chat, recommendations, and overlap triage should consume compact scoped
    context packets, not raw graph dumps or all visible files.
+
+## Corrected Startup Workflow
+
+The cockpit should not start by loading a broad graph and then asking the user
+to cut it down. It should start with no selected folders for a new or unsafe
+broad workspace and ask the operator what to include.
+
+Expected flow:
+
+1. Open the app.
+2. See a Workspace Scope picker before graph generation when there is no
+   intentional scoped graph, or when the active graph is above the browser-safe
+   default cap.
+3. Choose a parent location from a pull-down of useful roots and recent/saved
+   profiles, with a path entry fallback for exact folders.
+4. Expand the discovered folder/repo tree.
+5. Tick checkboxes for the folders/projects to include. Nothing is included
+   until the user checks it.
+6. Standard generated, dependency, cache, state, media-bulk, and secret-like
+   paths are ignored by default and visibly marked as unavailable/noisy.
+7. Press one primary Generate Map action that saves the scope profile, rebuilds
+   only the checked folders, activates the scoped graph, and opens the Overview
+   map.
+
+This control may live in Settings for advanced edits, but the first-run and
+unsafe-broad-graph experience must surface it directly instead of requiring the
+operator to hunt for it.
 
 ## Scope Builder Requirements
 
@@ -651,7 +699,9 @@ Acceptance:
 - Demonstrate hidden low-signal node counts.
 - Ask one question that returns a compact scoped answer.
 
-Status: task complete on 2026-06-17T11:35:38-06:00.
+Status: task complete on 2026-06-17T11:35:38-06:00; broad multi-root rebuild
+follow-up complete on 2026-06-17T12:00:36-06:00; browser-freeze guard
+complete on 2026-06-17T12:22:03-06:00.
 
 Evidence:
 
@@ -683,6 +733,84 @@ Evidence:
   `backend/.venv/bin/python -m pytest tests/test_graphify_service.py -q`
   after adding coverage for duplicate Graphify ids and single-repo module
   overlap grouping.
+- Follow-up fix: broad multi-root scoped rebuild no longer calls
+  `graphify merge-graphs` for already-filtered graph JSON. The cockpit composes
+  normalized graphs locally, deterministically rewrites cross-root duplicate ids,
+  remaps links, and keeps strict activation validation. Live smoke against
+  `Adam Code Broad Smoke Scope` completed at
+  `2026-06-17T17:57:25.610995+00:00`; `/runtime/status` reported 40,835 raw
+  nodes and 71,423 links, `/graph/summary` reported 22,613 visible default
+  nodes grouped into `agents`, `Applications`, `Tools`, and `Infrastructure`,
+  and Applications drilldown returned project/module groups instead of file
+  sprawl.
+- Follow-up fix: broad graph Evidence mode now fails closed before browser
+  rendering. `GET /graph/full?max_nodes=5000` returns
+  `413 GRAPH_FULL_TOO_LARGE` for the broad profile with 22,613 visible nodes,
+  Map keeps the operator in Overview until the scope is narrowed, and Workspace
+  Scope is the first Settings section so include/exclude controls are visible
+  without hunting through graph upload/runtime panels.
+
+### Chunk 8: Zero-Start Folder Picker and Generate Flow
+
+Goal: Replace the current "load broad graph, then narrow it" experience with a
+first-class startup picker: select folders with checkboxes first, then generate
+the map.
+
+Files likely to change:
+
+- `frontend/src/tabs/Map.tsx`
+- `frontend/src/tabs/Settings.tsx`
+- `frontend/src/styles.css`
+- optional `frontend/src/components/WorkspaceScopePicker.tsx`
+- `backend/routes/workspace_scope.py`
+- `backend/workspace_scope.py`
+- tests under `tests/`
+- `scripts/demo-path-smoke.mjs`
+
+Acceptance:
+
+- Fresh app startup, missing saved scope, or browser-unsafe broad graphs show a
+  scope-selection state instead of attempting to render the existing broad map.
+- Scope selection includes a pull-down of useful roots/saved profiles/recent
+  roots plus an exact path entry fallback.
+- Inspecting a parent location opens a collapsible folder/repo tree with
+  checkboxes.
+- The initial selection is empty. No folder is included until the operator
+  checks it.
+- Standard noisy paths are ignored by default before graph generation:
+  dependency folders, generated outputs, caches, local state, media bulk,
+  lockfile-style low-signal files, and secret-like env/config files.
+- Noisy/default-ignored paths are visually marked and cannot accidentally become
+  part of the generated default map.
+- A single primary Generate Map action saves the checked scope, runs rebuild,
+  activates the scoped graph, and opens the Overview map.
+- Generate Map is disabled with clear copy until at least one valid folder is
+  selected.
+- The same picker is reusable from Settings for later scope edits.
+- The broad Evidence, Low Signal, and Overlap guards remain in place.
+- Backend tests cover empty selection rejection, include-only scan roots, noisy
+  default exclusions, and saved profile persistence.
+- Frontend typecheck/build pass, live smoke proves select -> generate ->
+  overview without first loading `/graph/full`, and `graphify update .
+  --no-cluster` is run after code changes.
+
+Implementation steps:
+
+1. Add a reusable Workspace Scope Picker component with parent root pull-down,
+   path fallback, inspect action, collapsible tree, empty-by-default
+   checkboxes, default-excluded states, and Generate Map CTA.
+2. Add backend support if needed for root suggestions/recent profile metadata;
+   keep path inspection bounded and presence-only for secret-like paths.
+3. Wire Map startup gating so unsafe broad graphs and missing scopes render the
+   picker, not the graph canvas.
+4. Reuse the same picker at the top of Settings so advanced edits and first-run
+   setup stay consistent.
+5. Make Generate Map save the profile and call the existing scoped rebuild path
+   in one visible flow, with progress and failure copy.
+6. Update smoke coverage to assert the first meaningful browser action is scope
+   selection, not broad graph rendering.
+
+Status: planned on 2026-06-17T12:27:12-06:00. Implement next.
 
 ## Non-Goals
 
@@ -702,7 +830,7 @@ To continue tomorrow:
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md`.
 4. Read this document only: `docs/workspace-scope-and-signal-plan.md`.
-5. Start with owner review / final polish unless Adam redirects.
+5. Start with Chunk 8: Zero-Start Folder Picker and Generate Flow.
 
 Avoid loading `docs/current-build-pathway.md` and long historical sections of
 `docs/stabilization-plan.md` unless investigating a regression.

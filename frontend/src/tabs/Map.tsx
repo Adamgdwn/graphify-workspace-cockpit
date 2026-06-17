@@ -101,6 +101,7 @@ interface FullGraph {
 
 type Filter = "all" | "code" | "document";
 type ViewMode = "summary" | "full";
+const FULL_GRAPH_NODE_LIMIT = 5000;
 type MapMode = "explore" | "trace" | "overlap" | "review";
 
 const MAP_MODES: Array<{ id: MapMode; label: string; subLabel: string; hint: string; tooltip: string }> = [
@@ -1676,6 +1677,13 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     setPathNoRoute(false);
 
     if (mode === "overlap") {
+      if (broadEvidenceDisabled) {
+        setFocusNotice({
+          tone: "warn",
+          text: `Overlap mode needs Evidence view, which is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes. Narrow the scope or drill into a smaller project first.`,
+        });
+        return;
+      }
       setViewMode("full");
       setShowSemantic(true);
       setShowOverlap(true);
@@ -1739,6 +1747,7 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
   const activeMapMode = MAP_MODES.find((mode) => mode.id === mapMode) ?? MAP_MODES[0];
   const hiddenLowSignalCount = lowSignalCount(fullGraph, summary);
   const excludedFromScopeCount = excludedNodeCount(fullGraph, summary);
+  const broadEvidenceDisabled = !fullGraph && (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
 
   const sourceSelector = clusterData && clusterData.available_clusters.length > 0 ? (
     <div className="map-source-control">
@@ -1797,11 +1806,24 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
           key={m}
           className={`map-filter-btn${viewMode === m ? " map-filter-active" : ""}`}
           onClick={() => {
+            if (m === "full" && broadEvidenceDisabled) {
+              setFocusNotice({
+                tone: "warn",
+                text: `Evidence view is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes. Narrow the scope or drill into a smaller project first.`,
+              });
+              return;
+            }
             setViewMode(m);
             setSelected(null);
             setSelectedFull(null);
             if (m === "full") setPathMode(false);
           }}
+          disabled={m === "full" && broadEvidenceDisabled}
+          title={
+            m === "full" && broadEvidenceDisabled
+              ? "Narrow the workspace scope or drill into a smaller project before opening Evidence view."
+              : undefined
+          }
           type="button"
         >
           {m === "summary" ? "Overview" : fullLoading ? "Loading..." : "Evidence"}
@@ -1814,6 +1836,13 @@ export function Map({ activeContext, onNavigateSettings, onActiveContextChange }
     <button
       className={`map-path-btn${showLowSignal ? " map-signal-active" : ""}`}
       onClick={() => {
+        if (broadEvidenceDisabled) {
+          setFocusNotice({
+            tone: "warn",
+            text: `Low Signal view would load more than ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes. Narrow the scope first.`,
+          });
+          return;
+        }
         setSelectedFull(null);
         setFullGraph(null);
         setShowLowSignal((value) => !value);

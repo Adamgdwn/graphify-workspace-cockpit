@@ -874,6 +874,91 @@ export function Settings() {
     <div className="settings-pane">
       <h2 className="settings-heading">Settings</h2>
 
+      {/* Workspace Scope */}
+      <section className="settings-section">
+        <div className="settings-section-title">
+          Workspace Scope
+          {workspaceProfile && <span className="scope-saved-pill">Saved</span>}
+        </div>
+        <p className="settings-dim" style={{ marginBottom: 10 }}>
+          Choose a parent folder, inspect the bounded repo tree, select included folders, and save the scope profile before rebuilding.
+        </p>
+        <form className="settings-upload-form" onSubmit={handleInspectWorkspaceScope} style={{ gap: 8 }}>
+          <input
+            className="settings-mono-input"
+            style={{ flex: 1 }}
+            value={workspaceRootInput}
+            onChange={(event) => setWorkspaceRootInput(event.target.value)}
+            placeholder="/home/adamgoodwin/code"
+            type="text"
+          />
+          <button type="submit" className="settings-upload-btn" disabled={inspectingWorkspace || !workspaceRootInput.trim()}>
+            {inspectingWorkspace ? "Inspecting..." : "Inspect Folder"}
+          </button>
+        </form>
+        <div className="scope-profile-row">
+          <label className="settings-label" htmlFor="workspace-profile-name">Profile</label>
+          <input
+            id="workspace-profile-name"
+            className="settings-mono-input"
+            value={workspaceProfileName}
+            onChange={(event) => setWorkspaceProfileName(event.target.value)}
+            placeholder="All Code"
+          />
+        </div>
+        {workspaceProfile && (
+          <div className="scope-summary">
+            <span className="settings-mono settings-break">{workspaceProfile.root}</span>
+            <span>{workspaceProfile.included_paths.length.toLocaleString()} included paths</span>
+            <span>{workspaceProfile.excluded_paths.length.toLocaleString()} excluded paths</span>
+            <span>low-signal hidden by default</span>
+          </div>
+        )}
+        {workspaceScope && (
+          <>
+            <div className="scope-count-grid">
+              <div>
+                <span className="scope-count-value">{workspaceScope.root.estimated_file_count.toLocaleString()}</span>
+                <span className="scope-count-label">estimated files</span>
+              </div>
+              <div>
+                <span className="scope-count-value">{workspaceScope.root.estimated_included_count.toLocaleString()}</span>
+                <span className="scope-count-label">included by defaults</span>
+              </div>
+              <div>
+                <span className="scope-count-value">{workspaceScope.root.estimated_excluded_count.toLocaleString()}</span>
+                <span className="scope-count-label">excluded by defaults</span>
+              </div>
+            </div>
+            <div className="scope-toolbar">
+              <span className="settings-dim">
+                Current selection: {workspaceSelectedCount.toLocaleString()} included, {workspaceExcludedCount.toLocaleString()} excluded
+              </span>
+              <button
+                type="button"
+                className="settings-upload-btn"
+                onClick={handleSaveWorkspaceScope}
+                disabled={savingWorkspace || workspaceSelectedCount === 0}
+              >
+                {savingWorkspace ? "Saving..." : "Save Scope"}
+              </button>
+            </div>
+            <div className="scope-tree">
+              {renderWorkspaceScopeNode(workspaceScope.tree)}
+            </div>
+            <div className="scope-patterns">
+              <span className="settings-label">Default excludes</span>
+              <span>{workspaceScope.exclude_patterns.join(", ")}</span>
+            </div>
+          </>
+        )}
+        {!workspaceScope && !workspaceScopeError && (
+          <p className="settings-dim">No folder inspected yet.</p>
+        )}
+        {workspaceScopeMsg && <p className="settings-ok">{workspaceScopeMsg}</p>}
+        {workspaceScopeError && <p className="settings-err">{workspaceScopeError}</p>}
+      </section>
+
       {/* Active Graph */}
       <section className="settings-section">
         <div className="settings-section-title">Active Graph</div>
@@ -978,97 +1063,11 @@ export function Settings() {
         {uploadMsg && <p className="settings-ok">{uploadMsg}</p>}
       </section>
 
-      {/* Workspace Scope */}
-      <section className="settings-section">
-        <div className="settings-section-title">
-          Workspace Scope
-          {workspaceProfile && <span className="scope-saved-pill">Saved</span>}
-        </div>
-        <p className="settings-dim" style={{ marginBottom: 10 }}>
-          Choose a parent folder, inspect the bounded repo tree, and save the scope profile for the next scoped rebuild pass.
-        </p>
-        <form className="settings-upload-form" onSubmit={handleInspectWorkspaceScope} style={{ gap: 8 }}>
-          <input
-            className="settings-mono-input"
-            style={{ flex: 1 }}
-            value={workspaceRootInput}
-            onChange={(event) => setWorkspaceRootInput(event.target.value)}
-            placeholder="/home/adamgoodwin/code"
-            type="text"
-          />
-          <button type="submit" className="settings-upload-btn" disabled={inspectingWorkspace || !workspaceRootInput.trim()}>
-            {inspectingWorkspace ? "Inspecting..." : "Inspect Folder"}
-          </button>
-        </form>
-        <div className="scope-profile-row">
-          <label className="settings-label" htmlFor="workspace-profile-name">Profile</label>
-          <input
-            id="workspace-profile-name"
-            className="settings-mono-input"
-            value={workspaceProfileName}
-            onChange={(event) => setWorkspaceProfileName(event.target.value)}
-            placeholder="All Code"
-          />
-        </div>
-        {workspaceProfile && (
-          <div className="scope-summary">
-            <span className="settings-mono settings-break">{workspaceProfile.root}</span>
-            <span>{workspaceProfile.included_paths.length.toLocaleString()} included paths</span>
-            <span>{workspaceProfile.excluded_paths.length.toLocaleString()} excluded paths</span>
-            <span>low-signal hidden by default</span>
-          </div>
-        )}
-        {workspaceScope && (
-          <>
-            <div className="scope-count-grid">
-              <div>
-                <span className="scope-count-value">{workspaceScope.root.estimated_file_count.toLocaleString()}</span>
-                <span className="scope-count-label">estimated files</span>
-              </div>
-              <div>
-                <span className="scope-count-value">{workspaceScope.root.estimated_included_count.toLocaleString()}</span>
-                <span className="scope-count-label">included by defaults</span>
-              </div>
-              <div>
-                <span className="scope-count-value">{workspaceScope.root.estimated_excluded_count.toLocaleString()}</span>
-                <span className="scope-count-label">excluded by defaults</span>
-              </div>
-            </div>
-            <div className="scope-toolbar">
-              <span className="settings-dim">
-                Current selection: {workspaceSelectedCount.toLocaleString()} included, {workspaceExcludedCount.toLocaleString()} excluded
-              </span>
-              <button
-                type="button"
-                className="settings-upload-btn"
-                onClick={handleSaveWorkspaceScope}
-                disabled={savingWorkspace || workspaceSelectedCount === 0}
-              >
-                {savingWorkspace ? "Saving..." : "Save Scope"}
-              </button>
-            </div>
-            <div className="scope-tree">
-              {renderWorkspaceScopeNode(workspaceScope.tree)}
-            </div>
-            <div className="scope-patterns">
-              <span className="settings-label">Default excludes</span>
-              <span>{workspaceScope.exclude_patterns.join(", ")}</span>
-            </div>
-          </>
-        )}
-        {!workspaceScope && !workspaceScopeError && (
-          <p className="settings-dim">No folder inspected yet.</p>
-        )}
-        {workspaceScopeMsg && <p className="settings-ok">{workspaceScopeMsg}</p>}
-        {workspaceScopeError && <p className="settings-err">{workspaceScopeError}</p>}
-      </section>
-
       {/* Rebuild Graph */}
       <section className="settings-section">
         <div className="settings-section-title">Rebuild Graph</div>
         <p className="settings-dim" style={{ marginBottom: 10 }}>
-          Run <code>graphify update . --no-cluster</code> on the current repo for now.
-          The saved workspace scope above is ready for the scoped rebuild engine in the next chunk.
+          Rebuild from the saved workspace scope above when one exists; otherwise it falls back to the local repo scan.
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           <button

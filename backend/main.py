@@ -36,7 +36,6 @@ try:
         GraphifyServiceError,
         get_graphify_status,
         run_graphify_ask,
-        run_graphify_merge,
         run_graphify_update,
     )
     from backend.state_store import write_json_atomic
@@ -67,7 +66,6 @@ except ModuleNotFoundError:
         GraphifyServiceError,
         get_graphify_status,
         run_graphify_ask,
-        run_graphify_merge,
         run_graphify_update,
     )
     from state_store import write_json_atomic
@@ -821,7 +819,11 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
 
 
 @app.get("/graph/full")
-def graph_full(include_low_signal: bool = False) -> dict:
+def graph_full(
+    include_low_signal: bool = False,
+    max_nodes: int = 5000,
+    force: bool = False,
+) -> dict:
     """Return all raw nodes and links for full-graph rendering in the Map."""
     try:
         g = apply_signal_tiers_to_graph(_load_graph())
@@ -976,6 +978,22 @@ def graph_full(include_low_signal: bool = False) -> dict:
         for n in all_nodes
         if is_visible_signal_node(n, include_low_signal=include_low_signal)
     }
+    effective_max_nodes = max(100, min(50000, int(max_nodes)))
+    if len(visible_node_ids) > effective_max_nodes and not force:
+        raise HTTPException(
+            status_code=413,
+            detail={
+                "code": "GRAPH_FULL_TOO_LARGE",
+                "message": (
+                    "Full evidence graph is too large for default browser rendering. "
+                    "Use the overview/drilldown map or narrow the workspace scope."
+                ),
+                "visible_node_count": len(visible_node_ids),
+                "max_nodes": effective_max_nodes,
+                "total_node_count": len(all_nodes),
+                "hidden_node_count": counts_by_signal.get("evidence", 0) + counts_by_signal.get("hidden", 0),
+            },
+        )
 
     nodes = []
     for n in all_nodes:
@@ -2417,20 +2435,50 @@ def _write_scoped_graph_metadata(
     write_json_atomic(graph_path, graph)
 
 
+def _merge_normalized_graphs(graph_paths: list[str]) -> dict:
+    merged_nodes: list[dict] = []
+    merged_links: list[dict] = []
+    used_ids: set[str] = set()
+    seen_counts: Counter[str] = Counter()
+
+    for graph_path in graph_paths:
+        graph = normalize_graph(json.loads(Path(graph_path).read_text()), require_link_targets=True)
+        id_map: dict[str, str] = {}
+        for raw_node in graph["nodes"]:
+            node = dict(raw_node)
+            node_id = str(node["id"])
+            seen_counts[node_id] += 1
+            next_id = node_id
+            if next_id in used_ids:
+                index = seen_counts[node_id]
+                next_id = f"{node_id}__duplicate_{index}"
+                while next_id in used_ids:
+                    index += 1
+                    next_id = f"{node_id}__duplicate_{index}"
+                node["id"] = next_id
+                node.setdefault("original_graphify_id", node_id)
+            used_ids.add(next_id)
+            id_map[node_id] = next_id
+            merged_nodes.append(node)
+
+        for raw_link in graph["links"]:
+            link = dict(raw_link)
+            source = id_map.get(str(link["source"]), str(link["source"]))
+            target = id_map.get(str(link["target"]), str(link["target"]))
+            link["source"] = source
+            link["target"] = target
+            merged_links.append(link)
+
+    return normalize_graph({"nodes": merged_nodes, "links": merged_links}, require_link_targets=True)
+
+
 def _merge_graph_outputs(graph_paths: list[str], out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if len(graph_paths) == 1:
         import shutil
         shutil.copy(graph_paths[0], str(out_path))
         return
-    merge_result = run_graphify_merge(graph_paths, out_path=out_path, timeout=300)
-    if merge_result.returncode != 0:
-        raise GraphifyServiceError(
-            "GRAPHIFY_MERGE_FAILED",
-            merge_result.stderr[:500] or "Graphify merge failed.",
-            status_code=503,
-            stderr=merge_result.stderr,
-        )
+    write_json_atomic(out_path, _merge_normalized_graphs(graph_paths))
 
 
 def _run_scoped_rebuild(profile: dict, repo_root: Path) -> None:
