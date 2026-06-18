@@ -19,6 +19,7 @@ except ModuleNotFoundError:
 ScopeState = Literal["included", "excluded", "partial"]
 EntryKind = Literal["directory", "file", "symlink", "other"]
 SignalTier = Literal["overview", "important", "evidence", "hidden", "excluded"]
+ImportanceTier = Literal["anchor", "interface", "important", "evidence", "hidden", "excluded"]
 
 DEFAULT_EXCLUDE_PATTERNS = [
     "node_modules/",
@@ -50,6 +51,7 @@ DEFAULT_SIGNAL_SETTINGS = {
 }
 
 VISIBLE_SIGNAL_TIERS = {"overview", "important"}
+VISIBLE_KNOWLEDGE_TIERS = {"anchor", "interface", "important"}
 
 GENERATED_TYPE_FILENAMES = {
     "_vercel-types.ts",
@@ -88,7 +90,6 @@ IMPORTANT_PATH_MARKERS = {
     "adr",
     "adrs",
     "api",
-    "app",
     "auth",
     "config",
     "contracts",
@@ -105,6 +106,68 @@ IMPORTANT_PATH_MARKERS = {
     "schemas",
     "settings",
     "standards",
+}
+
+INTERFACE_PATH_MARKERS = {
+    "api",
+    "auth",
+    "contract",
+    "contracts",
+    "db",
+    "interface",
+    "interfaces",
+    "migration",
+    "migrations",
+    "public",
+    "route",
+    "routes",
+    "schema",
+    "schemas",
+    "storage",
+}
+
+CONFIG_BOUNDARY_NAMES = {
+    "caddyfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "dockerfile",
+    "eslint.config.js",
+    "next.config.js",
+    "next.config.mjs",
+    "package.json",
+    "project-control.yaml",
+    "pyproject.toml",
+    "requirements.txt",
+    "tailwind.config.js",
+    "tsconfig.json",
+    "vite.config.ts",
+}
+
+ENTRYPOINT_NAMES = {
+    "app.py",
+    "index.ts",
+    "index.tsx",
+    "main.go",
+    "main.py",
+    "main.ts",
+    "main.tsx",
+    "server.py",
+    "server.ts",
+    "server.tsx",
+}
+
+HIGH_SIGNAL_TEST_MARKERS = {
+    "api",
+    "auth",
+    "contract",
+    "contracts",
+    "e2e",
+    "integration",
+    "schema",
+    "scope",
+    "service",
+    "smoke",
+    "workflow",
 }
 
 LOW_SIGNAL_PATH_MARKERS = {
@@ -633,30 +696,86 @@ def _metadata_text(node: Mapping, key: str) -> str:
     return str(value or "").strip().lower()
 
 
-def classify_signal_tier(
+def _has_any_marker(parts: list[str], markers: set[str]) -> bool:
+    return any(part in markers for part in parts)
+
+
+def _stem_has_any_marker(stem: str, markers: set[str]) -> bool:
+    tokens = {token for token in stem.replace("_", "-").split("-") if token}
+    return bool(tokens & markers)
+
+
+def _is_type_declaration(name: str) -> bool:
+    return name.endswith(".d.ts") or name.endswith(".d.mts") or name.endswith(".d.cts")
+
+
+def _source_stem(name: str) -> str:
+    for suffix in (".d.ts", ".d.mts", ".d.cts"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name.rsplit(".", 1)[0] if "." in name else name
+
+
+def _is_dependency_type_declaration(name: str, parts: list[str]) -> bool:
+    if not _is_type_declaration(name):
+        return False
+    return (
+        "node_modules" in parts
+        or ".pnpm" in parts
+        or "@types" in parts
+        or any(part.startswith("@types+") for part in parts)
+    )
+
+
+def _is_workspace_type_contract(name: str, stem: str, parts: list[str]) -> bool:
+    if not _is_type_declaration(name):
+        return False
+    contract_markers = {
+        "api",
+        "contract",
+        "contracts",
+        "interface",
+        "interfaces",
+        "public",
+        "schema",
+        "schemas",
+        "sdk",
+    }
+    return _has_any_marker(parts, contract_markers) or _stem_has_any_marker(stem, contract_markers)
+
+
+def _is_high_signal_test(stem: str, parts: list[str]) -> bool:
+    if not _has_any_marker(parts, {"test", "tests", "__tests__"}):
+        return False
+    return _has_any_marker(parts, HIGH_SIGNAL_TEST_MARKERS) or _stem_has_any_marker(stem, HIGH_SIGNAL_TEST_MARKERS)
+
+
+def classify_file_importance(
     node: Mapping,
     *,
     degree: int = 0,
     source_path: Path | None = None,
     scan_root: Path | None = None,
-) -> tuple[SignalTier, str]:
-    """Classify a graph node for default map visibility.
+) -> tuple[ImportanceTier, str]:
+    """Classify a graph node by decision/knowledge value.
 
     The heuristic is intentionally conservative: known source-of-truth files
-    and connected code boundaries stay visible, ordinary source becomes hidden
-    map evidence, and common generated/fixture/lockfile noise is opt-in only.
+    and cross-project boundaries stay visible, ordinary implementation becomes
+    evidence, and common generated/dependency/fixture noise is opt-in only.
     """
     root = scan_root or (source_path.parent if source_path else Path.cwd())
     source_text = _node_source_text(node, source_path, root).lower()
     parts = [part for part in source_text.split("/") if part]
     name = parts[-1] if parts else ""
-    stem = name.rsplit(".", 1)[0] if "." in name else name
+    stem = _source_stem(name)
     node_type = _node_type(node)
     kind = _metadata_text(node, "kind")
     source = str(node.get("source") or node.get("origin") or "").strip().lower()
 
     if name in GENERATED_TYPE_FILENAMES:
         return "hidden", "generated type shim"
+    if _is_dependency_type_declaration(name, parts):
+        return "hidden", "dependency type declaration"
     if name in LOCKFILE_NAMES:
         return "hidden", "lockfile"
     if name == "__init__.py":
@@ -665,26 +784,65 @@ def classify_signal_tier(
         return "hidden", "fixture or mock evidence"
     if "generated" in parts or "generated" in kind:
         return "hidden", "generated source"
+    if _is_workspace_type_contract(name, stem, parts):
+        return "interface", "workspace-owned type contract"
+    if _is_type_declaration(name):
+        return "hidden", "ambient type declaration"
 
     if source and source not in {"local", "graphify"}:
         return "important", "connector workspace item"
     if name in SOURCE_OF_TRUTH_NAMES:
-        return "important", "source-of-truth file"
+        return "anchor", "source-of-truth file"
+    if name in CONFIG_BOUNDARY_NAMES:
+        return "anchor", "configuration boundary"
     if node_type == "rationale":
-        return "important", "decision context"
+        return "anchor", "decision context"
     if node_type == "document":
         if any(marker in parts for marker in {"docs", "policy", "standards", "architecture", "adr", "adrs"}):
-            return "important", "governance or architecture document"
+            return "anchor", "governance or architecture document"
         return "evidence", "supporting document"
-    if "migration" in parts or "migrations" in parts:
-        return "important", "database migration"
-    if any(marker in parts or marker in stem for marker in IMPORTANT_PATH_MARKERS):
+    if _has_any_marker(parts, INTERFACE_PATH_MARKERS) or _stem_has_any_marker(stem, INTERFACE_PATH_MARKERS):
+        return "interface", "public API or data boundary"
+    if name in ENTRYPOINT_NAMES or stem.startswith("main-"):
+        return "important", "runtime entry point"
+    if _is_high_signal_test(stem, parts):
+        return "important", "high-signal test"
+    if _has_any_marker(parts, IMPORTANT_PATH_MARKERS) or _stem_has_any_marker(stem, IMPORTANT_PATH_MARKERS):
         return "important", "important path role"
     if degree >= 20:
-        return "overview", "high graph degree"
+        return "important", "high graph degree"
     if degree >= 6:
         return "important", "connected implementation node"
     return "evidence", "supporting evidence"
+
+
+def _signal_tier_from_importance(importance: ImportanceTier, *, degree: int = 0) -> SignalTier:
+    if importance == "excluded":
+        return "excluded"
+    if importance == "hidden":
+        return "hidden"
+    if importance == "evidence":
+        return "evidence"
+    if degree >= 20:
+        return "overview"
+    return "important"
+
+
+def classify_signal_tier(
+    node: Mapping,
+    *,
+    degree: int = 0,
+    source_path: Path | None = None,
+    scan_root: Path | None = None,
+) -> tuple[SignalTier, str]:
+    """Classify a graph node for default map visibility."""
+    importance, reason = classify_file_importance(
+        node,
+        degree=degree,
+        source_path=source_path,
+        scan_root=scan_root,
+    )
+    return _signal_tier_from_importance(importance, degree=degree), reason
 
 
 def signal_counts(nodes: list[Mapping]) -> dict[str, int]:
@@ -692,6 +850,17 @@ def signal_counts(nodes: list[Mapping]) -> dict[str, int]:
     counts = {tier: 0 for tier in ("overview", "important", "evidence", "hidden", "excluded")}
     for node in nodes:
         tier = str(node.get("signal_tier") or "evidence")
+        if tier not in counts:
+            tier = "evidence"
+        counts[tier] += 1
+    return counts
+
+
+def importance_counts(nodes: list[Mapping]) -> dict[str, int]:
+    """Return stable file-importance counts for API metadata."""
+    counts = {tier: 0 for tier in ("anchor", "interface", "important", "evidence", "hidden", "excluded")}
+    for node in nodes:
+        tier = str(node.get("importance_tier") or "evidence")
         if tier not in counts:
             tier = "evidence"
         counts[tier] += 1
@@ -706,8 +875,14 @@ def is_visible_signal_node(node: Mapping, *, include_low_signal: bool = False) -
     return tier in VISIBLE_SIGNAL_TIERS
 
 
+def is_visible_knowledge_node(node: Mapping) -> bool:
+    """Return whether a node belongs on the workspace-knowledge lens."""
+    tier = str(node.get("importance_tier") or "evidence")
+    return tier in VISIBLE_KNOWLEDGE_TIERS
+
+
 def apply_signal_tiers_to_graph(graph: Mapping, *, scan_root: Path | None = None) -> dict:
-    """Return a graph whose nodes include explicit signal tier metadata."""
+    """Return a graph whose nodes include explicit signal and importance metadata."""
     links = [link for link in graph.get("links", []) if isinstance(link, Mapping)]
     degree: Counter[str] = Counter()
     for link in links:
@@ -725,13 +900,15 @@ def apply_signal_tiers_to_graph(graph: Mapping, *, scan_root: Path | None = None
         node = dict(raw_node)
         node_id = str(node.get("id") or "")
         source_path = _resolve_node_source_path(node, scan_root) if scan_root else None
-        tier, reason = classify_signal_tier(
+        importance, reason = classify_file_importance(
             node,
             degree=degree[node_id],
             source_path=source_path,
             scan_root=scan_root,
         )
-        node["signal_tier"] = tier
+        node["importance_tier"] = importance
+        node["importance_reason"] = reason
+        node["signal_tier"] = _signal_tier_from_importance(importance, degree=degree[node_id])
         node["signal_reason"] = reason
         nodes.append(node)
 
@@ -802,13 +979,15 @@ def filter_workspace_scope_graph(graph: Mapping, profile: Mapping, scan_root: Pa
         kept = dict(raw_node)
         for key, value in metadata.items():
             kept.setdefault(key, value)
-        tier, reason = classify_signal_tier(
+        importance, reason = classify_file_importance(
             kept,
             degree=degree[node_id],
             source_path=source_path,
             scan_root=scan_root,
         )
-        kept["signal_tier"] = tier
+        kept["importance_tier"] = importance
+        kept["importance_reason"] = reason
+        kept["signal_tier"] = _signal_tier_from_importance(importance, degree=degree[node_id])
         kept["signal_reason"] = reason
         kept_nodes.append(kept)
         kept_ids.add(node_id)
@@ -832,5 +1011,6 @@ def filter_workspace_scope_graph(graph: Mapping, profile: Mapping, scan_root: Pa
         "kept_node_count": len(kept_nodes),
         "kept_link_count": len(kept_links),
         "signal_counts": signal_counts(kept_nodes),
+        "importance_counts": importance_counts(kept_nodes),
     }
     return filtered, stats

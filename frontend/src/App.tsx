@@ -8,6 +8,7 @@ import { Ask } from "./tabs/Ask";
 import { Dashboard } from "./tabs/Dashboard";
 import type { DashboardDestination } from "./tabs/Dashboard";
 import { Decisions } from "./tabs/Decisions";
+import { FileImportance } from "./tabs/FileImportance";
 import { Map } from "./tabs/Map";
 import { Recommendations } from "./tabs/Recommendations";
 import { Settings } from "./tabs/Settings";
@@ -15,12 +16,13 @@ import { WorkspaceScope } from "./tabs/WorkspaceScope";
 import { WorkQueue } from "./tabs/WorkQueue";
 import type { ActiveCockpitContext } from "./domain/cockpitContext";
 
-type Tab = "dashboard" | "ask" | "scope" | "map" | "decisions" | "recommendations" | "work-queue" | "settings";
+type Tab = "dashboard" | "ask" | "scope" | "importance" | "map" | "decisions" | "recommendations" | "work-queue" | "settings";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "dashboard", label: "Command" },
   { id: "ask", label: "Ask" },
   { id: "scope", label: "Scope" },
+  { id: "importance", label: "Importance Criteria Table" },
   { id: "map", label: "Map" },
   { id: "decisions", label: "Decisions" },
   { id: "recommendations", label: "Recommendations" },
@@ -157,6 +159,7 @@ export default function App() {
           {active === "dashboard" && <ErrorBoundary tabName="Command Center"><Dashboard onNavigate={navigateFromDashboard} onNavigateMapContext={navigateToMapContext} /></ErrorBoundary>}
           {active === "ask" && <ErrorBoundary tabName="Ask"><Ask focusTrigger={focusTrigger} askRef={askRef} onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
           {active === "scope" && <ErrorBoundary tabName="Workspace Scope"><WorkspaceScope onGenerated={() => setActive("map")} /></ErrorBoundary>}
+          {active === "importance" && <ErrorBoundary tabName="Importance Criteria Table"><FileImportance /></ErrorBoundary>}
           {active === "map" && <ErrorBoundary tabName="Map"><Map activeContext={activeContext} onNavigateScope={() => setActive("scope")} onActiveContextChange={setActiveContext} /></ErrorBoundary>}
           {active === "decisions" && <ErrorBoundary tabName="Decisions"><Decisions onActiveContextChange={setActiveContext} /></ErrorBoundary>}
           {active === "recommendations" && <ErrorBoundary tabName="Recommendations"><Recommendations onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}

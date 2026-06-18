@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-18T16:56:04-06:00
-Status: boxed for context clear - scope/relationship fixes complete; next active work is Slice 4 file-importance and workspace knowledge lens before Slice 5 decision overlay
+Last Updated: 2026-06-18T17:21:54-06:00
+Status: Slice 4 file-importance, importance criteria table, and workspace knowledge lens task complete; next active work is Slice 5 decision overlay
 Owner: Adam Goodwin
 
 ## Purpose
@@ -26,7 +26,7 @@ as first-class nodes.
 
 ## Current State
 
-Closeout note 2026-06-18T16:56:04-06:00: this plan is the active continuation
+Closeout note 2026-06-18T17:14:07-06:00: this plan is the active continuation
 plan after `START_HERE.md`. The scope-focus examples used for smoke testing
 are not product fixtures. Adam's latest owner direction is that workspace-scale
 maps need an explicit file-importance model so dependency/type/generated noise
@@ -59,6 +59,12 @@ Completed foundations:
 - Overlap copy now distinguishes "Semantic overlay is off" from "semantic
   edges exist, but no cross-repo overlap edges are visible in the current
   scope/source filters."
+- File nodes now carry explicit `importance_tier` and `importance_reason`
+  metadata, and the Map has a `Knowledge` lens for anchors, interfaces, and
+  important boundary nodes.
+- A static `Importance Criteria Table` tab now sits between `Scope` and `Map`
+  to show how file importance is ranked and why files are shown, held, hidden,
+  or excluded.
 
 Historical evidence lives in `docs/workspace-scope-and-signal-plan.md`.
 Completed stabilization evidence lives in `docs/stabilization-plan.md`.
@@ -93,9 +99,9 @@ Dependency type files, generated type shims, fixtures, lockfiles, ordinary leaf
 source, and other low-signal evidence need better separation from decision
 anchors and cross-project contracts.
 
-Decision overlay remains important, but it will be more useful after the map
-can reliably show workspace knowledge instead of every runnable implementation
-detail.
+The map now has a first-pass workspace knowledge lens. Decision overlay is the
+next blocker for making prior classifications, recommendations, and queued
+actions visible in the relationship map.
 
 ## Next Implementation Slices
 
@@ -269,7 +275,7 @@ Validation:
 
 ### Slice 4 - File Importance And Workspace Knowledge Lens
 
-Status: planned.
+Status: task complete 2026-06-18T17:14:07-06:00.
 
 Goal: make workspace-scale maps show decision-grade knowledge instead of noisy
 raw file evidence.
@@ -298,20 +304,55 @@ Expected behavior:
 
 Implementation notes:
 
-- Start from `backend/workspace_scope.py` signal tiering and
-  `frontend/src/tabs/Map.tsx` controls.
-- Treat known generated type shims and dependency type declaration paths as
-  low-signal by default.
-- Decide whether arbitrary `*.d.ts` files should be `hidden` by default or
-  `interface` when they define workspace-owned public contracts.
-- Preserve secrets, generated output, and dependency folders as excluded where
-  the source path can be resolved under an excluded path.
-- Add tests that cover dependency type declarations, workspace-owned contract
-  type definitions, generated shims, and broad-map visibility counts.
+Delivered behavior:
+
+- `backend/workspace_scope.py` now classifies every graph node with
+  `importance_tier` values of `anchor`, `interface`, `important`, `evidence`,
+  `hidden`, or `excluded`, plus an `importance_reason`.
+- Source-of-truth files, governance/architecture docs, configuration
+  boundaries, rationale nodes, public API/data boundaries, migrations,
+  workspace-owned contract declarations, runtime entry points, and
+  high-signal tests stay visible as knowledge.
+- Dependency type declarations such as `node_modules/@types/react/index.d.ts`,
+  generated type shims, ambient `*.d.ts`, lockfiles, fixtures, mocks,
+  snapshots, test data, and generated paths are hidden from default knowledge
+  surfaces.
+- `/graph/summary` and `/graph/full` expose `importance_counts`; `/graph/full`
+  accepts `knowledge_only=true` to return only workspace knowledge nodes while
+  preserving existing Evidence and Low Signal modes.
+- `Map` now has a `Knowledge` control that can open a stricter full graph even
+  when broad Evidence is capped. Selected node details show both Signal and
+  Importance badges and explanations.
+- A static top-level `Importance Criteria Table` tab was added between `Scope`
+  and `Map`, with rank, tier, default-map behavior, Knowledge lens behavior,
+  examples, and reason labels.
+- The Evidence button explicitly clears Knowledge mode, Low Signal clears
+  Knowledge mode, and turning off Knowledge on an oversized broad scope returns
+  safely to Overview instead of loading the capped Evidence payload.
+
+Validation:
+
+- `bash scripts/governance-preflight.sh`: passed with 0 warnings
+- `backend/.venv/bin/python -m pytest tests/test_workspace_scope.py tests/test_graphify_service.py -q`:
+  35 passed
+- `backend/.venv/bin/python -m pytest tests -q`: 75 passed
+- `backend/.venv/bin/python -m compileall backend`: passed, with noisy
+  virtualenv listing
+- `source ~/.nvm/nvm.sh && npm --prefix frontend run typecheck`: passed
+- `source ~/.nvm/nvm.sh && npm --prefix frontend run build`: passed
+- post-table follow-up `source ~/.nvm/nvm.sh && npm --prefix frontend run build`:
+  passed
+
+Follow-up watch point:
+
+- The classifier is intentionally heuristic. After Adam reviews a real broad
+  workspace map, tune edge cases where an implementation file should become an
+  interface or where a project-specific generated/dependency path is still
+  visible.
 
 ### Slice 5 - Decision Overlay
 
-Status: planned after file-importance/workspace-knowledge slice.
+Status: planned.
 
 Goal: make decisions visible on the relationship map.
 
@@ -342,8 +383,7 @@ For the next coding session:
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md` only as the top-level router.
 4. Read this file: `docs/relationship-map-plan.md`.
-5. Start with File Importance And Workspace Knowledge Lens unless Adam
-   redirects.
+5. Start with Slice 5 - Decision Overlay unless Adam redirects.
 
 Avoid loading the long historical plans unless investigating a regression:
 

@@ -44,6 +44,8 @@ try:
         WorkspaceScopeError,
         apply_signal_tiers_to_graph,
         filter_workspace_scope_graph,
+        importance_counts,
+        is_visible_knowledge_node,
         is_visible_signal_node,
         load_workspace_scope_profile,
         signal_counts,
@@ -74,6 +76,8 @@ except ModuleNotFoundError:
         WorkspaceScopeError,
         apply_signal_tiers_to_graph,
         filter_workspace_scope_graph,
+        importance_counts,
+        is_visible_knowledge_node,
         is_visible_signal_node,
         load_workspace_scope_profile,
         signal_counts,
@@ -873,6 +877,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         if _is_node_selected(n, sel_sources, sel_clusters)
     ]
     counts_by_signal = signal_counts(selected_nodes)
+    counts_by_importance = importance_counts(selected_nodes)
     nodes_raw: list[dict] = [
         n for n in selected_nodes
         if is_visible_signal_node(n)
@@ -1058,6 +1063,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         "project": project,
         "total_nodes": sum(s["total"] for s in cluster_stats.values()),
         "signal_counts": counts_by_signal,
+        "importance_counts": counts_by_importance,
         "hidden_node_count": counts_by_signal.get("evidence", 0) + counts_by_signal.get("hidden", 0),
         "excluded_node_count": excluded_node_count,
         "workspace_scope": _workspace_scope_summary_metadata(signal_graph),
@@ -1071,6 +1077,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
 @app.get("/graph/full")
 def graph_full(
     include_low_signal: bool = False,
+    knowledge_only: bool = False,
     max_nodes: int = 5000,
     force: bool = False,
 ) -> dict:
@@ -1222,12 +1229,21 @@ def graph_full(
 
     all_nodes = [n for n in g.get("nodes", []) if isinstance(n, dict)]
     counts_by_signal = signal_counts(all_nodes)
+    counts_by_importance = importance_counts(all_nodes)
     excluded_node_count = _workspace_scope_removed_node_count(g)
-    visible_node_ids = {
+    effective_knowledge_only = bool(knowledge_only) and not include_low_signal
+    baseline_visible_node_ids = {
         n["id"]
         for n in all_nodes
         if is_visible_signal_node(n, include_low_signal=include_low_signal)
     }
+    visible_node_ids = {
+        n["id"]
+        for n in all_nodes
+        if is_visible_signal_node(n, include_low_signal=include_low_signal)
+        and (not effective_knowledge_only or is_visible_knowledge_node(n))
+    }
+    knowledge_hidden_node_count = len(baseline_visible_node_ids - visible_node_ids)
     effective_max_nodes = max(100, min(50000, int(max_nodes)))
     if len(visible_node_ids) > effective_max_nodes and not force:
         raise HTTPException(
@@ -1242,6 +1258,7 @@ def graph_full(
                 "max_nodes": effective_max_nodes,
                 "total_node_count": len(all_nodes),
                 "hidden_node_count": counts_by_signal.get("evidence", 0) + counts_by_signal.get("hidden", 0),
+                "knowledge_hidden_node_count": knowledge_hidden_node_count,
             },
         )
 
@@ -1272,6 +1289,8 @@ def graph_full(
             "source_excerpt": excerpt,
             "signal_tier": n.get("signal_tier", "evidence"),
             "signal_reason": n.get("signal_reason", "supporting evidence"),
+            "importance_tier": n.get("importance_tier", "evidence"),
+            "importance_reason": n.get("importance_reason", n.get("signal_reason", "supporting evidence")),
         })
 
     seen: set[str] = set()
@@ -1301,7 +1320,10 @@ def graph_full(
         "hidden_node_count": 0 if include_low_signal else low_signal_hidden,
         "excluded_node_count": excluded_node_count,
         "signal_counts": counts_by_signal,
+        "importance_counts": counts_by_importance,
         "include_low_signal": include_low_signal,
+        "knowledge_only": effective_knowledge_only,
+        "knowledge_hidden_node_count": knowledge_hidden_node_count,
         "nodes": nodes,
         "edges": edges,
     }

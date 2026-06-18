@@ -390,6 +390,51 @@ def test_graph_full_hides_low_signal_nodes_by_default(monkeypatch, tmp_path: Pat
     assert expanded_body["include_low_signal"] is True
 
 
+def test_graph_full_workspace_knowledge_lens_prioritizes_decision_files(monkeypatch, tmp_path: Path) -> None:
+    graph = tmp_path / "knowledge-graph.json"
+    graph.write_text(json.dumps({
+        "nodes": [
+            {"id": "readme", "label": "README", "source_file": "README.md", "file_type": "document"},
+            {"id": "contract", "label": "PublicApi", "source_file": "src/contracts/public-api.d.ts"},
+            {"id": "route", "label": "users route", "source_file": "src/routes/users.ts"},
+            {"id": "worker", "label": "worker", "source_file": "src/components/worker.ts"},
+            {"id": "react-types", "label": "React types", "source_file": "node_modules/@types/react/index.d.ts"},
+            {"id": "generated", "label": "next-env", "source_file": "next-env.d.ts"},
+        ],
+        "links": [
+            {"source": "readme", "target": "contract", "relation": "documents"},
+            {"source": "route", "target": "worker", "relation": "calls"},
+        ],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+    client = TestClient(main.app)
+
+    response = client.get("/graph/full?knowledge_only=true")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["knowledge_only"] is True
+    assert [node["id"] for node in body["nodes"]] == ["readme", "contract", "route"]
+    by_id = {node["id"]: node for node in body["nodes"]}
+    assert by_id["readme"]["importance_tier"] == "anchor"
+    assert by_id["contract"]["importance_tier"] == "interface"
+    assert by_id["contract"]["importance_reason"] == "workspace-owned type contract"
+    assert by_id["route"]["importance_tier"] == "interface"
+    assert body["importance_counts"]["hidden"] == 2
+    assert body["importance_counts"]["evidence"] == 1
+    assert body["signal_counts"]["hidden"] == 2
+    assert body["signal_counts"]["evidence"] == 1
+
+
 def test_graph_full_rejects_oversized_default_payload(monkeypatch, tmp_path: Path) -> None:
     graph = tmp_path / "graph.json"
     graph.write_text(json.dumps({

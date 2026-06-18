@@ -73,6 +73,7 @@ interface GraphSummary {
   hidden_node_count?: number;
   excluded_node_count?: number;
   signal_counts?: Record<string, number>;
+  importance_counts?: Record<string, number>;
   workspace_scope?: WorkspaceScopeSummary | null;
   nodes: SummaryNode[];
   edges: SummaryEdge[];
@@ -114,6 +115,8 @@ interface FullNode {
   purpose?: string;
   signal_tier?: "overview" | "important" | "evidence" | "hidden" | "excluded";
   signal_reason?: string;
+  importance_tier?: "anchor" | "interface" | "important" | "evidence" | "hidden" | "excluded";
+  importance_reason?: string;
   source_excerpt?: {
     start_line: number | null;
     lines: string[];
@@ -136,7 +139,10 @@ interface FullGraph {
   hidden_node_count?: number;
   excluded_node_count?: number;
   signal_counts?: Record<string, number>;
+  importance_counts?: Record<string, number>;
   include_low_signal?: boolean;
+  knowledge_only?: boolean;
+  knowledge_hidden_node_count?: number;
   nodes: FullNode[];
   edges: FullEdge[];
 }
@@ -249,6 +255,13 @@ function excludedNodeCount(graph: FullGraph | null, summary: GraphSummary | null
 
 function signalTierLabel(tier?: string): string {
   if (!tier) return "Evidence";
+  return tier.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function importanceTierLabel(tier?: string): string {
+  if (!tier) return "Evidence";
+  if (tier === "anchor") return "Anchor";
+  if (tier === "interface") return "Interface";
   return tier.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
@@ -959,6 +972,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [showSourcePanel, setShowSourcePanel] = useState(false);
   const [selectedClusters, setSelectedClusters] = useState<Set<string> | null>(null);
   const [showLowSignal, setShowLowSignal] = useState(false);
+  const [knowledgeOnly, setKnowledgeOnly] = useState(false);
   // edge layer toggles
   const [showStructural, setShowStructural] = useState(true);
   // semantic similarity overlay
@@ -1454,10 +1468,18 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   }, [fetchSummary, generatingScopeMap, loadWorkspaceScopeProfile]);
 
   const fetchFullGraph = useCallback(async () => {
-    if (fullGraph && Boolean(fullGraph.include_low_signal) === showLowSignal) return; // already loaded
+    const effectiveKnowledgeOnly = knowledgeOnly && !showLowSignal;
+    if (
+      fullGraph
+      && Boolean(fullGraph.include_low_signal) === showLowSignal
+      && Boolean(fullGraph.knowledge_only) === effectiveKnowledgeOnly
+    ) return; // already loaded
     setFullLoading(true);
     try {
-      const qs = showLowSignal ? "?include_low_signal=true" : "";
+      const params = new URLSearchParams();
+      if (showLowSignal) params.set("include_low_signal", "true");
+      if (effectiveKnowledgeOnly) params.set("knowledge_only", "true");
+      const qs = params.toString() ? `?${params.toString()}` : "";
       const res = await apiFetch(`/graph/full${qs}`);
       if (!res.ok) throw new Error(await apiErrorMessage(res));
       const data: FullGraph = await res.json();
@@ -1467,7 +1489,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     } finally {
       setFullLoading(false);
     }
-  }, [fullGraph, showLowSignal]);
+  }, [fullGraph, knowledgeOnly, showLowSignal]);
 
   // When switching to full mode, load the full graph once
   useEffect(() => {
@@ -1672,7 +1694,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
     if (activeContext.kind === "overlap-pair") {
       if (viewMode !== "full") {
+        setKnowledgeOnly(false);
         setViewMode("full");
+        return;
+      }
+
+      if (knowledgeOnly) {
+        setKnowledgeOnly(false);
+        setFullGraph(null);
         return;
       }
 
@@ -1712,7 +1741,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     }
 
     if (viewMode !== "full") {
+      setKnowledgeOnly(false);
       setViewMode("full");
+      return;
+    }
+
+    if (knowledgeOnly) {
+      setKnowledgeOnly(false);
+      setFullGraph(null);
       return;
     }
 
@@ -1774,7 +1810,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     setShowOverlap(false);
     setHighlightedPair(null);
     appliedContextKeyRef.current = key;
-  }, [activeContext, fetchFullGraph, filter, fullGraph, selectedClusters, viewMode]);
+  }, [activeContext, fetchFullGraph, filter, fullGraph, knowledgeOnly, selectedClusters, viewMode]);
 
   // Apply type filter via class toggling (no re-layout) — summary mode only.
   // Full mode re-runs its init effect to rebuild elements via buildFullElements.
@@ -1998,6 +2034,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         return;
       }
       setViewMode("full");
+      setKnowledgeOnly(false);
       setShowSemantic(true);
       setShowOverlap(true);
       return;
@@ -2136,7 +2173,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const activeMapMode = MAP_MODES.find((mode) => mode.id === mapMode) ?? MAP_MODES[0];
   const hiddenLowSignalCount = lowSignalCount(fullGraph, summary);
   const excludedFromScopeCount = excludedNodeCount(fullGraph, summary);
-  const broadEvidenceDisabled = !fullGraph && (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
+  const importanceCounts = fullGraph?.importance_counts ?? summary?.importance_counts ?? {};
+  const knowledgeAnchorCount = (importanceCounts.anchor ?? 0) + (importanceCounts.interface ?? 0) + (importanceCounts.important ?? 0);
+  const knowledgeHiddenCount = fullGraph?.knowledge_hidden_node_count ?? 0;
+  const summaryExceedsEvidenceCap = (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
+  const broadEvidenceDisabled = !fullGraph && summaryExceedsEvidenceCap;
 
   if (scopeGate === "checking") {
     return (
@@ -2262,7 +2303,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             setViewMode(m);
             setSelected(null);
             setSelectedFull(null);
-            if (m === "full") setPathMode(false);
+            if (m === "full") {
+              setKnowledgeOnly(false);
+              setPathMode(false);
+            }
           }}
           disabled={m === "full" && broadEvidenceDisabled}
           title={
@@ -2291,6 +2335,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }
         setSelectedFull(null);
         setFullGraph(null);
+        setKnowledgeOnly(false);
         setShowLowSignal((value) => !value);
         if (viewMode !== "full") {
           setViewMode("full");
@@ -2306,6 +2351,40 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       type="button"
     >
       Low Signal{hiddenLowSignalCount ? ` (${hiddenLowSignalCount.toLocaleString()})` : ""}
+    </button>
+  );
+
+  const knowledgeControl = (
+    <button
+      className={`map-path-btn${knowledgeOnly && viewMode === "full" ? " map-knowledge-active" : ""}`}
+      onClick={() => {
+        const activatingKnowledge = !(knowledgeOnly && viewMode === "full");
+        setSelectedFull(null);
+        setFullGraph(null);
+        setShowLowSignal(false);
+        setKnowledgeOnly(activatingKnowledge);
+        if (activatingKnowledge) {
+          setViewMode("full");
+          setPathMode(false);
+          setPathNoRoute(false);
+        } else if (summaryExceedsEvidenceCap) {
+          setViewMode("summary");
+          setFocusNotice({
+            tone: "warn",
+            text: `Evidence view is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes. Returned to Overview.`,
+          });
+        } else {
+          setFocusNotice({ tone: "info", text: "Returning to Evidence view." });
+        }
+      }}
+      title={
+        knowledgeOnly && viewMode === "full"
+          ? `Showing workspace knowledge anchors and interfaces${knowledgeHiddenCount ? `; ${knowledgeHiddenCount.toLocaleString()} lower-importance visible nodes hidden` : ""}`
+          : `Show workspace knowledge lens with ${knowledgeAnchorCount.toLocaleString()} anchors, interfaces, and important boundary nodes`
+      }
+      type="button"
+    >
+      Knowledge{knowledgeAnchorCount ? ` (${knowledgeAnchorCount.toLocaleString()})` : ""}
     </button>
   );
 
@@ -2454,6 +2533,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 {summary.nodes.length}&thinsp;groups&thinsp;·&thinsp;
                 {summary.total_nodes.toLocaleString()}&thinsp;visible
                 {hiddenLowSignalCount ? <>&thinsp;·&thinsp;{hiddenLowSignalCount.toLocaleString()}&thinsp;hidden</> : null}
+                {fullGraph?.knowledge_only && knowledgeHiddenCount ? <>&thinsp;·&thinsp;{knowledgeHiddenCount.toLocaleString()}&thinsp;held by lens</> : null}
                 {excludedFromScopeCount ? <>&thinsp;·&thinsp;{excludedFromScopeCount.toLocaleString()}&thinsp;excluded</> : null}
               </span>
             )}
@@ -2487,6 +2567,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             {viewModeControls}
             {typeFilterControls}
             {sourceSelector}
+            {knowledgeControl}
             {signalControls}
             {edgeLayerControls}
             {pathControl}
@@ -2519,7 +2600,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           {(loading || (fullLoading && viewMode === "full")) && (
             <div className="map-overlay">
               <WorkingStatus
-                label={fullLoading && viewMode === "full" ? "Loading full graph" : "Building graph summary"}
+                label={fullLoading && viewMode === "full" ? (knowledgeOnly ? "Loading workspace knowledge" : "Loading full graph") : "Building graph summary"}
                 detail="First load may take a moment"
               />
             </div>
@@ -2913,6 +2994,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               >
                 {signalTierLabel(selectedFull.signal_tier)}
               </span>
+              <span
+                className={`map-type-badge map-importance-badge map-importance-${selectedFull.importance_tier ?? "evidence"}`}
+                title={selectedFull.importance_reason || "File importance"}
+              >
+                {importanceTierLabel(selectedFull.importance_tier)}
+              </span>
             </div>
 
             <div className="map-inspector-block">
@@ -2958,6 +3045,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               <div className="map-provenance-row">
                 <span>Signal</span>
                 <strong>{presentValue(selectedFull.signal_reason)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Importance</span>
+                <strong>{presentValue(selectedFull.importance_reason)}</strong>
               </div>
               <div className="map-provenance-row map-provenance-wide">
                 <span>Source root</span>

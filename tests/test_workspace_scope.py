@@ -229,12 +229,20 @@ def test_signal_tiering_demotes_low_signal_and_keeps_source_of_truth(tmp_path: P
     (repo / "README.md").write_text("# Demo")
     (repo / "src").mkdir()
     (repo / "src" / "worker.py").write_text("print('ok')")
+    (repo / "src" / "contracts").mkdir()
+    (repo / "src" / "contracts" / "public-api.d.ts").write_text("export interface PublicApi {}")
+    (repo / "node_modules" / "@types" / "react").mkdir(parents=True)
+    (repo / "node_modules" / "@types" / "react" / "index.d.ts").write_text("declare namespace React {}")
+    (repo / "src" / "global.d.ts").write_text("declare global {}")
     (repo / "next-env.d.ts").write_text("/// generated")
     (repo / "package-lock.json").write_text("{}")
     graph = {
         "nodes": [
             {"id": "readme", "label": "README", "source_file": "README.md", "file_type": "document"},
             {"id": "worker", "label": "worker", "source_file": "src/worker.py"},
+            {"id": "contract", "label": "PublicApi", "source_file": "src/contracts/public-api.d.ts"},
+            {"id": "react-types", "label": "React types", "source_file": "node_modules/@types/react/index.d.ts"},
+            {"id": "ambient", "label": "global", "source_file": "src/global.d.ts"},
             {"id": "next", "label": "next-env", "source_file": "next-env.d.ts"},
             {"id": "lock", "label": "lock", "source_file": "package-lock.json"},
         ],
@@ -246,11 +254,22 @@ def test_signal_tiering_demotes_low_signal_and_keeps_source_of_truth(tmp_path: P
 
     tiered = apply_signal_tiers_to_graph(graph, scan_root=repo)
     tiers = {node["id"]: node["signal_tier"] for node in tiered["nodes"]}
+    importance = {node["id"]: node["importance_tier"] for node in tiered["nodes"]}
+    reasons = {node["id"]: node["importance_reason"] for node in tiered["nodes"]}
 
     assert tiers["readme"] == "important"
     assert tiers["worker"] == "evidence"
+    assert tiers["contract"] == "important"
+    assert tiers["react-types"] == "hidden"
+    assert tiers["ambient"] == "hidden"
     assert tiers["next"] == "hidden"
     assert tiers["lock"] == "hidden"
+    assert importance["readme"] == "anchor"
+    assert importance["contract"] == "interface"
+    assert importance["react-types"] == "hidden"
+    assert reasons["contract"] == "workspace-owned type contract"
+    assert reasons["react-types"] == "dependency type declaration"
+    assert reasons["ambient"] == "ambient type declaration"
 
 
 def test_scope_filter_adds_signal_metadata_and_counts(tmp_path: Path) -> None:
@@ -272,5 +291,8 @@ def test_scope_filter_adds_signal_metadata_and_counts(tmp_path: Path) -> None:
 
     assert [node["signal_tier"] for node in filtered["nodes"]] == ["important", "hidden"]
     assert filtered["nodes"][0]["signal_reason"] == "source-of-truth file"
+    assert filtered["nodes"][0]["importance_tier"] == "anchor"
     assert stats["signal_counts"]["important"] == 1
     assert stats["signal_counts"]["hidden"] == 1
+    assert stats["importance_counts"]["anchor"] == 1
+    assert stats["importance_counts"]["hidden"] == 1
