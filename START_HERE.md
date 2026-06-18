@@ -1,24 +1,31 @@
 # Start Here
 
-Last Updated: 2026-06-17T17:39:29-06:00
-Status: relationship-map Slices 1-2 complete; next active work is Slice 3 gap triage
+Last Updated: 2026-06-18T16:56:04-06:00
+Status: boxed for context clear; relationship-map Slices 1-3 plus scope/working-state follow-ups complete; next active work is file-importance and workspace knowledge lens before decision overlay
 Owner: Adam Goodwin
 
 ## Fast Startup
 
-Use this file as the lightweight router. Do not load the historical build log by
-default.
+This file is the official repo-local place to begin after a restart, clear,
+compaction, or day handoff. Use it as the lightweight router. Do not load the
+historical build log by default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
 3. Read `docs/relationship-map-plan.md`.
-4. Start with Slice 3 unless Adam redirects.
+4. Start with the file-importance and workspace knowledge lens slice unless Adam redirects.
 5. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
 6. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 7. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
+
+Context-clear closeout 2026-06-18T16:56:04-06:00: today's relationship-map,
+scope-focus, working-state polish, semantic-overlap copy fix, and active plan
+updates are captured here for restart. Do not treat any validation repo path
+used during the smoke pass as a hard-coded product target; the fixes are
+path-generic.
 
 The first 30 build chunks are complete. The cockpit is a working local-first
 decision surface with seven tabs (`Command`, `Ask`, `Map`, `Decisions`,
@@ -78,14 +85,36 @@ controls are now visible together, while the top mode presets carry clearer
 sublabels and hover/focus explanations. The UI polish commit is
 `c27d433 Expose map connection controls`.
 
+Scope-focus follow-up is task complete: if the saved scope and active generated
+graph do not match, the `Map` empty state now offers a direct `Generate Map`
+recovery action and refreshes after the scoped rebuild completes. `Scope` also
+distinguishes saved profiles from unsaved draft selections, so changing folders
+shows a `Draft` state with a generic derived profile name until saved.
+Working-state polish is task complete: page-level loading, rebuild, generation,
+and analysis states now use a shared color-matched spinning nuclear/radiation
+indicator across Map, Scope, Ask, Dashboard, Decisions, Recommendations, Work
+Queue, and Settings.
+
 The active plan is now `docs/relationship-map-plan.md`: make the Map tab a
 decision-grade relationship map that shows physical structure, meaningful
 connections, overlaps, gaps, and decisions without requiring a full broad graph
-payload in the browser. Relationship-map Slices 1-2 are task complete: the
+payload in the browser. Relationship-map Slices 1-3 are task complete: the
 broad Overview now exposes weighted group-to-group physical relationships,
-selected groups show connected groups plus gap metadata, and Overlap can open a
+selected groups show connected groups plus gap metadata, Overlap can open a
 summary-level server-side overlap panel without loading capped Evidence/full
-graph payloads. Next active work is Slice 3 gap triage.
+graph payloads, and gap triage now distinguishes root docs, filter-hidden
+links, missing extraction, and true isolation with Map inspector actions.
+Owner-reported scope focus fix is also task complete: generated graphs now
+carry included/excluded scope metadata, Map blocks stale generated graphs, and
+single-repo scopes under the Evidence cap open directly in expanded Evidence
+mode. Scope and Map behavior is path-generic; validation examples should not be
+treated as fixed repo targets. Owner review then identified a more immediate
+workspace-scale map quality issue: file inclusion needs a clearer importance
+model so broad maps show decision-grade knowledge and cross-project contracts
+instead of dependency type files, generated shims, fixtures, lockfiles, and
+ordinary leaf evidence.
+The active plan now puts `Slice 4 - File Importance And Workspace Knowledge
+Lens` before decision overlay. Decision overlay continues afterward as Slice 5.
 
 The completed scope/signal history is retained in
 `docs/workspace-scope-and-signal-plan.md`: select a parent folder, represent
@@ -235,7 +264,8 @@ Relationship-map plan split is task complete as of
 `docs/workspace-scope-and-signal-plan.md` is marked completed history and should
 only be opened for scope/signal evidence or regressions.
 
-Continue with `docs/relationship-map-plan.md`, Slice 3 unless Adam redirects.
+Continue with `docs/relationship-map-plan.md`, Slice 4 file-importance and
+workspace knowledge lens unless Adam redirects.
 
 Open owner-review flags before future implementation:
 - Project is classified as `AI agent with tools` while selected governance is
@@ -268,10 +298,12 @@ Open owner-review flags before future implementation:
 ## To Resume
 
 1. `git status --short` — preserve unrelated work.
-2. Read `docs/relationship-map-plan.md`.
-3. Start with Slice 3 unless Adam redirects.
-4. Load only the files named in that chunk.
-5. Use `docs/context-map.md` if routing is still unclear.
+2. Confirm this file still names the active plan.
+3. Read `docs/relationship-map-plan.md`.
+4. Start with Slice 4 file-importance and workspace knowledge lens unless Adam
+   redirects.
+5. Load only the files named in that chunk.
+6. Use `docs/context-map.md` if routing is still unclear.
 
 ## Work Patterns
 

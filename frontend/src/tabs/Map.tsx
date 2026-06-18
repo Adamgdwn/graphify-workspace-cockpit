@@ -6,9 +6,11 @@ import type { Core } from "cytoscape";
 import fcose from "cytoscape-fcose";
 // @ts-ignore
 import layoutUtilities from "cytoscape-layout-utilities";
-import { DECISION_CLASSIFICATIONS } from "../domain/decision";
+import { DECISION_CLASSIFICATIONS, type DecisionClassification } from "../domain/decision";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
+import type { WorkspaceScopeProfile } from "../components/WorkspaceScopePicker";
+import { WorkingStatus } from "../components/WorkingStatus";
 
 // ── Extension registration (once per page lifetime) ───────────────────────
 
@@ -37,8 +39,18 @@ interface SummaryNode {
   connection_weight?: number;
   is_gap?: boolean;
   gap_reason?: string;
+  gap_type?: GapType | "";
+  gap_detail?: string;
+  gap_evidence?: string[];
+  gap_actions?: string[];
   connections?: SummaryConnection[];
 }
+
+type GapType =
+  | "truly_isolated"
+  | "hidden_by_low_signal_filters"
+  | "missing_semantic_extraction"
+  | "root_level_docs_only";
 
 interface SummaryEdge {
   source: string;
@@ -61,8 +73,26 @@ interface GraphSummary {
   hidden_node_count?: number;
   excluded_node_count?: number;
   signal_counts?: Record<string, number>;
+  workspace_scope?: WorkspaceScopeSummary | null;
   nodes: SummaryNode[];
   edges: SummaryEdge[];
+}
+
+interface WorkspaceScopeSummary {
+  profile_name?: string;
+  root?: string;
+  included_paths?: string[];
+  excluded_paths?: string[];
+  scanned_root_count?: number;
+  removed_node_count?: number;
+  generated_at?: string | null;
+}
+
+interface RebuildStatus {
+  status: "idle" | "running" | "complete" | "error";
+  last_run: string | null;
+  error?: string | null;
+  code?: string | null;
 }
 
 // Full graph (all raw nodes/edges)
@@ -116,6 +146,41 @@ type ViewMode = "summary" | "full";
 const FULL_GRAPH_NODE_LIMIT = 5000;
 type MapMode = "explore" | "trace" | "overlap" | "review";
 type ScopeGateState = "checking" | "ready" | "setup";
+
+function normalizedPathList(values: string[] | undefined): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))].sort();
+}
+
+function samePathList(left: string[] | undefined, right: string[] | undefined): boolean {
+  const a = normalizedPathList(left);
+  const b = normalizedPathList(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function generatedScopeMatchesProfile(
+  generated: WorkspaceScopeSummary | null | undefined,
+  profile: WorkspaceScopeProfile | null | undefined,
+): boolean {
+  if (!profile) return true;
+  if (!generated) return false;
+  return (
+    String(generated.root || "") === profile.root
+    && samePathList(generated.included_paths, profile.included_paths)
+    && samePathList(generated.excluded_paths, profile.excluded_paths)
+  );
+}
+
+function shouldOpenExpandedEvidence(summary: GraphSummary, project?: string): boolean {
+  return (
+    !project
+    && (summary.workspace_scope?.included_paths?.length ?? 0) === 1
+    && summary.total_nodes <= FULL_GRAPH_NODE_LIMIT
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
 
 const MAP_MODES: Array<{ id: MapMode; label: string; subLabel: string; hint: string; tooltip: string }> = [
   {
@@ -288,6 +353,24 @@ function dossierList(items?: string[]): string[] {
 function relationList(relations?: string[]): string {
   const cleaned = (relations ?? []).map((relation) => relation.trim()).filter(Boolean);
   return cleaned.length ? cleaned.slice(0, 3).join(", ") : "physical links";
+}
+
+function gapTypeLabel(type?: string): string {
+  if (type === "hidden_by_low_signal_filters") return "Hidden by Filters";
+  if (type === "missing_semantic_extraction") return "Needs Extraction";
+  if (type === "root_level_docs_only") return "Root Docs";
+  if (type === "truly_isolated") return "Isolated";
+  return "Gap";
+}
+
+function gapAskPrompt(node: SummaryNode): string {
+  const evidence = (node.gap_evidence ?? []).map((item) => `- ${item}`).join("\n");
+  return [
+    `Review the workspace map gap "${node.label}" (${node.id}).`,
+    node.gap_detail || node.gap_reason || "No visible group-to-group physical links connect this area.",
+    evidence ? `Evidence:\n${evidence}` : "",
+    "Should this area be drilled into, monitored, archived, or re-indexed for better relationships?",
+  ].filter(Boolean).join("\n\n");
 }
 
 function overlapSummaryGroups(response: OverlapSummaryResponse | null): OverlapGroup[] {
@@ -838,6 +921,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
   const appliedContextKeyRef = useRef<string | null>(null);
+  const scopeProfileRef = useRef<WorkspaceScopeProfile | null>(null);
 
   // Refs for cy event handlers — avoids stale closures over React state
   const pathModeRef = useRef(false);
@@ -860,6 +944,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [pathNoRoute, setPathNoRoute] = useState(false);
   // target_id → classification for active decisions
   const [decisions, setDecisions] = useState<Record<string, string>>({});
+  const [decisionRecords, setDecisionRecords] = useState<Record<string, { id: string; classification: string }>>({});
+  const [savingGapDecision, setSavingGapDecision] = useState<DecisionClassification | null>(null);
   // top-5 nodes by total edge weight
   const [godNodeIds, setGodNodeIds] = useState<Set<string>>(new Set());
   // edge count per god node for tooltip display
@@ -896,6 +982,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [focusNotice, setFocusNotice] = useState<{ tone: "info" | "warn"; text: string } | null>(null);
   const [scopeGate, setScopeGate] = useState<ScopeGateState>("checking");
   const [scopeGateReason, setScopeGateReason] = useState("Choose folders before generating a workspace map.");
+  const [canGenerateScopeMap, setCanGenerateScopeMap] = useState(false);
+  const [generatingScopeMap, setGeneratingScopeMap] = useState(false);
 
   const showSemanticRef = useRef(false);
   const semanticEdgesRef = useRef<Array<{ source: string; target: string; similarity: number }>>([]);
@@ -981,6 +1069,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   );
   const usingSummaryOverlap = viewMode !== "full";
   const overlapGroups = usingSummaryOverlap ? summaryOverlapGroupsData : fullOverlapGroups;
+  const storedSemanticEdgeCount = semanticMeta?.edge_count ?? semanticEdges.length;
   const overlapConnectionCount = usingSummaryOverlap
     ? summaryOverlap?.total_cross_edges ?? 0
     : crossSemanticEdges.length;
@@ -1099,12 +1188,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   useEffect(() => {
     apiFetch(`/decisions`)
       .then((r) => (r.ok ? r.json() : []))
-      .then((list: Array<{ target_id: string; classification: string; status: string }>) => {
+      .then((list: Array<{ id: string; target_id: string; classification: string; status: string }>) => {
         const map: Record<string, string> = {};
+        const records: Record<string, { id: string; classification: string }> = {};
         list.filter((d) => d.status === "active").forEach((d) => {
           map[d.target_id] = d.classification;
+          records[d.target_id] = { id: d.id, classification: d.classification };
         });
         setDecisions(map);
+        setDecisionRecords(records);
       })
       .catch(() => {});
   }, []);
@@ -1222,10 +1314,24 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     setGodNodeEdgeCounts(Object.fromEntries(sorted.slice(0, 5)));
   }, [summary]);
 
-  const fetchSummary = useCallback(async (project?: string, label?: string) => {
+  const loadWorkspaceScopeProfile = useCallback(async (): Promise<WorkspaceScopeProfile | null> => {
+    const response = await apiFetch(`/workspace-scope`);
+    if (!response.ok) throw new Error(await apiErrorMessage(response));
+    const data = await response.json() as { profile: WorkspaceScopeProfile | null };
+    scopeProfileRef.current = data.profile;
+    return data.profile;
+  }, []);
+
+  const fetchSummary = useCallback(async (
+    project?: string,
+    label?: string,
+    expectedScope?: WorkspaceScopeProfile | null,
+  ) => {
     setLoading(true);
     setError(null);
     setSelected(null);
+    setSelectedFull(null);
+    setFullGraph(null);
     setFilter("all");
     setPathMode(false);
     setPathSource(null);
@@ -1238,8 +1344,29 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         throw new Error(await apiErrorMessage(res));
       }
       const data: GraphSummary = await res.json();
+      const scopeToCheck = expectedScope ?? scopeProfileRef.current;
+      if (!generatedScopeMatchesProfile(data.workspace_scope, scopeToCheck)) {
+        setSummary(null);
+        setFullGraph(null);
+        setScopeGate("setup");
+        setCanGenerateScopeMap(Boolean(scopeToCheck));
+        setScopeGateReason(
+          "The selected workspace scope has not been generated yet. Generate the map to show only the selected folders and exclusions.",
+        );
+        return;
+      }
+      setCanGenerateScopeMap(false);
       setSummary(data);
       setBreadcrumb(project ? [label || project] : []);
+      if (shouldOpenExpandedEvidence(data, project)) {
+        setViewMode("full");
+        setFocusNotice({
+          tone: "info",
+          text: `Opening the expanded evidence map for ${data.total_nodes.toLocaleString()} visible nodes in this selected repo.`,
+        });
+      } else {
+        setViewMode("summary");
+      }
       if (!project && data.total_nodes > FULL_GRAPH_NODE_LIMIT) {
         setFocusNotice({
           tone: "warn",
@@ -1259,26 +1386,72 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     async function checkWorkspaceScope() {
       setScopeGate("checking");
       try {
-        const response = await apiFetch(`/workspace-scope`);
-        if (!response.ok) throw new Error(await apiErrorMessage(response));
-        const data = await response.json() as { profile: unknown | null };
+        const profile = await loadWorkspaceScopeProfile();
         if (cancelled) return;
-        if (!data.profile) {
+        if (!profile) {
+          setCanGenerateScopeMap(false);
           setScopeGate("setup");
           setScopeGateReason("No workspace scope is selected yet. Select folders in Workspace Scope, then generate the map.");
           return;
         }
         setScopeGate("ready");
-        void fetchSummary();
+        void fetchSummary(undefined, undefined, profile);
       } catch (e) {
         if (cancelled) return;
+        setCanGenerateScopeMap(false);
         setScopeGate("setup");
         setScopeGateReason(e instanceof Error ? e.message : "Workspace scope is unavailable. Inspect a folder before generating the map.");
       }
     }
     void checkWorkspaceScope();
     return () => { cancelled = true; };
-  }, [fetchSummary]);
+  }, [fetchSummary, loadWorkspaceScopeProfile]);
+
+  const handleGenerateScopeMap = useCallback(async () => {
+    if (generatingScopeMap) return;
+    setGeneratingScopeMap(true);
+    setCanGenerateScopeMap(false);
+    setError(null);
+    setScopeGate("setup");
+    setScopeGateReason("Generating the selected workspace map...");
+    try {
+      const profile = scopeProfileRef.current ?? await loadWorkspaceScopeProfile();
+      if (!profile) {
+        setScopeGateReason("No workspace scope is selected yet. Select folders in Workspace Scope, then generate the map.");
+        return;
+      }
+
+      const response = await apiFetch(`/graph/rebuild`, { method: "POST" });
+      if (!response.ok) {
+        const message = await apiErrorMessage(response);
+        if (!message.toLowerCase().includes("already in progress")) {
+          throw new Error(message);
+        }
+        setScopeGateReason("Rebuild already in progress. Watching for completion...");
+      }
+
+      while (true) {
+        await sleep(2000);
+        const statusResponse = await apiFetch(`/graph/rebuild/status`);
+        if (!statusResponse.ok) throw new Error(await apiErrorMessage(statusResponse));
+        const status = await statusResponse.json() as RebuildStatus;
+        if (status.status === "complete") {
+          const refreshedProfile = await loadWorkspaceScopeProfile();
+          await fetchSummary(undefined, undefined, refreshedProfile ?? profile);
+          return;
+        }
+        if (status.status === "error") {
+          throw new Error(status.error || "Graph generation failed");
+        }
+      }
+    } catch (e) {
+      setCanGenerateScopeMap(Boolean(scopeProfileRef.current));
+      setScopeGate("setup");
+      setScopeGateReason(e instanceof Error ? e.message : "Graph generation failed");
+    } finally {
+      setGeneratingScopeMap(false);
+    }
+  }, [fetchSummary, generatingScopeMap, loadWorkspaceScopeProfile]);
 
   const fetchFullGraph = useCallback(async () => {
     if (fullGraph && Boolean(fullGraph.include_low_signal) === showLowSignal) return; // already loaded
@@ -1915,6 +2088,46 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     setPathMode(true);
   }
 
+  async function copyGapAskPrompt(node: SummaryNode) {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard unavailable.");
+      await navigator.clipboard?.writeText(gapAskPrompt(node));
+      setFocusNotice({ tone: "info", text: `Copied Ask prompt for ${node.label}.` });
+    } catch {
+      setFocusNotice({ tone: "warn", text: "Could not copy the Ask prompt in this browser." });
+    }
+  }
+
+  async function saveGapDecision(node: SummaryNode, classification: DecisionClassification) {
+    setSavingGapDecision(classification);
+    const rationale = node.gap_detail || node.gap_reason || "Marked from Map gap triage.";
+    const existing = decisionRecords[node.id];
+    try {
+      const res = await apiFetch(existing ? `/decisions/${encodeURIComponent(existing.id)}` : `/decisions`, {
+        method: existing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(existing
+          ? { classification, rationale, label: node.label, status: "active" }
+          : { target_id: node.id, label: node.label, classification, rationale }
+        ),
+      });
+      if (!res.ok) throw new Error(await apiErrorMessage(res));
+      const saved = await res.json();
+      setDecisions((current) => ({ ...current, [node.id]: saved.classification }));
+      setDecisionRecords((current) => ({
+        ...current,
+        [node.id]: { id: saved.id, classification: saved.classification },
+      }));
+      const label = DECISION_META[saved.classification]?.label ?? saved.classification;
+      setFocusNotice({ tone: "info", text: `${node.label} marked ${label}.` });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Could not save the decision.";
+      setFocusNotice({ tone: "warn", text: message });
+    } finally {
+      setSavingGapDecision(null);
+    }
+  }
+
   const pctCode = selected
     ? Math.round((selected.code_count / Math.max(1, selected.node_count)) * 100)
     : 0;
@@ -1930,9 +2143,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       <div className="map-pane">
         <div className="map-startup-shell">
           <div className="map-overlay map-startup-overlay">
-            <div className="map-spinner" />
-            <span>Checking workspace scope...</span>
-            <span className="map-overlay-sub">The map waits until scope is known.</span>
+            <WorkingStatus
+              label="Checking workspace scope"
+              detail="The map waits until scope is known."
+            />
           </div>
         </div>
       </div>
@@ -1944,11 +2158,37 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       <div className="map-pane">
         <div className="map-startup-shell">
           <div className="map-overlay map-startup-overlay map-scope-empty">
-            <span className="map-empty-title">Generate a workspace map first</span>
-            <span className="map-overlay-sub">{scopeGateReason}</span>
-            <button type="button" className="settings-upload-btn" onClick={onNavigateScope}>
-              Open Workspace Scope
-            </button>
+            {generatingScopeMap ? (
+              <WorkingStatus
+                label="Generating workspace map"
+                detail={scopeGateReason}
+              />
+            ) : (
+              <>
+                <span className="map-empty-title">Generate a workspace map first</span>
+                <span className="map-overlay-sub">{scopeGateReason}</span>
+              </>
+            )}
+            <div className="map-empty-actions">
+              {canGenerateScopeMap && (
+                <button
+                  type="button"
+                  className="settings-upload-btn"
+                  onClick={handleGenerateScopeMap}
+                  disabled={generatingScopeMap}
+                >
+                  {generatingScopeMap ? "Generating..." : "Generate Map"}
+                </button>
+              )}
+              <button
+                type="button"
+                className="settings-upload-btn settings-secondary-btn"
+                onClick={onNavigateScope}
+                disabled={generatingScopeMap}
+              >
+                Open Workspace Scope
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -2113,7 +2353,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             : crossSemanticEdges.length
             ? `${showSemantic ? "Hide" : "Show"} ${crossSemanticEdges.length} cross-repo similarity edges (${semanticMeta?.edge_count ?? 0} total)`
             : semanticMeta?.edge_count
-            ? "Loading cross-repo edges..."
+            ? `Semantic overlay has ${semanticMeta.edge_count} stored edges, but none match the current full-graph scope and source filters.`
             : "No semantic edges yet - run Semantic Analysis in Settings"
         }
         style={
@@ -2147,8 +2387,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       title={
         usingSummaryOverlap
           ? `${showOverlap ? "Close" : "Open"} summary overlap analysis - ${overlapGroups.length} group pairs detected`
-          : !crossSemanticEdges.length
+          : !showSemantic
           ? "Enable Semantic overlay to run overlap analysis"
+          : !crossSemanticEdges.length
+          ? storedSemanticEdgeCount
+            ? "Semantic overlay is on, but no cross-repo overlap edges match the current scope or source filters."
+            : "No semantic edges yet - run Semantic Analysis in Settings"
           : `${showOverlap ? "Close" : "Open"} overlap analysis - ${overlapGroups.length} cluster pairs detected`
       }
       style={
@@ -2274,9 +2518,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
           {(loading || (fullLoading && viewMode === "full")) && (
             <div className="map-overlay">
-              <div className="map-spinner" />
-              <span>{fullLoading && viewMode === "full" ? "Loading full graph…" : "Building graph summary…"}</span>
-              <span className="map-overlay-sub">First load may take a moment</span>
+              <WorkingStatus
+                label={fullLoading && viewMode === "full" ? "Loading full graph" : "Building graph summary"}
+                detail="First load may take a moment"
+              />
             </div>
           )}
 
@@ -2318,9 +2563,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 aria-label="Close"
               >✕</button>
             </div>
-            {!usingSummaryOverlap && !crossSemanticEdges.length ? (
+            {!usingSummaryOverlap && !showSemantic ? (
               <div className="map-overlap-empty">
                 Enable the Semantic overlay first to see cross-repo overlap analysis.
+              </div>
+            ) : !usingSummaryOverlap && !crossSemanticEdges.length ? (
+              <div className="map-overlap-empty">
+                {storedSemanticEdgeCount
+                  ? "Semantic overlay is on, but no cross-repo overlap edges are visible in the current scope and source filters. If this is a single-repo map, select a broader workspace scope to review overlap across repos."
+                  : "No semantic edges are available yet. Run Semantic Analysis in Settings, then return to Overlap."}
               </div>
             ) : overlapGroups.length === 0 ? (
               <div className="map-overlap-empty">
@@ -2846,6 +3097,65 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 <span>Docs</span>
               </div>
             </div>
+
+            {selected.is_gap && (
+              <div className="map-gap-triage">
+                <div className="map-gap-triage-head">
+                  <span>Gap Triage</span>
+                  <strong>{gapTypeLabel(selected.gap_type)}</strong>
+                </div>
+                <p>{selected.gap_detail || selected.gap_reason || "No visible group-to-group physical links at the current filters."}</p>
+                {(selected.gap_evidence ?? []).length > 0 && (
+                  <div className="map-gap-evidence">
+                    {selected.gap_evidence?.map((item) => (
+                      <span key={item}>{item}</span>
+                    ))}
+                  </div>
+                )}
+                <div className="map-gap-actions">
+                  {selected.is_drillable && (
+                    <button
+                      className="map-action-btn map-action-primary"
+                      onClick={() => handleDrillDown(selected)}
+                    >
+                      Drill In
+                    </button>
+                  )}
+                  {selected.gap_actions?.includes("show_low_signal") && (
+                    <button
+                      className="map-action-btn"
+                      onClick={() => {
+                        setShowLowSignal(true);
+                        setViewMode("full");
+                        setFocusNotice({ tone: "info", text: "Opening Evidence with low-signal nodes included." });
+                      }}
+                    >
+                      Show Low Signal
+                    </button>
+                  )}
+                  <button
+                    className="map-action-btn"
+                    onClick={() => copyGapAskPrompt(selected)}
+                  >
+                    Copy Ask Prompt
+                  </button>
+                  <button
+                    className="map-action-btn"
+                    disabled={savingGapDecision !== null}
+                    onClick={() => saveGapDecision(selected, "monitor")}
+                  >
+                    {savingGapDecision === "monitor" ? "Saving..." : "Mark Monitor"}
+                  </button>
+                  <button
+                    className="map-action-btn"
+                    disabled={savingGapDecision !== null}
+                    onClick={() => saveGapDecision(selected, "archive")}
+                  >
+                    {savingGapDecision === "archive" ? "Saving..." : "Mark Archive"}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="map-relationships">
               <div className="map-relationships-head">

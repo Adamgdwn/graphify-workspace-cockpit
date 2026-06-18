@@ -248,6 +248,8 @@ def test_rebuild_with_workspace_scope_scans_and_activates_filtered_graph(
     assert [node["id"] for node in active_graph["nodes"]] == ["keep"]
     assert active_graph["links"] == []
     assert active_graph["_meta"]["workspace_scope"]["profile_name"] == "Scoped Test"
+    assert active_graph["_meta"]["workspace_scope"]["included_paths"] == [str(app), str(excluded)]
+    assert active_graph["_meta"]["workspace_scope"]["excluded_paths"] == [str(excluded)]
     assert active_graph["_meta"]["workspace_scope"]["scanned_root_count"] == 1
     assert active_graph["nodes"][0]["source_root"] == str(app)
     assert active_graph["nodes"][0]["scope_profile"] == "Scoped Test"
@@ -256,6 +258,11 @@ def test_rebuild_with_workspace_scope_scans_and_activates_filtered_graph(
     assert not semantic_file.exists()
     assert main._graph_cache is None
     assert main._summary_cache == {}
+
+    summary = main.graph_summary(min_weight=1)
+    assert summary["workspace_scope"]["profile_name"] == "Scoped Test"
+    assert summary["workspace_scope"]["included_paths"] == [str(app), str(excluded)]
+    assert summary["workspace_scope"]["excluded_paths"] == [str(excluded)]
     assert main._REBUILD_STATUS["status"] == "complete"
 
 
@@ -596,6 +603,80 @@ def test_graph_summary_expands_broad_scope_from_relative_paths(monkeypatch, tmp_
         "Timeshare-Connect",
     }
     assert {node["group_type"] for node in applications_detail["nodes"]} == {"module"}
+
+
+def test_graph_summary_classifies_gap_triage(monkeypatch, tmp_path: Path) -> None:
+    graph = tmp_path / "gap-triage-graph.json"
+    shared_meta = {"source_root": str(tmp_path), "source_root_name": "workspace"}
+    graph.write_text(json.dumps({
+        "nodes": [
+            {
+                **shared_meta,
+                "id": "root-doc",
+                "label": "AGENTS",
+                "source_file": "AGENTS.md",
+                "file_type": "document",
+            },
+            {
+                **shared_meta,
+                "id": "hidden-readme",
+                "label": "Hidden App README",
+                "source_file": "hidden-app/README.md",
+                "file_type": "document",
+            },
+            {
+                **shared_meta,
+                "id": "hidden-worker",
+                "label": "hidden worker",
+                "source_file": "hidden-app/src/worker.py",
+                "file_type": "code",
+            },
+            {
+                **shared_meta,
+                "id": "target-readme",
+                "label": "Target README",
+                "source_file": "target-app/README.md",
+                "file_type": "document",
+            },
+            {
+                **shared_meta,
+                "id": "code-main",
+                "label": "main",
+                "source_file": "code-app/src/main.py",
+                "file_type": "code",
+            },
+            {
+                **shared_meta,
+                "id": "lone-readme",
+                "label": "Lone README",
+                "source_file": "lone-doc/README.md",
+                "file_type": "document",
+            },
+        ],
+        "links": [
+            {"source": "hidden-worker", "target": "target-readme", "relation": "references"},
+        ],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+
+    overview = TestClient(main.app).get("/graph/summary", params={"min_weight": 1}).json()
+    by_label = {node["label"]: node for node in overview["nodes"]}
+
+    assert by_label["Workspace Docs"]["gap_type"] == "root_level_docs_only"
+    assert by_label["hidden-app"]["gap_type"] == "hidden_by_low_signal_filters"
+    assert by_label["target-app"]["gap_type"] == "hidden_by_low_signal_filters"
+    assert "references" in " ".join(by_label["hidden-app"]["gap_evidence"])
+    assert by_label["code-app"]["gap_type"] == "missing_semantic_extraction"
+    assert by_label["lone-doc"]["gap_type"] == "truly_isolated"
+    assert by_label["lone-doc"]["gap_actions"] == ["drill_in", "ask", "monitor", "archive"]
 
 
 def test_graph_full_clusters_nodes_by_workspace_project(monkeypatch, tmp_path: Path) -> None:

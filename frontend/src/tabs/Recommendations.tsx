@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { apiErrorMessage, apiFetch } from "../api/client";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { WorkingStatus } from "../components/WorkingStatus";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────
@@ -571,7 +572,9 @@ function RecCard({
 
       {packetOpen && (
         packetLoading ? (
-          <div className="rec-packet-loading">Loading decision packet…</div>
+          <div className="rec-packet-loading">
+            <WorkingStatus compact label="Loading decision packet" />
+          </div>
         ) : packetError ? (
           <div className="rec-packet-error">Decision packet unavailable: {packetError}</div>
         ) : packet ? (
@@ -790,6 +793,7 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
       <div className="rec-list">
         {loading && (
           <>
+            <WorkingStatus label="Loading recommendations" detail="Reading saved decision suggestions" />
             <SkeletonCard lines={4} />
             <SkeletonCard lines={3} />
             <SkeletonCard lines={4} />

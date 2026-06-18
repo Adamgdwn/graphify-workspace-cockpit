@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import { API } from "../config";
 import { useToast } from "../components/Toast";
+import { WorkingStatus } from "../components/WorkingStatus";
 
 interface SettingsProps {
   onNavigateScope: () => void;
@@ -674,7 +675,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             </div>
           </div>
         ) : (
-          <p className="settings-dim">Loading…</p>
+          <WorkingStatus compact label="Loading settings" />
         )}
       </section>
 
@@ -861,9 +862,11 @@ export function Settings({ onNavigateScope }: SettingsProps) {
           <div style={{ marginBottom: 10 }}>
             {semanticStatus.status === "running" && (
               <>
-                <div className="settings-dim" style={{ marginBottom: 4 }}>
-                  Embedding nodes… {semanticStatus.progress} / {semanticStatus.total}
-                </div>
+                <WorkingStatus
+                  inline
+                  compact
+                  label={`Embedding nodes ${semanticStatus.progress} / ${semanticStatus.total}`}
+                />
                 <div style={{ background: "#1a1c2a", borderRadius: 4, height: 6, overflow: "hidden" }}>
                   <div style={{
                     background: "#a855f7",

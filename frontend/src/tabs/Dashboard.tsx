@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { API_AUTH_ERROR_MESSAGE, apiErrorMessage, apiFetch } from "../api/client";
+import { WorkingStatus } from "../components/WorkingStatus";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
 export type DashboardDestination = "map" | "recommendations" | "work-queue" | "settings";
@@ -364,9 +365,11 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
       <div className="dash-header">
         <div>
           <h1 className="dash-title">Command Center</h1>
-          <p className="dash-subtitle">
-            {loading ? "Refreshing decision signals..." : `${attentionTotal} item${attentionTotal === 1 ? "" : "s"} need operator attention`}
-          </p>
+          {loading ? (
+            <WorkingStatus inline compact label="Refreshing decision signals" />
+          ) : (
+            <p className="dash-subtitle">{`${attentionTotal} item${attentionTotal === 1 ? "" : "s"} need operator attention`}</p>
+          )}
         </div>
         <button type="button" className="dash-refresh" onClick={refresh} disabled={loading}>
           {loading ? "Refreshing..." : "Refresh"}

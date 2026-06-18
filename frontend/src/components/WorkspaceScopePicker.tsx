@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { apiErrorMessage, apiFetch } from "../api/client";
 import { useToast } from "./Toast";
+import { WorkingStatus } from "./WorkingStatus";
 
 type WorkspaceScopeState = "included" | "excluded" | "partial";
 
@@ -114,6 +115,30 @@ function uniqueOptions(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])];
 }
 
+function normalizedPathList(values: Iterable<string> | undefined): string[] {
+  return [...new Set(Array.from(values ?? []).map((value) => value.trim()).filter(Boolean))].sort();
+}
+
+function samePathList(left: Iterable<string> | undefined, right: Iterable<string> | undefined): boolean {
+  const a = normalizedPathList(left);
+  const b = normalizedPathList(right);
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function titleFromPath(path: string): string {
+  const segment = path.split("/").filter(Boolean).pop() ?? path;
+  const words = segment.replace(/[_-]+/g, " ").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "Workspace";
+  return words.map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+
+function draftProfileNameForSelection(includedPaths: Iterable<string>): string {
+  const paths = normalizedPathList(includedPaths);
+  if (paths.length === 1) return `${titleFromPath(paths[0])} Scope`;
+  if (paths.length > 1) return `${paths.length.toLocaleString()} Folder Scope`;
+  return "Workspace Scope";
+}
+
 function requestWorkspaceScopeInspection(root: string, maxDepth: number): Promise<WorkspaceScopeInspect> {
   const key = `${root}::${maxDepth}`;
   const pending = pendingScopeInspections.get(key);
@@ -153,6 +178,7 @@ export function WorkspaceScopePicker({
   const [rootInput, setRootInput] = useState("");
   const [selectedRootOption, setSelectedRootOption] = useState("");
   const [profileName, setProfileName] = useState("Workspace Scope");
+  const [profileNameTouched, setProfileNameTouched] = useState(false);
   const [scope, setScope] = useState<WorkspaceScopeInspect | null>(null);
   const [profile, setProfile] = useState<WorkspaceScopeProfile | null>(null);
   const [included, setIncluded] = useState<Set<string>>(() => new Set());
@@ -171,6 +197,17 @@ export function WorkspaceScopePicker({
 
   const includedCount = included.size;
   const excludedCount = excluded.size;
+  const draftRoot = scope?.root.path ?? rootInput.trim();
+  const hasUnsavedScopeChanges = Boolean(
+    profile
+    && (
+      draftRoot !== profile.root
+      || !samePathList(included, profile.included_paths)
+      || !samePathList(excluded, profile.excluded_paths)
+      || profileName.trim() !== profile.profile_name
+    ),
+  );
+  const hasDraftSelection = hasUnsavedScopeChanges || (!profile && includedCount > 0);
   const shouldAutoInspectSavedProfile = autoInspectSavedProfile ?? mode === "settings";
   const shouldRestoreSavedSelection = restoreSavedSelection ?? mode === "settings";
   const generateDisabledReason = !scope
@@ -192,6 +229,20 @@ export function WorkspaceScopePicker({
       setIncluded(new Set());
     }
   }, []);
+
+  useEffect(() => {
+    if (profileNameTouched) return;
+    if (
+      profile
+      && draftRoot === profile.root
+      && samePathList(included, profile.included_paths)
+      && samePathList(excluded, profile.excluded_paths)
+    ) {
+      setProfileName(profile.profile_name);
+      return;
+    }
+    setProfileName(draftProfileNameForSelection(included));
+  }, [draftRoot, excluded, included, profile, profileNameTouched]);
 
   const inspectRoot = useCallback(async (root: string, nextProfile: WorkspaceScopeProfile | null = null) => {
     const path = root.trim();
@@ -237,6 +288,7 @@ export function WorkspaceScopePicker({
         setRootInput(data.profile.root);
         setSelectedRootOption(data.profile.root);
         setProfileName(data.profile.profile_name);
+        setProfileNameTouched(false);
         setIncluded(shouldRestoreSavedSelection ? new Set(data.profile.included_paths) : new Set());
         setExcluded(shouldRestoreSavedSelection ? new Set(data.profile.excluded_paths) : new Set());
         if (shouldAutoInspectSavedProfile) {
@@ -261,11 +313,13 @@ export function WorkspaceScopePicker({
   function handleRootShortcut(value: string) {
     setSelectedRootOption(value);
     setRootInput(value);
+    setProfileNameTouched(false);
     void inspectRoot(value);
   }
 
   async function handleInspect(e: FormEvent) {
     e.preventDefault();
+    setProfileNameTouched(false);
     await inspectRoot(rootInput);
   }
 
@@ -327,6 +381,7 @@ export function WorkspaceScopePicker({
       const data = await response.json() as { profile: WorkspaceScopeProfile };
       setProfile(data.profile);
       setProfileName(data.profile.profile_name);
+      setProfileNameTouched(false);
       setIncluded(new Set(data.profile.included_paths));
       setExcluded(new Set(data.profile.excluded_paths));
       onProfileSaved?.(data.profile);
@@ -469,14 +524,16 @@ export function WorkspaceScopePicker({
         </div>
       ) : (
         <div className="scope-empty-tree">
-          <div className="scope-empty-row">
-            <span className="scope-empty-expander">v</span>
-            <input type="checkbox" disabled aria-label="Workspace folders loading" />
-            <span className="settings-mono">{rootInput || initialRoot}</span>
-            <span className="scope-state-badge scope-state-partial">
-              {inspecting ? "loading" : "choose root"}
-            </span>
-          </div>
+          {inspecting ? (
+            <WorkingStatus compact label="Inspecting folders" detail={rootInput || initialRoot} />
+          ) : (
+            <div className="scope-empty-row">
+              <span className="scope-empty-expander">v</span>
+              <input type="checkbox" disabled aria-label="Workspace folders loading" />
+              <span className="settings-mono">{rootInput || initialRoot}</span>
+              <span className="scope-state-badge scope-state-partial">choose root</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -486,7 +543,11 @@ export function WorkspaceScopePicker({
     <section className={mode === "startup" ? "scope-picker scope-picker-startup" : "settings-section scope-picker"}>
       <div className="settings-section-title">
         {title}
-        {profile && <span className="scope-saved-pill">Saved</span>}
+        {hasDraftSelection ? (
+          <span className="scope-draft-pill">Draft</span>
+        ) : profile ? (
+          <span className="scope-saved-pill">Saved</span>
+        ) : null}
       </div>
       <p className="settings-dim" style={{ marginBottom: 10 }}>{intro}</p>
 
@@ -535,12 +596,12 @@ export function WorkspaceScopePicker({
 
       {treePanel}
 
-      {profile && (
+      {(scope || profile) && (
         <div className="scope-summary">
-          <span className="settings-mono settings-break">{profile.root}</span>
-          <span>{profile.included_paths.length.toLocaleString()} selected paths</span>
-          <span>{profile.excluded_paths.length.toLocaleString()} ignored paths</span>
-          <span>low-signal hidden by default</span>
+          <span className="settings-mono settings-break">{draftRoot || profile?.root}</span>
+          <span>{includedCount.toLocaleString()} selected paths</span>
+          <span>{excludedCount.toLocaleString()} ignored paths</span>
+          <span>{hasDraftSelection ? "unsaved draft" : "saved profile"}</span>
         </div>
       )}
 
@@ -550,7 +611,10 @@ export function WorkspaceScopePicker({
           id={`workspace-profile-name-${mode}`}
           className="settings-mono-input"
           value={profileName}
-          onChange={(event) => setProfileName(event.target.value)}
+          onChange={(event) => {
+            setProfileNameTouched(true);
+            setProfileName(event.target.value);
+          }}
           placeholder="Workspace Scope"
         />
       </div>
@@ -619,6 +683,13 @@ export function WorkspaceScopePicker({
         <p className="settings-dim">No folder inspected yet.</p>
       )}
       {message && <p className="settings-ok">{message}</p>}
+      {generating && (
+        <WorkingStatus
+          compact
+          label="Generating workspace map"
+          detail="Watching the scoped rebuild"
+        />
+      )}
       {error && <p className="settings-err">{error}</p>}
     </section>
   );

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { apiErrorMessage, apiFetch } from "../api/client";
 import { useToast } from "../components/Toast";
+import { WorkingStatus } from "../components/WorkingStatus";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -443,7 +444,11 @@ export function WorkQueue() {
 
             <div className="wq-log" ref={logRef}>
               {focusMission.log.length === 0 ? (
-                <span className="wq-log-empty">Waiting for output…</span>
+                focusMission.status === "running" ? (
+                  <WorkingStatus compact label="Waiting for output" />
+                ) : (
+                  <span className="wq-log-empty">Waiting for output…</span>
+                )
               ) : (
                 focusMission.log.map((line, i) => (
                   <div key={i} className="wq-log-line">{line}</div>

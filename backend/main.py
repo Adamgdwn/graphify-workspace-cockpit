@@ -413,6 +413,24 @@ def _workspace_scope_removed_node_count(graph: dict) -> int:
         return 0
 
 
+def _workspace_scope_summary_metadata(graph: dict) -> dict | None:
+    meta = graph.get("_meta")
+    if not isinstance(meta, dict):
+        return None
+    scope = meta.get("workspace_scope")
+    if not isinstance(scope, dict):
+        return None
+    return {
+        "profile_name": scope.get("profile_name") or "Workspace Scope",
+        "root": scope.get("root") or "",
+        "included_paths": list(scope.get("included_paths") or []),
+        "excluded_paths": list(scope.get("excluded_paths") or []),
+        "scanned_root_count": scope.get("scanned_root_count") or 0,
+        "removed_node_count": scope.get("removed_node_count") or 0,
+        "generated_at": scope.get("generated_at"),
+    }
+
+
 def _safe_graph_upload_name(filename: str | None) -> str:
     raw_name = (filename or "").strip()
     name = Path(raw_name).name
@@ -601,6 +619,70 @@ def _summary_cluster_getter(
         return module_key
 
     return get_cluster, cluster_labels, cluster_group_types
+
+
+def _gap_triage(
+    *,
+    node: dict,
+    hidden_counts: Counter[str],
+    hidden_link_counts: Counter[str],
+    hidden_link_relations: dict[str, set[str]],
+    total_link_counts: Counter[str],
+) -> dict:
+    cluster_id = str(node["id"])
+    code_count = int(node.get("code_count") or 0)
+    doc_count = int(node.get("doc_count") or 0)
+    node_count = int(node.get("node_count") or 0)
+    hidden_count = hidden_counts[cluster_id]
+    hidden_links = hidden_link_counts[cluster_id]
+    relation_list = sorted(hidden_link_relations.get(cluster_id, set()))[:3]
+
+    if cluster_id == "__workspace_docs__" or (
+        str(node.get("label") or "").lower() in {"workspace docs", "(root)"}
+        and doc_count >= code_count
+    ):
+        return {
+            "gap_type": "root_level_docs_only",
+            "gap_detail": "This looks like root-level workspace documentation rather than an isolated project.",
+            "gap_evidence": [
+                f"{doc_count} document node{'s' if doc_count != 1 else ''} in the group.",
+                "No visible cross-group physical links were found.",
+            ],
+            "gap_actions": ["drill_in", "ask", "monitor", "archive"],
+        }
+
+    if hidden_links > 0:
+        relation_text = f" ({', '.join(relation_list)})" if relation_list else ""
+        return {
+            "gap_type": "hidden_by_low_signal_filters",
+            "gap_detail": "Low-signal evidence links would connect this group, but default map filters hide those nodes.",
+            "gap_evidence": [
+                f"{hidden_links} hidden cross-group link{'s' if hidden_links != 1 else ''}{relation_text}.",
+                f"{hidden_count} low-signal node{'s' if hidden_count != 1 else ''} in this group.",
+            ],
+            "gap_actions": ["drill_in", "show_low_signal", "ask", "monitor"],
+        }
+
+    if code_count > 0 or node_count > 1:
+        return {
+            "gap_type": "missing_semantic_extraction",
+            "gap_detail": "This group has visible build material, but the stored graph has no cross-group relationships for it.",
+            "gap_evidence": [
+                f"{code_count} code node{'s' if code_count != 1 else ''} and {doc_count} document node{'s' if doc_count != 1 else ''}.",
+                f"{total_link_counts[cluster_id]} total stored link{'s' if total_link_counts[cluster_id] != 1 else ''} touch this group.",
+            ],
+            "gap_actions": ["drill_in", "ask", "monitor"],
+        }
+
+    return {
+        "gap_type": "truly_isolated",
+        "gap_detail": "No visible or hidden graph relationships connect this group to the current map.",
+        "gap_evidence": [
+            f"{node_count} visible node{'s' if node_count != 1 else ''} in this group.",
+            "No cross-group physical links were found in the stored graph.",
+        ],
+        "gap_actions": ["drill_in", "ask", "monitor", "archive"],
+    }
 
 
 def _is_node_selected(n: dict, sel_sources: list[str], sel_clusters: list[str] | None) -> bool:
@@ -844,14 +926,51 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         )
         valid_ids.add(cluster_id)
 
+    selected_node_map: dict[str, dict] = {
+        str(n.get("id")): n
+        for n in selected_nodes
+        if n.get("id")
+        and str(n.get("signal_tier") or "evidence") != "excluded"
+    }
+    hidden_counts: Counter[str] = Counter()
+    for n in selected_node_map.values():
+        if is_visible_signal_node(n):
+            continue
+        cluster = get_cluster(n)
+        if cluster in valid_ids:
+            hidden_counts[cluster] += 1
+
     # Aggregate inter-cluster edge weights. Summary relationships are undirected:
     # a broad map should show that two visible areas touch, not split the same
     # relationship by source/target direction.
     edge_weights: Counter[tuple[str, str]] = Counter()
     edge_relations: dict[tuple[str, str], set[str]] = defaultdict(set)
+    hidden_link_counts: Counter[str] = Counter()
+    hidden_link_relations: dict[str, set[str]] = defaultdict(set)
+    total_link_counts: Counter[str] = Counter()
     for link in links_raw:
         src_node = node_map.get(link["source"])
         tgt_node = node_map.get(link["target"])
+        selected_src = selected_node_map.get(str(link.get("source")))
+        selected_tgt = selected_node_map.get(str(link.get("target")))
+        if selected_src and selected_tgt:
+            src_cluster_all = get_cluster(selected_src)
+            tgt_cluster_all = get_cluster(selected_tgt)
+            if (
+                src_cluster_all
+                and tgt_cluster_all
+                and src_cluster_all != tgt_cluster_all
+                and src_cluster_all in valid_ids
+                and tgt_cluster_all in valid_ids
+            ):
+                total_link_counts[src_cluster_all] += 1
+                total_link_counts[tgt_cluster_all] += 1
+                if not (is_visible_signal_node(selected_src) and is_visible_signal_node(selected_tgt)):
+                    rel = str(link.get("relation") or "")
+                    for cluster in (src_cluster_all, tgt_cluster_all):
+                        hidden_link_counts[cluster] += 1
+                        if rel:
+                            hidden_link_relations[cluster].add(rel)
         if not src_node or not tgt_node:
             continue
         src_cluster = get_cluster(src_node)
@@ -913,11 +1032,22 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         node["connection_count"] = connection_counts[node_id]
         node["connection_weight"] = connection_weights[node_id]
         node["is_gap"] = len(summary_nodes) > 1 and connection_counts[node_id] == 0
-        node["gap_reason"] = (
-            "No visible physical links connect this group to another visible group at the current filters."
-            if node["is_gap"]
-            else ""
-        )
+        if node["is_gap"]:
+            triage = _gap_triage(
+                node=node,
+                hidden_counts=hidden_counts,
+                hidden_link_counts=hidden_link_counts,
+                hidden_link_relations=hidden_link_relations,
+                total_link_counts=total_link_counts,
+            )
+            node.update(triage)
+            node["gap_reason"] = triage["gap_detail"]
+        else:
+            node["gap_reason"] = ""
+            node["gap_type"] = ""
+            node["gap_detail"] = ""
+            node["gap_evidence"] = []
+            node["gap_actions"] = []
         node["connections"] = sorted(
             connection_details[node_id],
             key=lambda item: (-int(item.get("weight") or 0), str(item.get("label") or "")),
@@ -930,6 +1060,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         "signal_counts": counts_by_signal,
         "hidden_node_count": counts_by_signal.get("evidence", 0) + counts_by_signal.get("hidden", 0),
         "excluded_node_count": excluded_node_count,
+        "workspace_scope": _workspace_scope_summary_metadata(signal_graph),
         "nodes": summary_nodes,
         "edges": summary_edges,
     }
@@ -2546,6 +2677,8 @@ def _write_scoped_graph_metadata(
     meta["workspace_scope"] = {
         "profile_name": profile.get("profile_name") or "Workspace Scope",
         "root": profile["root"],
+        "included_paths": list(profile.get("included_paths") or []),
+        "excluded_paths": list(profile.get("excluded_paths") or []),
         "scanned_root_count": scanned_root_count,
         "removed_node_count": removed_node_count,
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),

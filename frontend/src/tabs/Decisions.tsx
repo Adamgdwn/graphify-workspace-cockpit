@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { apiErrorMessage, apiFetch } from "../api/client";
 import { SkeletonCard } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { WorkingStatus } from "../components/WorkingStatus";
 import {
   DECISION_CLASSIFICATIONS,
   decisionClassificationMeta,
@@ -325,6 +326,7 @@ export function Decisions({ onActiveContextChange }: DecisionsProps) {
 
         {loading && (
           <div className="dec-skeleton-list">
+            <WorkingStatus label="Loading decisions" detail="Reading active classifications" />
             <SkeletonCard lines={3} />
             <SkeletonCard lines={2} />
             <SkeletonCard lines={3} />

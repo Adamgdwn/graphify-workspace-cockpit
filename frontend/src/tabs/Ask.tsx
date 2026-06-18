@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { apiErrorMessage, apiFetch } from "../api/client";
 import { Skeleton } from "../components/Skeleton";
 import { useToast } from "../components/Toast";
+import { WorkingStatus } from "../components/WorkingStatus";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
 type Mode = "query" | "path" | "explain";
@@ -171,6 +172,7 @@ export function Ask({ focusTrigger = 0, askRef, onEvidenceNavigate }: AskProps) 
       {/* Loading skeleton in answer area */}
       {loading && (
         <div className="ask-skeleton-area">
+          <WorkingStatus label="Running graph query" detail="Collecting answer evidence" />
           <Skeleton height={14} width="80%" style={{ marginBottom: 10 }} />
           <Skeleton height={12} style={{ marginBottom: 8 }} />
           <Skeleton height={12} width="90%" style={{ marginBottom: 8 }} />
