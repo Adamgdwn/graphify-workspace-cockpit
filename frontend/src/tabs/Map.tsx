@@ -1167,6 +1167,22 @@ function buildFullElements(full: FullGraph, filter: Filter, selectedClusters: Se
   return [...nodes, ...edges];
 }
 
+function applyStructuralEdgeVisibility(cy: Core, showStructural: boolean) {
+  cy.batch(() => {
+    cy.edges().forEach((edge: any) => {
+      if (edge.hasClass("semantic-edge")) {
+        edge.removeClass("struct-hidden");
+        return;
+      }
+      if (showStructural) {
+        edge.removeClass("struct-hidden");
+      } else {
+        edge.addClass("struct-hidden");
+      }
+    });
+  });
+}
+
 const FULL_CY_STYLE: object[] = [
   {
     selector: "node",
@@ -1814,19 +1830,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }));
       if (toAdd.length) cy.add(toAdd);
     });
+    applyStructuralEdgeVisibility(cy, showStructuralRef.current);
   }, [showSemantic, semanticEdgesForDisplay, viewMode]);
 
   // Toggle structural edges on/off (class swap — no layout restart)
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || viewMode !== "full") return;
-    const structEdges = cy.edges(":not(.semantic-edge)");
-    if (showStructural) {
-      structEdges.removeClass("struct-hidden");
-    } else {
-      structEdges.addClass("struct-hidden");
-    }
-  }, [showStructural, viewMode]);
+    applyStructuralEdgeVisibility(cy, showStructural);
+  }, [showStructural, viewMode, semanticEdgesForDisplay.length]);
 
   // Recompute god nodes whenever summary changes
   useEffect(() => {
@@ -2108,6 +2120,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       minZoom: 0.02,
       maxZoom: 12,
     });
+    applyStructuralEdgeVisibility(cy, showStructuralRef.current);
 
     const finishRender = () => {
       if (renderFinished) return;
@@ -2127,6 +2140,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           }));
         if (toAdd.length) cy.batch(() => cy.add(toAdd));
       }
+      applyStructuralEdgeVisibility(cy, showStructuralRef.current);
     };
     const layout = cy.layout(FULL_FCOSE_LAYOUT as any);
     layout.one("layoutstop", finishRender);
