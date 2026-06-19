@@ -966,6 +966,66 @@ const FULL_FCOSE_LAYOUT = {
 };
 
 const SEMANTIC_EDGE_DISPLAY_LIMIT = 2000;
+const SEMANTIC_BACKBONE_NEIGHBOR_LIMIT = 4;
+const SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT = 6;
+
+function semanticEdgeKey(source: string, target: string) {
+  return source < target ? `${source}\u0000${target}` : `${target}\u0000${source}`;
+}
+
+function buildSemanticBackbone(edges: SemanticEdge[]): SemanticEdge[] {
+  const uniqueByPair = new globalThis.Map<string, SemanticEdge>();
+  for (const edge of edges) {
+    const key = semanticEdgeKey(edge.source, edge.target);
+    const existing = uniqueByPair.get(key);
+    if (!existing || edge.similarity > existing.similarity) {
+      uniqueByPair.set(key, edge);
+    }
+  }
+
+  const uniqueEdges = [...uniqueByPair.values()];
+  const sortedEdges = [...uniqueEdges].sort((a, b) => b.similarity - a.similarity);
+  const edgesByNode = new globalThis.Map<string, SemanticEdge[]>();
+  for (const edge of uniqueEdges) {
+    edgesByNode.set(edge.source, [...(edgesByNode.get(edge.source) ?? []), edge]);
+    edgesByNode.set(edge.target, [...(edgesByNode.get(edge.target) ?? []), edge]);
+  }
+
+  const rankByNode = new globalThis.Map<string, globalThis.Map<string, number>>();
+  for (const [nodeId, nodeEdges] of edgesByNode) {
+    const ranked = new globalThis.Map<string, number>();
+    [...nodeEdges]
+      .sort((a, b) => b.similarity - a.similarity)
+      .forEach((edge, index) => {
+        ranked.set(semanticEdgeKey(edge.source, edge.target), index + 1);
+      });
+    rankByNode.set(nodeId, ranked);
+  }
+
+  const selected: SemanticEdge[] = [];
+  const degreeByNode = new globalThis.Map<string, number>();
+  for (const edge of sortedEdges) {
+    const key = semanticEdgeKey(edge.source, edge.target);
+    const sourceRank = rankByNode.get(edge.source)?.get(key) ?? Number.POSITIVE_INFINITY;
+    const targetRank = rankByNode.get(edge.target)?.get(key) ?? Number.POSITIVE_INFINITY;
+    if (sourceRank > SEMANTIC_BACKBONE_NEIGHBOR_LIMIT || targetRank > SEMANTIC_BACKBONE_NEIGHBOR_LIMIT) {
+      continue;
+    }
+    if (
+      (degreeByNode.get(edge.source) ?? 0) >= SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT
+      || (degreeByNode.get(edge.target) ?? 0) >= SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT
+    ) {
+      continue;
+    }
+
+    selected.push(edge);
+    degreeByNode.set(edge.source, (degreeByNode.get(edge.source) ?? 0) + 1);
+    degreeByNode.set(edge.target, (degreeByNode.get(edge.target) ?? 0) + 1);
+    if (selected.length >= SEMANTIC_EDGE_DISPLAY_LIMIT) break;
+  }
+
+  return selected.length ? selected : sortedEdges.slice(0, SEMANTIC_EDGE_DISPLAY_LIMIT);
+}
 
 function buildFullElements(full: FullGraph, filter: Filter, selectedClusters: Set<string> | null = null) {
   const visibleIds = new Set(
@@ -1311,11 +1371,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     })
   ), [visibleSemanticEdges, nodeClusterMap]);
 
-  const semanticEdgesForDisplay = useMemo(() => (
-    [...visibleSemanticEdges]
-      .sort((a, b) => b.similarity - a.similarity)
-      .slice(0, SEMANTIC_EDGE_DISPLAY_LIMIT)
-  ), [visibleSemanticEdges]);
+  const semanticEdgesForDisplay = useMemo(
+    () => buildSemanticBackbone(visibleSemanticEdges),
+    [visibleSemanticEdges],
+  );
 
   // Overlap analysis groups — ranked cross-cluster pairs by connection count
   const fullOverlapGroups = useMemo((): OverlapGroup[] => {
@@ -1643,13 +1702,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       cy.elements('[?semantic]').remove();
       return;
     }
-    if (!semanticEdgesForDisplay.length) return;
     const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
     cy.batch(() => {
-      const existingIds = new Set(cy.edges('[?semantic]').map((e) => e.id()));
+      cy.elements('[?semantic]').remove();
+      if (!semanticEdgesForDisplay.length) return;
       const toAdd = semanticEdgesForDisplay
         .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-        .filter((e) => !existingIds.has(`sem__${e.source}__${e.target}`))
         .map((e) => ({
           group: "edges" as const,
           data: {
@@ -2550,11 +2608,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         : "semantic evidence"
       : "physical evidence"
     : "summary physical";
-  const semanticDisplayCount = Math.min(visibleSemanticEdges.length, SEMANTIC_EDGE_DISPLAY_LIMIT);
+  const semanticDisplayCount = semanticEdgesForDisplay.length;
   const semanticDisplayText = semanticDisplayCount.toLocaleString();
-  const semanticScopeText = visibleSemanticEdges.length > SEMANTIC_EDGE_DISPLAY_LIMIT
-    ? `top ${semanticDisplayText} of ${visibleSemanticEdges.length.toLocaleString()}`
-    : semanticDisplayText;
+  const semanticVisibleText = visibleSemanticEdges.length.toLocaleString();
+  const semanticScopeText = semanticDisplayCount < visibleSemanticEdges.length
+    ? `${semanticDisplayText} high-signal backbone edges from ${semanticVisibleText}`
+    : `${semanticDisplayText} visible semantic edges`;
 
   if (scopeGate === "checking") {
     return (
@@ -2806,8 +2865,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         title={
           viewMode !== "full"
             ? "Switch to Full graph and show semantic similarity edges"
-            : visibleSemanticEdges.length
-            ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} visible semantic edges (${crossSemanticEdges.length.toLocaleString()} cross-group overlap, ${semanticMeta?.edge_count ?? 0} stored total). Trace can route through visible semantic edges.`
+            : semanticDisplayCount
+            ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} (${crossSemanticEdges.length.toLocaleString()} cross-group overlap, ${semanticMeta?.edge_count ?? 0} stored total). Display uses mutual top-${SEMANTIC_BACKBONE_NEIGHBOR_LIMIT} neighbors so dense pockets stay readable; Trace routes through this backbone.`
             : semanticMeta?.edge_count
             ? `Semantic overlay has ${semanticMeta.edge_count} stored edges, but none match the current full-graph scope and source filters.`
             : "No semantic edges yet - run Semantic Analysis in Settings"
@@ -2821,7 +2880,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }
         type="button"
       >
-        Semantic{visibleSemanticEdges.length ? ` (${semanticDisplayText})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
+        Semantic{semanticDisplayCount ? ` (${semanticDisplayText})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
       </button>
     </>
   );
