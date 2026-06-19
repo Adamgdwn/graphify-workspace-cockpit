@@ -2212,6 +2212,99 @@ body {
   margin-bottom: 9px;
 }
 
+.map-overlap-insight {
+  margin: 2px 0 8px;
+  padding: 7px 8px;
+  border: 1px solid rgba(107, 140, 255, 0.16);
+  border-radius: 4px;
+  background: rgba(8, 13, 28, 0.62);
+  color: #b8c2d8;
+}
+
+.map-overlap-insight-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.map-overlap-insight-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  color: #d8deed;
+}
+
+.map-overlap-insight-source,
+.map-overlap-actionability {
+  flex-shrink: 0;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.map-overlap-insight-source {
+  color: #6b8cff;
+}
+
+.map-overlap-actionability {
+  margin-left: auto;
+  color: #9aa7c0;
+  font-family: ui-monospace, monospace;
+}
+
+.map-overlap-insight p {
+  margin: 5px 0 0;
+  color: #9aa7c0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.map-overlap-decision-signals {
+  margin: 6px 0 0;
+  padding-left: 14px;
+  color: #8f9bb5;
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.map-overlap-decision-signals li + li {
+  margin-top: 2px;
+}
+
+.map-overlap-insight-waste-duplicate {
+  border-color: rgba(239, 68, 68, 0.28);
+  background: rgba(80, 16, 24, 0.18);
+}
+
+.map-overlap-insight-gap-missing-bridge {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: rgba(80, 54, 12, 0.16);
+}
+
+.map-overlap-insight-cross-app-similarity {
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(18, 42, 85, 0.18);
+}
+
+.map-overlap-insight-shared-pattern {
+  border-color: rgba(20, 184, 166, 0.26);
+  background: rgba(9, 68, 63, 0.16);
+}
+
+.map-overlap-insight-drift-risk {
+  border-color: rgba(168, 85, 247, 0.28);
+  background: rgba(55, 30, 90, 0.16);
+}
+
+.map-overlap-insight-intentional-reference {
+  border-color: rgba(34, 197, 94, 0.24);
+  background: rgba(16, 80, 45, 0.14);
+}
+
 .map-overlap-pair-row {
   display: flex;
   align-items: flex-start;

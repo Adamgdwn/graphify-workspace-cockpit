@@ -350,6 +350,24 @@ interface OverlapGroup {
   source: "full" | "summary";
 }
 
+type SemanticInsightKind =
+  | "waste_duplicate"
+  | "gap_missing_bridge"
+  | "cross_app_similarity"
+  | "shared_pattern"
+  | "drift_risk"
+  | "intentional_reference"
+  | "low_value"
+  | "unknown";
+
+interface SemanticInsightSummary {
+  kind: SemanticInsightKind;
+  label: string;
+  score: number;
+  source: "signal" | "llm";
+  impact?: string;
+}
+
 interface OverlapSummaryResponse {
   groups?: Array<{
     cluster_a: string;
@@ -376,6 +394,12 @@ interface OverlapSummaryResponse {
 interface TriageResult {
   verdict: "duplicate" | "reference" | "related" | "unknown";
   confidence: number;
+  insight_kind?: SemanticInsightKind;
+  actionability_score?: number;
+  decision_impact?: string;
+  waste_signal?: string;
+  gap_signal?: string;
+  cross_app_similarity?: string;
   reason: string;
   action: string;
   evidence_summary?: string;
@@ -422,6 +446,75 @@ function compactPath(path: string): string {
 
 function dossierList(items?: string[]): string[] {
   return (items ?? []).map((item) => item.trim()).filter(Boolean).slice(0, 5);
+}
+
+const SEMANTIC_INSIGHT_LABELS: Record<SemanticInsightKind, string> = {
+  waste_duplicate: "Waste / Duplicate",
+  gap_missing_bridge: "Gap / Missing Bridge",
+  cross_app_similarity: "Cross-App Similarity",
+  shared_pattern: "Shared Pattern",
+  drift_risk: "Drift Risk",
+  intentional_reference: "Intentional Reference",
+  low_value: "Low-Value Similarity",
+  unknown: "Needs Judgment",
+};
+
+function boundedPercent(value: number | undefined, fallback: number): number {
+  const numeric = Number.isFinite(value) ? Number(value) : fallback;
+  return Math.round(Math.min(1, Math.max(0, numeric)) * 100);
+}
+
+function semanticInsightClass(kind: SemanticInsightKind): string {
+  return kind.replace(/_/g, "-");
+}
+
+function heuristicOverlapInsight(group: OverlapGroup): SemanticInsightSummary {
+  const maxSimilarity = group.maxSimilarity || group.avgSimilarity || 0;
+  const sameNameBoost = group.sameNameCount > 0 ? 0.18 : 0;
+  const densityBoost = Math.min(0.18, group.edgeCount / 250);
+  const score = Math.min(0.98, 0.34 + group.avgSimilarity * 0.34 + densityBoost + sameNameBoost);
+  let kind: SemanticInsightKind = "low_value";
+  let impact = "Similarity is present, but it needs LLM triage before it should drive cleanup work.";
+
+  if (group.sameNameCount >= 2 || (group.sameNameCount > 0 && maxSimilarity >= 0.88)) {
+    kind = "waste_duplicate";
+    impact = "Same-name, high-similarity pairs may indicate duplicate knowledge or implementation waste.";
+  } else if (group.edgeCount >= 18 && group.avgSimilarity >= 0.86) {
+    kind = "cross_app_similarity";
+    impact = "Many high-similarity links connect these areas, so compare them as related application capabilities.";
+  } else if (group.edgeCount >= 8 && group.avgSimilarity >= 0.8) {
+    kind = "gap_missing_bridge";
+    impact = "Related areas are semantically close but lack a clear duplicate signal; look for a missing bridge or owner decision.";
+  } else if (maxSimilarity >= 0.92) {
+    kind = "drift_risk";
+    impact = "A very similar pair may drift unless the canonical source is made explicit.";
+  } else if (group.edgeCount >= 4) {
+    kind = "shared_pattern";
+    impact = "This may be a reusable pattern or vocabulary that should be named if it matters across apps.";
+  }
+
+  return {
+    kind,
+    label: SEMANTIC_INSIGHT_LABELS[kind],
+    score,
+    source: "signal",
+    impact,
+  };
+}
+
+function triageInsight(triage: TriageResult | undefined, group: OverlapGroup): SemanticInsightSummary {
+  const fallback = heuristicOverlapInsight(group);
+  if (!triage) return fallback;
+  const kind = triage.insight_kind && SEMANTIC_INSIGHT_LABELS[triage.insight_kind]
+    ? triage.insight_kind
+    : fallback.kind;
+  return {
+    kind,
+    label: SEMANTIC_INSIGHT_LABELS[kind],
+    score: Number.isFinite(triage.actionability_score) ? Number(triage.actionability_score) : fallback.score,
+    source: "llm",
+    impact: triage.decision_impact || fallback.impact,
+  };
 }
 
 function relationList(relations?: string[]): string {
@@ -2326,9 +2419,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           edge_count: group.edgeCount,
           avg_similarity: group.avgSimilarity,
           top_pairs: group.topPairs.map((p) => ({
+            source: p.source,
+            target: p.target,
             label_a: p.labelA, label_b: p.labelB,
             file_a: p.fileA, file_b: p.fileB,
             similarity: p.similarity,
+            same_name: p.sameName,
           })),
           ...(triage ? {
             triage_verdict: triage.verdict,
@@ -3169,7 +3265,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 </div>
                 {/* Triage bar */}
                 <div className="map-overlap-triage-bar">
-                  <span className="map-overlap-hint-inline">LLM: duplicate / reference / related</span>
+                  <span className="map-overlap-hint-inline">LLM: waste / gap / cross-app / drift</span>
                   <button
                     className="map-overlap-btn map-overlap-btn-triage"
                     onClick={triageAll}
@@ -3191,11 +3287,19 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                     const created = workflowStatus === "task-created" || taskCreated === taskKey;
                     const creating = creatingTask === taskKey;
                     const triage = triageResults[triageKey];
+                    const insight = triageInsight(triage, g);
+                    const insightPercent = boundedPercent(insight.score, 0.5);
+                    const insightClass = semanticInsightClass(insight.kind);
                     const isTriaging = triaging[triageKey] ?? false;
                     const similarities = dossierList(triage?.similarities);
                     const differences = dossierList(triage?.differences);
                     const canonicalitySignals = dossierList(triage?.canonicality_signals);
                     const openQuestions = dossierList(triage?.open_questions);
+                    const decisionSignals = [
+                      triage?.waste_signal,
+                      triage?.gap_signal,
+                      triage?.cross_app_similarity,
+                    ].map((item) => item?.trim()).filter(Boolean).slice(0, 3);
                     return (
                       <div
                         key={taskKey}
@@ -3226,6 +3330,19 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                             <span className="map-overlap-edge-count">{g.edgeCount}</span>
                             <span className="map-overlap-sim-pct">{Math.round(g.avgSimilarity * 100)}%</span>
                           </div>
+                        </div>
+                        <div className={`map-overlap-insight map-overlap-insight-${insightClass}`}>
+                          <div className="map-overlap-insight-head">
+                            <span className="map-overlap-insight-source">{insight.source === "llm" ? "LLM" : "Signal"}</span>
+                            <strong>{insight.label}</strong>
+                            <span className="map-overlap-actionability">{insightPercent}% actionable</span>
+                          </div>
+                          {insight.impact && <p>{insight.impact}</p>}
+                          {triage && decisionSignals.length > 0 && (
+                            <ul className="map-overlap-decision-signals">
+                              {decisionSignals.map((item, i) => <li key={i}>{item}</li>)}
+                            </ul>
+                          )}
                         </div>
                         {triage && (
                           <div className={`map-overlap-verdict map-overlap-verdict-${triage.verdict}`}>

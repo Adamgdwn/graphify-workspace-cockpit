@@ -3458,6 +3458,84 @@ def _overlap_pair_name(pair: dict) -> str:
     return f"{left} ↔ {right}"
 
 
+SEMANTIC_INSIGHT_KINDS = {
+    "waste_duplicate",
+    "gap_missing_bridge",
+    "cross_app_similarity",
+    "shared_pattern",
+    "drift_risk",
+    "intentional_reference",
+    "low_value",
+    "unknown",
+}
+
+
+def _bounded_score(value: object, fallback: float) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        score = fallback
+    return round(min(1.0, max(0.0, score)), 2)
+
+
+def _heuristic_overlap_insight(req: TriageOverlapRequest, verdict: str = "related") -> dict:
+    pairs = req.top_pairs[:6]
+    same_name_count = sum(1 for pair in pairs if pair.get("same_name"))
+    max_similarity = max((float(pair.get("similarity") or 0) for pair in pairs), default=req.avg_similarity)
+    avg = max(0.0, min(1.0, float(req.avg_similarity or 0)))
+    density_bonus = min(0.18, req.edge_count / 250)
+    score = 0.35 + (avg * 0.32) + density_bonus
+    if same_name_count:
+        score += 0.16
+    if max_similarity >= 0.94:
+        score += 0.08
+    if verdict == "duplicate":
+        score += 0.12
+    elif verdict == "reference":
+        score -= 0.06
+
+    if verdict == "duplicate" or same_name_count >= 2 or (same_name_count and max_similarity >= 0.88):
+        insight_kind = "waste_duplicate"
+        decision_impact = "Likely waste: choose a canonical owner or merge repeated content before the overlap spreads."
+    elif verdict == "reference":
+        insight_kind = "intentional_reference"
+        decision_impact = "Likely intentional relationship: make the source-of-truth and reference direction explicit."
+    elif req.edge_count >= 18 and avg >= 0.86:
+        insight_kind = "cross_app_similarity"
+        decision_impact = "Highly similar areas across applications: compare for shared interfaces, standards, or reusable knowledge."
+    elif req.edge_count >= 8 and same_name_count == 0 and avg >= 0.80:
+        insight_kind = "gap_missing_bridge"
+        decision_impact = "Possible gap: related areas are close semantically but need an explicit bridge, owner, or integration decision."
+    elif max_similarity >= 0.92:
+        insight_kind = "drift_risk"
+        decision_impact = "Drift risk: similar knowledge may diverge unless one side owns the canonical wording or behavior."
+    elif req.edge_count >= 4:
+        insight_kind = "shared_pattern"
+        decision_impact = "Shared pattern: likely reusable vocabulary or design that should be named if it matters across apps."
+    else:
+        insight_kind = "low_value"
+        decision_impact = "Low immediate value: similarity appears too thin for a consolidation decision without more evidence."
+
+    return {
+        "insight_kind": insight_kind,
+        "actionability_score": _bounded_score(score, 0.5),
+        "decision_impact": decision_impact,
+        "waste_signal": (
+            f"{same_name_count} top pair(s) share filenames and max similarity is {round(max_similarity * 100)}%."
+            if same_name_count
+            else "No same-filename duplicate signal in the top pairs."
+        ),
+        "gap_signal": (
+            "No same-name canonicality signal; inspect whether these related areas need a cross-reference or owner decision."
+            if same_name_count == 0 and avg >= 0.80
+            else "Gap signal is secondary to stronger duplicate/reference evidence."
+        ),
+        "cross_app_similarity": (
+            f"{req.edge_count} cross-container semantic links at {round(avg * 100)}% average similarity."
+        ),
+    }
+
+
 def _path_container(path: object) -> str:
     parts = [part for part in str(path or "").replace("\\", "/").split("/") if part]
     if not parts:
@@ -3483,6 +3561,7 @@ def _side_examples(top_pairs: list[dict], side: str) -> str:
 
 def _fallback_overlap_dossier(req: TriageOverlapRequest, verdict: str = "related") -> dict:
     pairs = req.top_pairs[:6]
+    insight = _heuristic_overlap_insight(req, verdict)
     same_name_count = sum(1 for pair in pairs if pair.get("same_name"))
     max_pair = max(pairs, key=lambda pair: float(pair.get("similarity") or 0), default={})
     max_pct = round(float(max_pair.get("similarity") or req.avg_similarity or 0) * 100)
@@ -3525,6 +3604,7 @@ def _fallback_overlap_dossier(req: TriageOverlapRequest, verdict: str = "related
     return {
         "verdict": verdict if verdict in ("duplicate", "reference", "related", "unknown") else "related",
         "confidence": round(min(0.85, max(0.35, req.avg_similarity)), 2),
+        **insight,
         "reason": (
             f"{req.cluster_a} and {req.cluster_b} overlap across {req.edge_count} semantic connections, "
             f"but the graph alone does not prove whether one side should replace the other."
@@ -3555,6 +3635,10 @@ def _normalize_overlap_triage(data: dict, req: TriageOverlapRequest, model: str)
     if verdict not in ("duplicate", "reference", "related"):
         verdict = "related"
 
+    insight_kind = str(data.get("insight_kind", fallback["insight_kind"]))
+    if insight_kind not in SEMANTIC_INSIGHT_KINDS:
+        insight_kind = fallback["insight_kind"]
+
     raw_per_side = data.get("per_side_purpose")
     per_side = fallback["per_side_purpose"]
     if isinstance(raw_per_side, dict):
@@ -3571,6 +3655,12 @@ def _normalize_overlap_triage(data: dict, req: TriageOverlapRequest, model: str)
     return {
         "verdict": verdict,
         "confidence": round(min(1.0, max(0.0, confidence)), 2),
+        "insight_kind": insight_kind,
+        "actionability_score": _bounded_score(data.get("actionability_score"), fallback["actionability_score"]),
+        "decision_impact": _truncate_text(data.get("decision_impact") or fallback["decision_impact"], 520),
+        "waste_signal": _truncate_text(data.get("waste_signal") or fallback["waste_signal"], 360),
+        "gap_signal": _truncate_text(data.get("gap_signal") or fallback["gap_signal"], 360),
+        "cross_app_similarity": _truncate_text(data.get("cross_app_similarity") or fallback["cross_app_similarity"], 360),
         "reason": _truncate_text(data.get("reason") or fallback["reason"], 420),
         "action": _truncate_text(data.get("action") or fallback["action"], 520),
         "evidence_summary": _truncate_text(data.get("evidence_summary") or fallback["evidence_summary"], 520),
@@ -3600,6 +3690,8 @@ def _unique_texts(values: list[object], limit: int = 8) -> list[str]:
 def _overlap_action_plan(req: CreateOverlapRecommendationRequest, verdict: str, proposed_action: str) -> dict:
     pairs = req.top_pairs[:6]
     triage = req.triage_result if isinstance(req.triage_result, dict) else {}
+    insight_kind = str(triage.get("insight_kind") or "unknown")
+    decision_impact = _truncate_text(triage.get("decision_impact") or "", 260)
     side_purpose = triage.get("per_side_purpose") if isinstance(triage.get("per_side_purpose"), dict) else {}
     open_questions = _bounded_text_list(triage.get("open_questions"), max_items=5)
     risks = _bounded_text_list(triage.get("risks"), max_items=5)
@@ -3676,6 +3768,8 @@ def _overlap_action_plan(req: CreateOverlapRecommendationRequest, verdict: str, 
                 1,
                 f"Use the triage purpose notes as a starting hypothesis: {req.cluster_a}: {purpose_a or 'unknown'}; {req.cluster_b}: {purpose_b or 'unknown'}.",
             )
+    if insight_kind != "unknown" and decision_impact:
+        concrete_steps.insert(0, f"Use the semantic insight category `{insight_kind}` as the review frame: {decision_impact}")
 
     return {
         "canonical_target": canonical_target,
@@ -3701,6 +3795,7 @@ def _overlap_action_plan(req: CreateOverlapRecommendationRequest, verdict: str, 
         ],
         "source_pairs": pair_names,
         "same_name_count": same_name_count,
+        "insight_kind": insight_kind,
         "proposed_action": proposed_action,
     }
 
@@ -3793,8 +3888,24 @@ def triage_overlap(req: TriageOverlapRequest) -> dict:
         f"Do not merely restate that semantic similarity is high. Explain what each side appears to do, "
         f"why the overlap matters to a decision-maker, what looks the same, what differs, whether either "
         f"side looks canonical, and what questions remain before merge/review/document action.\n\n"
+        f"Also classify the decision-useful insight as exactly ONE of:\n"
+        f'- "waste_duplicate": duplicated work, wording, behavior, or knowledge that can likely be consolidated\n'
+        f'- "gap_missing_bridge": related areas lack an explicit owner, reference, integration, or explanatory bridge\n'
+        f'- "cross_app_similarity": highly similar parts of multiple applications should be compared for shared interfaces, standards, or reusable knowledge\n'
+        f'- "shared_pattern": similar vocabulary/design appears intentional and should be named as a reusable pattern\n'
+        f'- "drift_risk": similar material should stay separate but may diverge unless one side is canonical\n'
+        f'- "intentional_reference": one side intentionally references, extends, or summarizes the other\n'
+        f'- "low_value": similarity is generic vocabulary and is unlikely to drive a useful action\n\n'
+        f"Score actionability from 0.0 to 1.0. Give a high score only when the overlap can help cut waste, close a gap, "
+        f"or reveal highly similar application areas. Penalize generic vocabulary, framework boilerplate, and weak evidence.\n\n"
         f"Return ONLY valid JSON with no extra text:\n"
         f'{{"verdict":"duplicate"|"reference"|"related","confidence":0.0-1.0,'
+        f'"insight_kind":"waste_duplicate"|"gap_missing_bridge"|"cross_app_similarity"|"shared_pattern"|"drift_risk"|"intentional_reference"|"low_value",'
+        f'"actionability_score":0.0-1.0,'
+        f'"decision_impact":"why this matters for waste, gaps, or multi-application similarity",'
+        f'"waste_signal":"specific evidence for or against waste",'
+        f'"gap_signal":"specific evidence for or against a missing bridge/owner/reference",'
+        f'"cross_app_similarity":"specific evidence about similar parts across applications",'
         f'"reason":"one sentence decision rationale",'
         f'"action":"one sentence recommended action",'
         f'"evidence_summary":"why this matters beyond high similarity",'
@@ -3830,17 +3941,34 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
     effort = "medium" if req.edge_count > 50 else "low"
 
     verdict = req.triage_verdict or "duplicate"
+    triage_result = req.triage_result if isinstance(req.triage_result, dict) else {}
+    insight_kind = str(triage_result.get("insight_kind") or "")
+    actionability_score = _bounded_score(triage_result.get("actionability_score"), req.triage_confidence or req.avg_similarity)
+    decision_impact = _truncate_text(triage_result.get("decision_impact") or "", 420)
     title_prefix = {
         "duplicate": "Merge",
         "reference": "Review Cross-Reference",
         "related": "Document Relationship",
     }.get(verdict, "Consolidate")
+    insight_title_prefix = {
+        "waste_duplicate": "Cut Waste",
+        "gap_missing_bridge": "Close Gap",
+        "cross_app_similarity": "Compare Apps",
+        "shared_pattern": "Name Pattern",
+        "drift_risk": "Prevent Drift",
+        "intentional_reference": "Clarify Reference",
+        "low_value": "Defer Low-Signal",
+    }.get(insight_kind)
+    if insight_title_prefix:
+        title_prefix = insight_title_prefix
     title = f"{title_prefix}: {req.cluster_a} ↔ {req.cluster_b} ({req.edge_count} overlapping nodes)"
 
     triage_note = ""
     if req.triage_verdict:
         conf_pct = round((req.triage_confidence or 0) * 100)
-        triage_note = f"\n\nLLM triage verdict: {req.triage_verdict.upper()} ({conf_pct}% confidence)"
+        actionability_pct = round(actionability_score * 100)
+        insight_note = f"; insight: {insight_kind.replace('_', ' ')}" if insight_kind else ""
+        triage_note = f"\n\nLLM triage verdict: {req.triage_verdict.upper()} ({conf_pct}% confidence{insight_note}; {actionability_pct}% actionable)"
 
     summary_tail = {
         "duplicate": "These files appear to be near-duplicates. Review and merge into one canonical location.",
@@ -3868,6 +3996,7 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
         "summary": (
             f"Semantic analysis detected {req.edge_count} cross-repo similarity connections between "
             f"'{req.cluster_a}' and '{req.cluster_b}' (avg {round(req.avg_similarity * 100)}% similar).{triage_note}\n\n"
+            f"{decision_impact + chr(10) + chr(10) if decision_impact else ''}"
             f"Top overlapping content:\n{pairs_text}\n\n"
             f"{summary_tail}"
         ),
