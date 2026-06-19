@@ -435,6 +435,121 @@ def test_graph_full_workspace_knowledge_lens_prioritizes_decision_files(monkeypa
     assert body["signal_counts"]["evidence"] == 1
 
 
+def test_graph_map_decision_overlay_marks_summary_and_full_nodes(monkeypatch, tmp_path: Path) -> None:
+    app_a = tmp_path / "code" / "app-a"
+    app_b = tmp_path / "code" / "app-b"
+    state_dir = tmp_path / "state"
+    rec_dir = state_dir / "recommendations"
+    action_dir = state_dir / "action-queue"
+    rec_dir.mkdir(parents=True)
+    action_dir.mkdir(parents=True)
+    graph = tmp_path / "decision-overlay-graph.json"
+    graph.write_text(json.dumps({
+        "nodes": [
+            {
+                "id": "a-readme",
+                "label": "README",
+                "source_file": "README.md",
+                "file_type": "document",
+                "source_root": str(app_a),
+                "source_root_name": "app-a",
+                "repo_project_name": "app-a",
+            },
+            {
+                "id": "a-route",
+                "label": "users route",
+                "source_file": "src/routes/users.py",
+                "file_type": "code",
+                "source_root": str(app_a),
+                "source_root_name": "app-a",
+                "repo_project_name": "app-a",
+            },
+            {
+                "id": "b-readme",
+                "label": "README",
+                "source_file": "README.md",
+                "file_type": "document",
+                "source_root": str(app_b),
+                "source_root_name": "app-b",
+                "repo_project_name": "app-b",
+            },
+        ],
+        "links": [
+            {"source": "a-readme", "target": "a-route", "relation": "documents"},
+            {"source": "a-route", "target": "b-readme", "relation": "references"},
+        ],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    decisions = state_dir / "decisions.json"
+    decisions.write_text(json.dumps([
+        {
+            "id": "decision-app-a",
+            "target_id": "app-a",
+            "label": "App A",
+            "classification": "invest",
+            "rationale": "This is the canonical route boundary.",
+            "status": "active",
+            "created_at": "2026-06-18T12:00:00+00:00",
+            "updated_at": "2026-06-18T12:00:00+00:00",
+        }
+    ]))
+    (rec_dir / "rec-app-a.json").write_text(json.dumps({
+        "id": "rec-app-a",
+        "mode": "next-build",
+        "title": "Document app-a route boundary",
+        "summary": "App A should become the canonical route boundary.",
+        "evidence": ["app-a", "src/routes/users.py"],
+        "status": "accepted",
+        "proposed_action": "Document the app-a route boundary before merging adjacent work.",
+        "created_at": "2026-06-18T12:05:00+00:00",
+        "updated_at": "2026-06-18T12:05:00+00:00",
+    }))
+    (action_dir / "action-app-a.json").write_text(json.dumps({
+        "id": "action-app-a",
+        "source_recommendation_id": "rec-app-a",
+        "status": "pending",
+        "action_type": "create_note",
+        "description": "Create note: app-a route boundary",
+        "proposed_action_text": "Create a note for app-a route boundary ownership.",
+        "evidence": ["app-a", "src/routes/users.py"],
+        "created_at": "2026-06-18T12:10:00+00:00",
+        "updated_at": "2026-06-18T12:10:00+00:00",
+    }))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "DECISIONS_FILE", decisions)
+    monkeypatch.setattr(main, "RECOMMENDATIONS_DIR", rec_dir)
+    monkeypatch.setattr(main, "ACTION_QUEUE_DIR", action_dir)
+    monkeypatch.setattr(main, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+    client = TestClient(main.app)
+
+    overview = client.get("/graph/summary", params={"min_weight": 1}).json()
+    by_label = {node["label"]: node for node in overview["nodes"]}
+
+    assert by_label["app-a"]["decision_classification"] == "invest"
+    assert by_label["app-a"]["decision_overlay"]["decision_count"] == 1
+    assert by_label["app-a"]["decision_overlay"]["recommendation_count"] == 1
+    assert by_label["app-a"]["decision_overlay"]["queued_action_count"] == 1
+    assert by_label["app-a"]["decision_overlay"]["recommendations"][0]["id"] == "rec-app-a"
+    assert by_label["app-a"]["decision_overlay"]["queued_actions"][0]["id"] == "action-app-a"
+    assert by_label["app-b"]["decision_overlay"]["decision_count"] == 0
+
+    full = client.get("/graph/full").json()
+    full_by_id = {node["id"]: node for node in full["nodes"]}
+
+    assert full_by_id["a-route"]["decision_classification"] == "invest"
+    assert full_by_id["a-route"]["decision_overlay"]["decision_count"] == 1
+    assert full_by_id["a-route"]["decision_overlay"]["recommendation_count"] == 1
+    assert full_by_id["a-route"]["decision_overlay"]["queued_action_count"] == 1
+    assert full_by_id["b-readme"]["decision_overlay"]["decision_count"] == 0
+
+
 def test_graph_full_rejects_oversized_default_payload(monkeypatch, tmp_path: Path) -> None:
     graph = tmp_path / "graph.json"
     graph.write_text(json.dumps({

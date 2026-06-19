@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-18T17:21:54-06:00
-Status: Slice 4 file-importance, importance criteria table, and workspace knowledge lens task complete; next active work is Slice 5 decision overlay
+Last Updated: 2026-06-18T17:37:36-06:00
+Status: Slice 5 decision overlay task complete; next active work is owner review and post-review tuning
 Owner: Adam Goodwin
 
 ## Purpose
@@ -26,11 +26,11 @@ as first-class nodes.
 
 ## Current State
 
-Closeout note 2026-06-18T17:14:07-06:00: this plan is the active continuation
+Closeout note 2026-06-18T17:37:36-06:00: this plan is the active continuation
 plan after `START_HERE.md`. The scope-focus examples used for smoke testing
-are not product fixtures. Adam's latest owner direction is that workspace-scale
-maps need an explicit file-importance model so dependency/type/generated noise
-does not crowd out the real decision and knowledge surface.
+are not product fixtures. Slices 1-5 now give the Map a broad relationship
+layer, broad-safe overlap review, gap triage, a file-importance knowledge
+lens, and a first decision overlay.
 
 Completed foundations:
 
@@ -65,6 +65,10 @@ Completed foundations:
 - A static `Importance Criteria Table` tab now sits between `Scope` and `Map`
   to show how file importance is ranked and why files are shown, held, hidden,
   or excluded.
+- Summary groups and full/drilldown nodes now carry a compact decision overlay
+  derived from active decisions, relevant recommendations, and queued actions.
+  Map nodes glow by primary decision classification, and selected node details
+  show the related decision context.
 
 Historical evidence lives in `docs/workspace-scope-and-signal-plan.md`.
 Completed stabilization evidence lives in `docs/stabilization-plan.md`.
@@ -89,19 +93,14 @@ answer:
 The map is only partway to that product intent.
 
 The latest fixes prevent stale scope maps, make broad Overlap usable without
-loading full Evidence mode, and make gap triage actionable.
+loading full Evidence mode, make gap triage actionable, separate file
+importance from raw file inclusion, and surface existing decisions plus
+follow-up work directly in the map.
 
-Owner review found the next practical blocker: at large workspace scale, the
-map can still feel like a raw technical artifact dump. File inclusion is
-folder-first and signal-tiered, but it does not yet expose a clear enough
-importance model for deciding which files matter across major projects.
-Dependency type files, generated type shims, fixtures, lockfiles, ordinary leaf
-source, and other low-signal evidence need better separation from decision
-anchors and cross-project contracts.
-
-The map now has a first-pass workspace knowledge lens. Decision overlay is the
-next blocker for making prior classifications, recommendations, and queued
-actions visible in the relationship map.
+The remaining practical blocker is owner review on real broad workspaces:
+the decision overlay and importance classifier are intentionally heuristic and
+should be tuned where project-specific contracts, implementation boundaries,
+or recommendation evidence match too broadly or too narrowly.
 
 ## Next Implementation Slices
 
@@ -352,7 +351,7 @@ Follow-up watch point:
 
 ### Slice 5 - Decision Overlay
 
-Status: planned.
+Status: task complete 2026-06-18T17:37:36-06:00.
 
 Goal: make decisions visible on the relationship map.
 
@@ -364,6 +363,49 @@ Expected behavior:
   queued actions.
 - The map should help decide what to invest in, merge, document, archive, or
   leave alone.
+
+Delivered behavior:
+
+- `/graph/summary` now derives a compact `decision_overlay` for each summary
+  group from active decisions, non-rejected recommendations, and queued actions.
+  Group overlays aggregate child node ids, labels, repos, clusters, source
+  roots, and paths so a decision on `app-a` can light up the `app-a` group.
+- `/graph/full` attaches the same overlay shape to drilldown/full nodes. Node
+  matching includes exact ids/labels/repos/clusters first and path containment
+  for file or project paths.
+- `backend/map_decision_overlay.py` owns the pure overlay matching and compact
+  record shaping, while `backend/main.py` only loads current records and
+  attaches overlay payloads to graph responses.
+- Summary cache keys include an overlay state hash, so newly recorded
+  decisions, recommendations, or actions do not stay hidden behind a stale
+  summary response.
+- `Map` now uses backend `decision_overlay.decision_classification` for summary
+  and full-node decision glows, with the existing local decision fetch retained
+  as a fallback while saving new gap decisions.
+- Selected summary groups and full nodes now show a `Decision Context` block
+  with matched decisions, recommendations, queued actions, and compact next
+  action text.
+
+Validation:
+
+- `bash scripts/governance-preflight.sh`: passed with 0 warnings
+- `backend/.venv/bin/python -m pytest tests/test_graphify_service.py::test_graph_map_decision_overlay_marks_summary_and_full_nodes -q`:
+  1 passed
+- `backend/.venv/bin/python -m pytest tests/test_graphify_service.py -q`:
+  25 passed
+- `backend/.venv/bin/python -m pytest tests -q`: 76 passed
+- `backend/.venv/bin/python -m compileall -q -x 'backend/.venv|__pycache__' backend`:
+  passed
+- `source ~/.nvm/nvm.sh && npm --prefix frontend run typecheck`: passed
+- `source ~/.nvm/nvm.sh && npm --prefix frontend run build`: passed
+- `git diff --check`: passed
+- `graphify update . --no-cluster`: rebuilt 1,589 nodes and 80,369 edges
+
+Follow-up watch point:
+
+- Overlay matching is intentionally compact and heuristic. After Adam reviews a
+  real broad workspace, tune cases where a decision should inherit into a
+  module/file node or where recommendation evidence is too broad.
 
 ## Non-Goals
 
@@ -383,7 +425,7 @@ For the next coding session:
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md` only as the top-level router.
 4. Read this file: `docs/relationship-map-plan.md`.
-5. Start with Slice 5 - Decision Overlay unless Adam redirects.
+5. Start with owner review or post-review tuning unless Adam redirects.
 
 Avoid loading the long historical plans unless investigating a regression:
 

@@ -44,6 +44,11 @@ interface SummaryNode {
   gap_evidence?: string[];
   gap_actions?: string[];
   connections?: SummaryConnection[];
+  decision_classification?: DecisionClassification | "";
+  decision_count?: number;
+  recommendation_count?: number;
+  queued_action_count?: number;
+  decision_overlay?: DecisionOverlay;
 }
 
 type GapType =
@@ -64,6 +69,51 @@ interface SummaryConnection {
   label: string;
   weight: number;
   relations: string[];
+}
+
+interface OverlayDecision {
+  id: string;
+  target_id: string;
+  label: string;
+  classification: DecisionClassification | string;
+  rationale?: string;
+  status?: string;
+  updated_at?: string;
+}
+
+interface OverlayRecommendation {
+  id: string;
+  title: string;
+  mode?: string;
+  status?: string;
+  summary?: string;
+  proposed_action?: string;
+  confidence?: number;
+  risk?: string;
+  effort?: string;
+  updated_at?: string;
+}
+
+interface OverlayAction {
+  id: string;
+  source_recommendation_id?: string;
+  status?: string;
+  action_type?: string;
+  description?: string;
+  proposed_action_text?: string;
+  target_path?: string;
+  updated_at?: string;
+}
+
+interface DecisionOverlay {
+  decision_classification?: DecisionClassification | "";
+  decision_count: number;
+  recommendation_count: number;
+  queued_action_count: number;
+  decisions: OverlayDecision[];
+  recommendations: OverlayRecommendation[];
+  queued_actions: OverlayAction[];
+  next_actions?: string[];
 }
 
 interface GraphSummary {
@@ -117,6 +167,11 @@ interface FullNode {
   signal_reason?: string;
   importance_tier?: "anchor" | "interface" | "important" | "evidence" | "hidden" | "excluded";
   importance_reason?: string;
+  decision_classification?: DecisionClassification | "";
+  decision_count?: number;
+  recommendation_count?: number;
+  queued_action_count?: number;
+  decision_overlay?: DecisionOverlay;
   source_excerpt?: {
     start_line: number | null;
     lines: string[];
@@ -414,6 +469,112 @@ function overlapSummaryGroups(response: OverlapSummaryResponse | null): OverlapG
 const DECISION_META = Object.fromEntries(
   DECISION_CLASSIFICATIONS.map((c) => [c.id, { label: c.label, color: c.color }]),
 ) as Record<string, { label: string; color: string }>;
+
+function decisionMeta(classification?: string) {
+  return classification ? DECISION_META[classification] : undefined;
+}
+
+function hasDecisionOverlay(overlay?: DecisionOverlay | null): overlay is DecisionOverlay {
+  if (!overlay) return false;
+  return Boolean(
+    overlay.decision_count
+    || overlay.recommendation_count
+    || overlay.queued_action_count
+    || (overlay.next_actions?.length ?? 0),
+  );
+}
+
+function overlayStatusText(status?: string): string {
+  return presentValue(status).replace(/-/g, " ");
+}
+
+function DecisionContextBlock({ overlay }: { overlay?: DecisionOverlay | null }) {
+  if (!hasDecisionOverlay(overlay)) return null;
+  return (
+    <div className="map-decision-context">
+      <div className="map-decision-context-head">
+        <span>Decision Context</span>
+        <strong>
+          {overlay.decision_count}D · {overlay.recommendation_count}R · {overlay.queued_action_count}Q
+        </strong>
+      </div>
+
+      {overlay.decisions.length > 0 && (
+        <div className="map-decision-context-section">
+          {overlay.decisions.map((decision) => {
+            const meta = decisionMeta(decision.classification);
+            return (
+              <div className="map-decision-context-card" key={decision.id}>
+                <div className="map-decision-context-card-head">
+                  <span>{decision.label || decision.target_id}</span>
+                  {meta && (
+                    <strong style={{ color: meta.color, borderColor: meta.color }}>
+                      {meta.label}
+                    </strong>
+                  )}
+                </div>
+                {decision.rationale && <p>{decision.rationale}</p>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {overlay.recommendations.length > 0 && (
+        <div className="map-decision-context-section">
+          <div className="map-decision-context-label">Recommendations</div>
+          {overlay.recommendations.map((rec) => (
+            <div className="map-decision-context-card" key={rec.id}>
+              <div className="map-decision-context-card-head">
+                <span>{rec.title || rec.id}</span>
+                <strong>{overlayStatusText(rec.status)}</strong>
+              </div>
+              {(rec.proposed_action || rec.summary) && (
+                <p>{rec.proposed_action || rec.summary}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {overlay.queued_actions.length > 0 && (
+        <div className="map-decision-context-section">
+          <div className="map-decision-context-label">Queued Actions</div>
+          {overlay.queued_actions.map((action) => (
+            <div className="map-decision-context-card" key={action.id}>
+              <div className="map-decision-context-card-head">
+                <span>{action.description || action.action_type || action.id}</span>
+                <strong>{overlayStatusText(action.status)}</strong>
+              </div>
+              {action.proposed_action_text && <p>{action.proposed_action_text}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {overlay.next_actions && overlay.next_actions.length > 0 && (
+        <div className="map-decision-next-actions">
+          {overlay.next_actions.slice(0, 3).map((action, index) => (
+            <span key={`${action}-${index}`}>{action}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DecisionBadge({ classification }: { classification?: string }) {
+  const meta = decisionMeta(classification);
+  if (!meta) return null;
+  return (
+    <span
+      className="map-decision-badge"
+      style={{ color: meta.color, borderColor: meta.color }}
+    >
+      {meta.label}
+    </span>
+  );
+}
 
 // ── Cytoscape stylesheet ──────────────────────────────────────────────────
 
@@ -713,7 +874,7 @@ function buildElements(
   const ringPositions = buildRingPositions(summary.nodes);
 
   const nodes = summary.nodes.map((n) => {
-    const dec = decisions[n.id];
+    const dec = n.decision_overlay?.decision_classification || n.decision_classification || decisions[n.id];
     return {
       data: {
         id: n.id,
@@ -727,6 +888,9 @@ function buildElements(
         connection_count: n.connection_count ?? 0,
         connection_weight: n.connection_weight ?? 0,
         is_gap: Boolean(n.is_gap),
+        decision_count: n.decision_overlay?.decision_count ?? n.decision_count ?? 0,
+        recommendation_count: n.decision_overlay?.recommendation_count ?? n.recommendation_count ?? 0,
+        queued_action_count: n.decision_overlay?.queued_action_count ?? n.queued_action_count ?? 0,
         // log₂ scaling: 1→36px, 100→66px, 10k→108px, 23k→126px
         size: Math.max(36, Math.min(126, Math.log2(n.node_count + 2) * 15)),
         god_node: godNodeIds.has(n.id),
@@ -813,6 +977,10 @@ function buildFullElements(full: FullGraph, filter: Filter, selectedClusters: Se
         cluster: n.cluster,
         source_file: n.source_file,
         color: clusterColor(n.cluster),
+        decision: n.decision_overlay?.decision_classification || n.decision_classification || "",
+        decision_count: n.decision_overlay?.decision_count ?? n.decision_count ?? 0,
+        recommendation_count: n.decision_overlay?.recommendation_count ?? n.recommendation_count ?? 0,
+        queued_action_count: n.decision_overlay?.queued_action_count ?? n.queued_action_count ?? 0,
       },
     }));
 
@@ -860,6 +1028,67 @@ const FULL_CY_STYLE: object[] = [
   {
     selector: "node:hover",
     style: { "border-width": 2, "border-color": "#fff", width: 13, height: 13 },
+  },
+  {
+    selector: 'node[decision="invest"]',
+    style: {
+      "border-color": "#4ade80",
+      "border-width": 2.5,
+      "shadow-blur": 16,
+      "shadow-color": "#4ade80",
+      "shadow-opacity": 0.65,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
+  {
+    selector: 'node[decision="client-ready"]',
+    style: {
+      "border-color": "#f5d280",
+      "border-width": 2.5,
+      "shadow-blur": 16,
+      "shadow-color": "#f5d280",
+      "shadow-opacity": 0.65,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
+  {
+    selector: 'node[decision="monitor"]',
+    style: {
+      "border-color": "#6b8cff",
+      "border-width": 2.5,
+      "shadow-blur": 14,
+      "shadow-color": "#6b8cff",
+      "shadow-opacity": 0.6,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
+  },
+  {
+    selector: 'node[decision="archive"]',
+    style: {
+      "border-color": "#9ca3af",
+      "border-width": 2,
+      "shadow-blur": 8,
+      "shadow-color": "#9ca3af",
+      "shadow-opacity": 0.35,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+      opacity: 0.62,
+    },
+  },
+  {
+    selector: 'node[decision="paused"]',
+    style: {
+      "border-color": "#f97316",
+      "border-width": 2.5,
+      "shadow-blur": 14,
+      "shadow-color": "#f97316",
+      "shadow-opacity": 0.55,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+    },
   },
   {
     selector: "node.selected",
@@ -3000,6 +3229,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               >
                 {importanceTierLabel(selectedFull.importance_tier)}
               </span>
+              <DecisionBadge classification={selectedFull.decision_overlay?.decision_classification || selectedFull.decision_classification} />
             </div>
 
             <div className="map-inspector-block">
@@ -3008,6 +3238,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 {selectedFull.purpose || `${selectedFull.label} is a ${selectedFull.type} node. Source detail is limited for this item.`}
               </p>
             </div>
+
+            <DecisionContextBlock overlay={selectedFull.decision_overlay} />
 
             <div className="map-provenance-grid">
               <div className="map-provenance-row">
@@ -3130,17 +3362,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                   Gap
                 </span>
               )}
-              {decisions[selected.id] && (() => {
-                const meta = DECISION_META[decisions[selected.id]];
-                return meta ? (
-                  <span
-                    className="map-decision-badge"
-                    style={{ color: meta.color, borderColor: meta.color }}
-                  >
-                    {meta.label}
-                  </span>
-                ) : null;
-              })()}
+              <DecisionBadge classification={selected.decision_overlay?.decision_classification || selected.decision_classification || decisions[selected.id]} />
             </div>
 
             <div className="map-panel-stats">
@@ -3188,6 +3410,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 <span>Docs</span>
               </div>
             </div>
+
+            <DecisionContextBlock overlay={selected.decision_overlay} />
 
             {selected.is_gap && (
               <div className="map-gap-triage">

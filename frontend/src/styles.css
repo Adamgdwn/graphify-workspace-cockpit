@@ -1974,6 +1974,107 @@ body {
   vertical-align: middle;
 }
 
+.map-decision-context {
+  margin: 10px 15px 14px;
+  padding: 10px;
+  border: 1px solid rgba(107, 140, 255, 0.32);
+  border-radius: 6px;
+  background: rgba(9, 14, 28, 0.72);
+}
+
+.map-decision-context-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #9ab0e0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.map-decision-context-head strong {
+  flex-shrink: 0;
+  color: #c7d4f4;
+  font-family: ui-monospace, monospace;
+  font-size: 0.68rem;
+}
+
+.map-decision-context-section {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.map-decision-context-label {
+  color: #58627d;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.map-decision-context-card {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #1d2741;
+  border-radius: 5px;
+  background: #0d1020;
+}
+
+.map-decision-context-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.map-decision-context-card-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: #c0cce8;
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-decision-context-card-head strong {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 4px;
+  color: #8aa0c8;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.map-decision-context-card p {
+  margin: 6px 0 0;
+  color: #8794b5;
+  font-size: 0.7rem;
+  line-height: 1.42;
+}
+
+.map-decision-next-actions {
+  display: grid;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.map-decision-next-actions span {
+  padding-left: 8px;
+  border-left: 2px solid rgba(107, 140, 255, 0.42);
+  color: #a9b8dc;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
 /* ── Overlap Analysis Panel ─────────────────────────────────────────────── */
 
 .map-overlap-panel {

@@ -24,6 +24,12 @@ try:
     from backend.app import create_app
     from backend.auth import APIKeyMiddleware
     from backend.graph_schema import GraphValidationError, count_links, normalize_graph
+    from backend.map_decision_overlay import (
+        build_decision_overlay_context,
+        decision_overlay_for_terms,
+        overlay_add_term,
+        overlay_terms_for_node,
+    )
     from backend.routes import ask as _ask_routes
     from backend.routes import chat as _chat_routes
     from backend.routes import cluster_selection as _cluster_selection_routes
@@ -56,6 +62,12 @@ except ModuleNotFoundError:
     from app import create_app
     from auth import APIKeyMiddleware
     from graph_schema import GraphValidationError, count_links, normalize_graph
+    from map_decision_overlay import (
+        build_decision_overlay_context,
+        decision_overlay_for_terms,
+        overlay_add_term,
+        overlay_terms_for_node,
+    )
     from routes import ask as _ask_routes
     from routes import chat as _chat_routes
     from routes import cluster_selection as _cluster_selection_routes
@@ -760,6 +772,26 @@ def _scope_ask_evidence(evidence: list[dict]) -> list[dict]:
     return scoped
 
 
+def _map_decision_overlay_context() -> dict:
+    try:
+        decisions = _load_decisions()
+    except Exception:
+        decisions = []
+    try:
+        recommendations = _load_recommendations()
+    except Exception:
+        recommendations = []
+    try:
+        actions = _load_all_actions()
+    except Exception:
+        actions = []
+    return build_decision_overlay_context(
+        decisions=decisions,
+        recommendations=recommendations,
+        actions=actions,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -856,7 +888,8 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
     sel_sources = selection.get("sources", ["local", "sharepoint", "onenote"])
     sel_clusters = selection.get("clusters")
     sel_hash = hashlib.md5(json.dumps(selection, sort_keys=True).encode()).hexdigest()[:8]
-    cache_key = f"{project}:{min_weight}:{sel_hash}"
+    overlay_context = _map_decision_overlay_context()
+    cache_key = f"{project}:{min_weight}:{sel_hash}:{overlay_context['hash']}"
     if cache_key in _summary_cache:
         return _summary_cache[cache_key]
 
@@ -938,10 +971,19 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         and str(n.get("signal_tier") or "evidence") != "excluded"
     }
     hidden_counts: Counter[str] = Counter()
+    cluster_overlay_terms: dict[str, set[str]] = defaultdict(set)
     for n in selected_node_map.values():
+        cluster = get_cluster(n)
+        if cluster in valid_ids:
+            cluster_overlay_terms[cluster].update(
+                overlay_terms_for_node(
+                    n,
+                    workspace_label=_node_workspace_label(n),
+                    cluster_id=_node_cluster_id(n),
+                )
+            )
         if is_visible_signal_node(n):
             continue
-        cluster = get_cluster(n)
         if cluster in valid_ids:
             hidden_counts[cluster] += 1
 
@@ -1034,6 +1076,15 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
         )
     for node in summary_nodes:
         node_id = str(node["id"])
+        overlay_terms = set(cluster_overlay_terms.get(node_id, set()))
+        overlay_add_term(overlay_terms, node_id)
+        overlay_add_term(overlay_terms, node.get("label"))
+        overlay = decision_overlay_for_terms(overlay_terms, overlay_context)
+        node["decision_overlay"] = overlay
+        node["decision_classification"] = overlay.get("decision_classification", "")
+        node["decision_count"] = overlay.get("decision_count", 0)
+        node["recommendation_count"] = overlay.get("recommendation_count", 0)
+        node["queued_action_count"] = overlay.get("queued_action_count", 0)
         node["connection_count"] = connection_counts[node_id]
         node["connection_weight"] = connection_weights[node_id]
         node["is_gap"] = len(summary_nodes) > 1 and connection_counts[node_id] == 0
@@ -1262,6 +1313,7 @@ def graph_full(
             },
         )
 
+    overlay_context = _map_decision_overlay_context()
     nodes = []
     for n in all_nodes:
         if n.get("id") not in visible_node_ids:
@@ -1270,7 +1322,7 @@ def graph_full(
         source_location = n.get("source_location", "")
         _, source_root, relative_path = _resolve_source(source_file)
         excerpt = _read_node_excerpt(source_file, source_location)
-        nodes.append({
+        node_payload = {
             "id": n["id"],
             "label": n.get("label", n["id"]),
             "type": n.get("file_type", "code"),
@@ -1291,7 +1343,19 @@ def graph_full(
             "signal_reason": n.get("signal_reason", "supporting evidence"),
             "importance_tier": n.get("importance_tier", "evidence"),
             "importance_reason": n.get("importance_reason", n.get("signal_reason", "supporting evidence")),
-        })
+        }
+        overlay_terms = overlay_terms_for_node(
+            {**n, **node_payload},
+            workspace_label=_node_workspace_label(n),
+            cluster_id=_node_cluster_id(n),
+        )
+        node_overlay = decision_overlay_for_terms(overlay_terms, overlay_context)
+        node_payload["decision_overlay"] = node_overlay
+        node_payload["decision_classification"] = node_overlay.get("decision_classification", "")
+        node_payload["decision_count"] = node_overlay.get("decision_count", 0)
+        node_payload["recommendation_count"] = node_overlay.get("recommendation_count", 0)
+        node_payload["queued_action_count"] = node_overlay.get("queued_action_count", 0)
+        nodes.append(node_payload)
 
     seen: set[str] = set()
     edges = []
