@@ -1058,6 +1058,17 @@ const FULL_FCOSE_LAYOUT = {
   packComponents: true,
 };
 
+const FULL_FAST_LAYOUT = {
+  name: "preset",
+  fit: true,
+  padding: 60,
+  animate: false,
+};
+
+const FULL_FAST_LAYOUT_NODE_THRESHOLD = 900;
+const FULL_FAST_LAYOUT_MULTI_REPO_THRESHOLD = 600;
+const FULL_FAST_LAYOUT_EDGE_THRESHOLD = 1600;
+
 const SEMANTIC_EDGE_DISPLAY_LIMIT = 2000;
 const SEMANTIC_BACKBONE_NEIGHBOR_LIMIT = 4;
 const SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT = 6;
@@ -1120,30 +1131,174 @@ function buildSemanticBackbone(edges: SemanticEdge[]): SemanticEdge[] {
   return selected.length ? selected : sortedEdges.slice(0, SEMANTIC_EDGE_DISPLAY_LIMIT);
 }
 
-function buildFullElements(full: FullGraph, filter: Filter, selectedClusters: Set<string> | null = null) {
-  const visibleIds = new Set(
-    full.nodes
-      .filter((n) => filter === "all" || n.type === filter)
-      .filter((n) => selectedClusters === null || selectedClusters.has(n.cluster))
-      .map((n) => n.id)
-  );
+function fullNodeRepo(node: FullNode): string {
+  return node.repo || node.source_root_name || node.source_root || node.cluster || "workspace";
+}
 
-  const nodes = full.nodes
-    .filter((n) => visibleIds.has(n.id))
-    .map((n) => ({
-      data: {
-        id: n.id,
-        label: n.label,
-        type: n.type,
-        cluster: n.cluster,
-        source_file: n.source_file,
-        color: clusterColor(n.cluster),
-        decision: n.decision_overlay?.decision_classification || n.decision_classification || "",
-        decision_count: n.decision_overlay?.decision_count ?? n.decision_count ?? 0,
-        recommendation_count: n.decision_overlay?.recommendation_count ?? n.recommendation_count ?? 0,
-        queued_action_count: n.decision_overlay?.queued_action_count ?? n.queued_action_count ?? 0,
-      },
-    }));
+function fullNodeContainer(node: FullNode): string {
+  const pathHead = (node.relative_path || node.source_file || "")
+    .replace(/\\/g, "/")
+    .split("/")
+    .filter(Boolean)[0];
+  return node.container || pathHead || node.type || "root";
+}
+
+function visibleFullNodes(full: FullGraph, filter: Filter, selectedClusters: Set<string> | null = null): FullNode[] {
+  return full.nodes
+    .filter((n) => filter === "all" || n.type === filter)
+    .filter((n) => selectedClusters === null || selectedClusters.has(n.cluster));
+}
+
+function visibleFullEdgeCount(full: FullGraph, visibleIds: Set<string>): number {
+  const seen = new Set<string>();
+  let count = 0;
+  for (const edge of full.edges) {
+    if (!visibleIds.has(edge.source) || !visibleIds.has(edge.target)) continue;
+    const key = `${edge.source}::${edge.target}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    count += 1;
+  }
+  return count;
+}
+
+function shouldUseFastFullLayout(full: FullGraph, filter: Filter, selectedClusters: Set<string> | null = null): boolean {
+  const nodes = visibleFullNodes(full, filter, selectedClusters);
+  const visibleIds = new Set(nodes.map((node) => node.id));
+  const repoCount = new Set(nodes.map(fullNodeRepo)).size;
+  return (
+    nodes.length >= FULL_FAST_LAYOUT_NODE_THRESHOLD
+    || (repoCount > 1 && nodes.length >= FULL_FAST_LAYOUT_MULTI_REPO_THRESHOLD)
+    || visibleFullEdgeCount(full, visibleIds) >= FULL_FAST_LAYOUT_EDGE_THRESHOLD
+  );
+}
+
+function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number; y: number }> {
+  const positions: Record<string, { x: number; y: number }> = {};
+  const nodeSpacing = 26;
+  const groupGap = 92;
+  const repoGap = 240;
+  const repoTargetWidth = (count: number) => Math.max(760, Math.ceil(Math.sqrt(count)) * nodeSpacing * 1.75);
+
+  const repos = new globalThis.Map<string, FullNode[]>();
+  for (const node of nodes) {
+    const key = fullNodeRepo(node);
+    const bucket = repos.get(key);
+    if (bucket) bucket.push(node);
+    else repos.set(key, [node]);
+  }
+
+  const repoLayouts = [...repos.entries()]
+    .sort(([repoA, nodesA], [repoB, nodesB]) => nodesB.length - nodesA.length || repoA.localeCompare(repoB))
+    .map(([repo, repoNodes]) => {
+      const containers = new globalThis.Map<string, FullNode[]>();
+      for (const node of repoNodes) {
+        const key = fullNodeContainer(node);
+        const bucket = containers.get(key);
+        if (bucket) bucket.push(node);
+        else containers.set(key, [node]);
+      }
+
+      const groups = [...containers.entries()]
+        .sort(([containerA, nodesA], [containerB, nodesB]) => nodesB.length - nodesA.length || containerA.localeCompare(containerB))
+        .map(([container, groupNodes]) => {
+          const sortedNodes = [...groupNodes].sort((a, b) => (
+            (a.relative_path || a.source_file || a.id).localeCompare(b.relative_path || b.source_file || b.id)
+          ));
+          const cols = Math.max(3, Math.ceil(Math.sqrt(sortedNodes.length * 1.2)));
+          const rows = Math.ceil(sortedNodes.length / cols);
+          return {
+            container,
+            nodes: sortedNodes,
+            cols,
+            rows,
+            width: Math.max(120, (cols - 1) * nodeSpacing),
+            height: Math.max(90, (rows - 1) * nodeSpacing),
+          };
+        });
+
+      const targetWidth = repoTargetWidth(repoNodes.length);
+      let cursorX = 0;
+      let cursorY = 0;
+      let rowHeight = 0;
+      let width = 0;
+
+      const placedGroups = groups.map((group) => {
+        if (cursorX > 0 && cursorX + group.width > targetWidth) {
+          cursorX = 0;
+          cursorY += rowHeight + groupGap;
+          rowHeight = 0;
+        }
+        const placed = { ...group, x: cursorX, y: cursorY };
+        cursorX += group.width + groupGap;
+        rowHeight = Math.max(rowHeight, group.height);
+        width = Math.max(width, placed.x + group.width);
+        return placed;
+      });
+
+      return {
+        groups: placedGroups,
+        width: Math.max(targetWidth, width),
+        height: cursorY + rowHeight,
+      };
+    });
+
+  const totalNodeCount = Math.max(1, nodes.length);
+  const workspaceTargetWidth = Math.max(1800, Math.ceil(Math.sqrt(totalNodeCount)) * nodeSpacing * 3);
+  let repoCursorX = 0;
+  let repoCursorY = 0;
+  let repoRowHeight = 0;
+
+  for (const repoLayout of repoLayouts) {
+    if (repoCursorX > 0 && repoCursorX + repoLayout.width > workspaceTargetWidth) {
+      repoCursorX = 0;
+      repoCursorY += repoRowHeight + repoGap;
+      repoRowHeight = 0;
+    }
+
+    for (const group of repoLayout.groups) {
+      group.nodes.forEach((node, index) => {
+        const col = index % group.cols;
+        const row = Math.floor(index / group.cols);
+        positions[node.id] = {
+          x: repoCursorX + group.x + col * nodeSpacing,
+          y: repoCursorY + group.y + row * nodeSpacing,
+        };
+      });
+    }
+
+    repoCursorX += repoLayout.width + repoGap;
+    repoRowHeight = Math.max(repoRowHeight, repoLayout.height);
+  }
+
+  return positions;
+}
+
+function buildFullElements(
+  full: FullGraph,
+  filter: Filter,
+  selectedClusters: Set<string> | null = null,
+  usePresetPositions = false,
+) {
+  const visibleNodes = visibleFullNodes(full, filter, selectedClusters);
+  const visibleIds = new Set(visibleNodes.map((n) => n.id));
+  const positions = usePresetPositions ? buildFullPresetPositions(visibleNodes) : {};
+
+  const nodes = visibleNodes.map((n) => ({
+    data: {
+      id: n.id,
+      label: n.label,
+      type: n.type,
+      cluster: n.cluster,
+      source_file: n.source_file,
+      color: clusterColor(n.cluster),
+      decision: n.decision_overlay?.decision_classification || n.decision_classification || "",
+      decision_count: n.decision_overlay?.decision_count ?? n.decision_count ?? 0,
+      recommendation_count: n.decision_overlay?.recommendation_count ?? n.recommendation_count ?? 0,
+      queued_action_count: n.decision_overlay?.queued_action_count ?? n.queued_action_count ?? 0,
+    },
+    ...(positions[n.id] ? { position: positions[n.id] } : {}),
+  }));
 
   const seen = new Set<string>();
   const edges = full.edges
@@ -2112,9 +2267,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     cyRef.current?.destroy();
     cyRef.current = null;
 
+    const useFastLayout = shouldUseFastFullLayout(fullGraph, filter, selectedClusters);
     const cy = cytoscape({
       container: containerRef.current,
-      elements: buildFullElements(fullGraph, filter, selectedClusters),
+      elements: buildFullElements(fullGraph, filter, selectedClusters, useFastLayout),
       style: FULL_CY_STYLE as any,
       pixelRatio: 1,
       minZoom: 0.02,
@@ -2122,13 +2278,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     });
     applyStructuralEdgeVisibility(cy, showStructuralRef.current);
 
-    const finishRender = () => {
-      if (renderFinished) return;
-      renderFinished = true;
-      cy.fit(undefined, 40);
-      finishMapRender(renderCycle);
-    };
+    let semanticEdgesRestored = false;
     const restoreSemanticEdges = () => {
+      if (semanticEdgesRestored) return;
+      semanticEdgesRestored = true;
       if (showSemanticRef.current && visibleSemanticEdgesRef.current.length > 0) {
         const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
         const toAdd = visibleSemanticEdgesRef.current
@@ -2142,11 +2295,17 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       }
       applyStructuralEdgeVisibility(cy, showStructuralRef.current);
     };
-    const layout = cy.layout(FULL_FCOSE_LAYOUT as any);
+    const finishRender = () => {
+      if (renderFinished) return;
+      renderFinished = true;
+      restoreSemanticEdges();
+      cy.fit(undefined, 40);
+      finishMapRender(renderCycle);
+    };
+    const layout = cy.layout((useFastLayout ? FULL_FAST_LAYOUT : FULL_FCOSE_LAYOUT) as any);
     layout.one("layoutstop", finishRender);
-    layout.one("layoutstop", restoreSemanticEdges);
     layout.run();
-    const renderFallback = window.setTimeout(finishRender, 20000);
+    const renderFallback = window.setTimeout(finishRender, useFastLayout ? 2000 : 20000);
 
     cy.on("tap", "node", (e: any) => {
       const node = e.target;
@@ -2702,6 +2861,10 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const knowledgeHiddenCount = fullGraph?.knowledge_hidden_node_count ?? 0;
   const summaryExceedsEvidenceCap = (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
   const broadEvidenceDisabled = !fullGraph && summaryExceedsEvidenceCap;
+  const usingFastFullLayout = useMemo(
+    () => Boolean(fullGraph && viewMode === "full" && shouldUseFastFullLayout(fullGraph, filter, selectedClusters)),
+    [fullGraph, filter, selectedClusters, viewMode],
+  );
   const mapWorkPending = loading || (fullLoading && viewMode === "full") || mapRendering;
   const mapWorkLabel = fullLoading && viewMode === "full"
     ? (knowledgeOnly ? "Loading workspace knowledge" : "Loading full graph")
@@ -2709,7 +2872,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       ? "Rendering map"
       : "Building graph summary";
   const mapWorkDetail = mapRendering && !loading && !(fullLoading && viewMode === "full")
-    ? "Laying out the workspace view"
+    ? usingFastFullLayout
+      ? "Packing selected repos into a broad Evidence view"
+      : "Laying out the workspace view"
     : "First load may take a moment";
   const traceLayerText = viewMode === "full"
     ? showSemantic && semanticEdgesForDisplay.length
