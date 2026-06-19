@@ -238,9 +238,11 @@ function generatedScopeMatchesProfile(
 }
 
 function shouldOpenExpandedEvidence(summary: GraphSummary, project?: string): boolean {
+  const includedCount = summary.workspace_scope?.included_paths?.length ?? 0;
   return (
     !project
-    && (summary.workspace_scope?.included_paths?.length ?? 0) === 1
+    && includedCount >= 1
+    && includedCount <= 3
     && summary.total_nodes <= FULL_GRAPH_NODE_LIMIT
   );
 }
@@ -1173,13 +1175,44 @@ function shouldUseFastFullLayout(full: FullGraph, filter: Filter, selectedCluste
   );
 }
 
-function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number; y: number }> {
-  const positions: Record<string, { x: number; y: number }> = {};
-  const nodeSpacing = 26;
-  const groupGap = 92;
-  const repoGap = 240;
-  const repoTargetWidth = (count: number) => Math.max(760, Math.ceil(Math.sqrt(count)) * nodeSpacing * 1.75);
+function stableLayoutHash(value: string): number {
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = Math.imul(31, hash) + value.charCodeAt(index) | 0;
+  }
+  return Math.abs(hash);
+}
 
+function nodeCloudRadius(count: number): number {
+  if (count <= 1) return 0;
+  return Math.max(34, Math.sqrt(count) * 18);
+}
+
+function placeNodeCloud(
+  nodes: FullNode[],
+  centerX: number,
+  centerY: number,
+  seed: string,
+  positions: Record<string, { x: number; y: number }>,
+) {
+  if (nodes.length === 1) {
+    positions[nodes[0].id] = { x: centerX, y: centerY };
+    return;
+  }
+
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const angleOffset = (stableLayoutHash(seed) % 628) / 100;
+  nodes.forEach((node, index) => {
+    const radius = 18 * Math.sqrt(index + 1);
+    const angle = index * goldenAngle + angleOffset;
+    positions[node.id] = {
+      x: centerX + Math.cos(angle) * radius,
+      y: centerY + Math.sin(angle) * radius,
+    };
+  });
+}
+
+function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number; y: number }> {
   const repos = new globalThis.Map<string, FullNode[]>();
   for (const node of nodes) {
     const key = fullNodeRepo(node);
@@ -1191,6 +1224,7 @@ function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number
   const repoLayouts = [...repos.entries()]
     .sort(([repoA, nodesA], [repoB, nodesB]) => nodesB.length - nodesA.length || repoA.localeCompare(repoB))
     .map(([repo, repoNodes]) => {
+      const localPositions: Record<string, { x: number; y: number }> = {};
       const containers = new globalThis.Map<string, FullNode[]>();
       for (const node of repoNodes) {
         const key = fullNodeContainer(node);
@@ -1201,75 +1235,64 @@ function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number
 
       const groups = [...containers.entries()]
         .sort(([containerA, nodesA], [containerB, nodesB]) => nodesB.length - nodesA.length || containerA.localeCompare(containerB))
-        .map(([container, groupNodes]) => {
-          const sortedNodes = [...groupNodes].sort((a, b) => (
+        .map(([container, groupNodes]) => ({
+          container,
+          nodes: [...groupNodes].sort((a, b) => (
             (a.relative_path || a.source_file || a.id).localeCompare(b.relative_path || b.source_file || b.id)
-          ));
-          const cols = Math.max(3, Math.ceil(Math.sqrt(sortedNodes.length * 1.2)));
-          const rows = Math.ceil(sortedNodes.length / cols);
-          return {
-            container,
-            nodes: sortedNodes,
-            cols,
-            rows,
-            width: Math.max(120, (cols - 1) * nodeSpacing),
-            height: Math.max(90, (rows - 1) * nodeSpacing),
-          };
-        });
+          )),
+          radius: nodeCloudRadius(groupNodes.length),
+        }));
 
-      const targetWidth = repoTargetWidth(repoNodes.length);
-      let cursorX = 0;
-      let cursorY = 0;
-      let rowHeight = 0;
-      let width = 0;
-
-      const placedGroups = groups.map((group) => {
-        if (cursorX > 0 && cursorX + group.width > targetWidth) {
-          cursorX = 0;
-          cursorY += rowHeight + groupGap;
-          rowHeight = 0;
-        }
-        const placed = { ...group, x: cursorX, y: cursorY };
-        cursorX += group.width + groupGap;
-        rowHeight = Math.max(rowHeight, group.height);
-        width = Math.max(width, placed.x + group.width);
-        return placed;
+      const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+      const largestRadius = groups[0]?.radius ?? 0;
+      groups.forEach((group, index) => {
+        const radius = index === 0
+          ? 0
+          : Math.sqrt(index) * Math.max(180, largestRadius * 0.75 + group.radius + 110);
+        const angle = index === 0 ? 0 : index * goldenAngle + (stableLayoutHash(`${repo}:${group.container}`) % 314) / 100;
+        const centerX = Math.cos(angle) * radius;
+        const centerY = Math.sin(angle) * radius;
+        placeNodeCloud(group.nodes, centerX, centerY, `${repo}:${group.container}`, localPositions);
       });
 
+      const coords = Object.values(localPositions);
+      const minX = Math.min(...coords.map((position) => position.x));
+      const maxX = Math.max(...coords.map((position) => position.x));
+      const minY = Math.min(...coords.map((position) => position.y));
+      const maxY = Math.max(...coords.map((position) => position.y));
+      const padding = 140;
       return {
-        groups: placedGroups,
-        width: Math.max(targetWidth, width),
-        height: cursorY + rowHeight,
+        repo,
+        positions: localPositions,
+        bounds: {
+          minX: minX - padding,
+          maxX: maxX + padding,
+          minY: minY - padding,
+          maxY: maxY + padding,
+        },
       };
     });
 
-  const totalNodeCount = Math.max(1, nodes.length);
-  const workspaceTargetWidth = Math.max(1800, Math.ceil(Math.sqrt(totalNodeCount)) * nodeSpacing * 3);
-  let repoCursorX = 0;
-  let repoCursorY = 0;
-  let repoRowHeight = 0;
+  const positions: Record<string, { x: number; y: number }> = {};
+  const repoGap = 520;
+  const repoWidths = repoLayouts.map((layout) => layout.bounds.maxX - layout.bounds.minX);
+  const totalWidth = repoWidths.reduce((sum, width) => sum + width, 0) + repoGap * Math.max(0, repoLayouts.length - 1);
+  let cursorX = -totalWidth / 2;
 
-  for (const repoLayout of repoLayouts) {
-    if (repoCursorX > 0 && repoCursorX + repoLayout.width > workspaceTargetWidth) {
-      repoCursorX = 0;
-      repoCursorY += repoRowHeight + repoGap;
-      repoRowHeight = 0;
+  repoLayouts.forEach((layout, index) => {
+    const width = repoWidths[index] ?? 0;
+    const offsetX = cursorX - layout.bounds.minX;
+    const offsetY = -((layout.bounds.minY + layout.bounds.maxY) / 2);
+
+    for (const [nodeId, position] of Object.entries(layout.positions)) {
+      positions[nodeId] = {
+        x: position.x + offsetX,
+        y: position.y + offsetY,
+      };
     }
 
-    for (const group of repoLayout.groups) {
-      group.nodes.forEach((node, index) => {
-        const col = index % group.cols;
-        const row = Math.floor(index / group.cols);
-        positions[node.id] = {
-          x: repoCursorX + group.x + col * nodeSpacing,
-          y: repoCursorY + group.y + row * nodeSpacing,
-        };
-      });
-    }
-
-    repoCursorX += repoLayout.width + repoGap;
-    repoRowHeight = Math.max(repoRowHeight, repoLayout.height);
-  }
+    cursorX += width + repoGap;
+  });
 
   return positions;
 }
@@ -1612,19 +1635,40 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const showSemanticRef = useRef(false);
   const visibleSemanticEdgesRef = useRef<SemanticEdge[]>([]);
   const showStructuralRef = useRef(true);
-  const nodeClusterMapRef = useRef<Record<string, string>>({});
+  const overlapNodeGroupMapRef = useRef<Record<string, string>>({});
 
   // Cross-cluster node lookup — built once when fullGraph loads
   const nodeClusterMap = useMemo(
     () => Object.fromEntries(fullGraph?.nodes.map((n) => [n.id, n.cluster]) ?? []) as Record<string, string>,
     [fullGraph],
   );
+  const nodeRepoMap = useMemo(
+    () => Object.fromEntries(fullGraph?.nodes.map((n) => [n.id, fullNodeRepo(n)]) ?? []) as Record<string, string>,
+    [fullGraph],
+  );
+  const visibleFullNodeIds = useMemo(
+    () => new Set(fullGraph ? visibleFullNodes(fullGraph, filter, selectedClusters).map((n) => n.id) : []),
+    [fullGraph, filter, selectedClusters],
+  );
+  const visibleRepoCount = useMemo(
+    () => new Set([...visibleFullNodeIds].map((nodeId) => nodeRepoMap[nodeId]).filter(Boolean)).size,
+    [nodeRepoMap, visibleFullNodeIds],
+  );
+  const overlapNodeGroupMap = useMemo(
+    () => Object.fromEntries(
+      fullGraph?.nodes.map((n) => [
+        n.id,
+        visibleRepoCount > 1 ? `${fullNodeRepo(n)} / ${fullNodeContainer(n)}` : n.cluster,
+      ]) ?? [],
+    ) as Record<string, string>,
+    [fullGraph, visibleRepoCount],
+  );
 
   // Semantic edges that connect nodes currently available in Evidence view.
   const visibleSemanticEdges = useMemo(() => {
     if (!fullGraph) return [];
-    return semanticEdges.filter((e) => nodeClusterMap[e.source] && nodeClusterMap[e.target]);
-  }, [semanticEdges, nodeClusterMap, fullGraph]);
+    return semanticEdges.filter((e) => visibleFullNodeIds.has(e.source) && visibleFullNodeIds.has(e.target));
+  }, [semanticEdges, visibleFullNodeIds, fullGraph]);
 
   // Cross-cluster semantic edges drive Overlap; intra-cluster semantic edges still matter for Trace.
   const crossSemanticEdges = useMemo(() => (
@@ -1634,21 +1678,32 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       return sc && tc && sc !== tc;
     })
   ), [visibleSemanticEdges, nodeClusterMap]);
+  const crossRepoSemanticEdges = useMemo(() => (
+    visibleSemanticEdges.filter((e) => {
+      const sourceRepo = nodeRepoMap[e.source];
+      const targetRepo = nodeRepoMap[e.target];
+      return sourceRepo && targetRepo && sourceRepo !== targetRepo;
+    })
+  ), [visibleSemanticEdges, nodeRepoMap]);
 
   const semanticEdgesForDisplay = useMemo(
-    () => buildSemanticBackbone(visibleSemanticEdges),
-    [visibleSemanticEdges],
+    () => buildSemanticBackbone(visibleRepoCount > 1 ? crossRepoSemanticEdges : visibleSemanticEdges),
+    [crossRepoSemanticEdges, visibleRepoCount, visibleSemanticEdges],
+  );
+  const overlapSemanticEdges = useMemo(
+    () => (visibleRepoCount > 1 ? crossRepoSemanticEdges : crossSemanticEdges),
+    [crossRepoSemanticEdges, crossSemanticEdges, visibleRepoCount],
   );
 
   // Overlap analysis groups — ranked cross-cluster pairs by connection count
   const fullOverlapGroups = useMemo((): OverlapGroup[] => {
-    if (!fullGraph || !crossSemanticEdges.length) return [];
+    if (!fullGraph || !overlapSemanticEdges.length) return [];
     const nodeMap = Object.fromEntries(fullGraph.nodes.map((n) => [n.id, n]));
     const basename = (f: string) => f.split("/").pop() ?? f;
     const groups: Record<string, { clusterA: string; clusterB: string; edges: OverlapPair[] }> = {};
-    for (const edge of crossSemanticEdges) {
-      const sc = nodeClusterMap[edge.source];
-      const tc = nodeClusterMap[edge.target];
+    for (const edge of overlapSemanticEdges) {
+      const sc = overlapNodeGroupMap[edge.source];
+      const tc = overlapNodeGroupMap[edge.target];
       if (!sc || !tc || sc === tc) continue;
       const ca = sc <= tc ? sc : tc;
       const cb = sc <= tc ? tc : sc;
@@ -1694,7 +1749,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         if ((a.sameNameCount > 0) !== (b.sameNameCount > 0)) return a.sameNameCount > 0 ? -1 : 1;
         return b.edgeCount - a.edgeCount;
       });
-  }, [crossSemanticEdges, nodeClusterMap, fullGraph]);
+  }, [overlapSemanticEdges, overlapNodeGroupMap, fullGraph]);
 
   const summaryOverlapGroupsData = useMemo(
     () => overlapSummaryGroups(summaryOverlap),
@@ -1705,7 +1760,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const storedSemanticEdgeCount = semanticMeta?.edge_count ?? semanticEdges.length;
   const overlapConnectionCount = usingSummaryOverlap
     ? summaryOverlap?.total_cross_edges ?? 0
-    : crossSemanticEdges.length;
+    : overlapSemanticEdges.length;
 
   function overlapKey(group: Pick<OverlapGroup, "clusterA" | "clusterB">) {
     return `${group.clusterA}___${group.clusterB}`;
@@ -1749,7 +1804,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   useEffect(() => { showSemanticRef.current = showSemantic; }, [showSemantic]);
   useEffect(() => { visibleSemanticEdgesRef.current = semanticEdgesForDisplay; }, [semanticEdgesForDisplay]);
   useEffect(() => { showStructuralRef.current = showStructural; }, [showStructural]);
-  useEffect(() => { nodeClusterMapRef.current = nodeClusterMap; }, [nodeClusterMap]); // eslint-disable-line
+  useEffect(() => { overlapNodeGroupMapRef.current = overlapNodeGroupMap; }, [overlapNodeGroupMap]); // eslint-disable-line
 
   function beginMapRender() {
     renderCycleRef.current += 1;
@@ -2059,7 +2114,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         setViewMode("full");
         setFocusNotice({
           tone: "info",
-          text: `Opening the expanded evidence map for ${data.total_nodes.toLocaleString()} visible nodes in this selected repo.`,
+          text: `Opening the expanded evidence map for ${data.total_nodes.toLocaleString()} visible nodes in this selected workspace scope.`,
         });
       } else {
         setViewMode("summary");
@@ -2537,13 +2592,13 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       return;
     }
     const [ca, cb] = highlightedPair;
-    const clusterMap = nodeClusterMapRef.current;
+    const groupMap = overlapNodeGroupMapRef.current;
     cy.batch(() => {
       cy.edges(".semantic-edge").forEach((e: any) => {
         const src = e.data("source") as string;
         const tgt = e.data("target") as string;
-        const sc = clusterMap[src];
-        const tc = clusterMap[tgt];
+        const sc = groupMap[src];
+        const tc = groupMap[tgt];
         const inPair = (sc === ca && tc === cb) || (sc === cb && tc === ca);
         if (inPair) {
           e.removeClass("faded").addClass("highlighted");
@@ -2552,7 +2607,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }
       });
     });
-  }, [highlightedPair, viewMode, showSemantic, crossSemanticEdges.length]);
+  }, [highlightedPair, viewMode, showSemantic, overlapSemanticEdges.length]);
 
   // Clear highlighted pair when semantic is turned off
   useEffect(() => {
@@ -2893,7 +2948,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       : "Building graph summary";
   const mapWorkDetail = mapRendering && !loading && !(fullLoading && viewMode === "full")
     ? usingFastFullLayout
-      ? "Packing selected repos into a broad Evidence view"
+      ? "Arranging selected repos into a folder-level comparison"
       : "Laying out the workspace view"
     : "First load may take a moment";
   const traceLayerText = viewMode === "full"
@@ -2906,7 +2961,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const semanticDisplayCount = semanticEdgesForDisplay.length;
   const semanticDisplayText = semanticDisplayCount.toLocaleString();
   const semanticVisibleText = visibleSemanticEdges.length.toLocaleString();
-  const semanticScopeText = semanticDisplayCount < visibleSemanticEdges.length
+  const semanticScopeText = visibleRepoCount > 1
+    ? `${semanticDisplayText} cross-repo high-signal edges from ${crossRepoSemanticEdges.length.toLocaleString()}`
+    : semanticDisplayCount < visibleSemanticEdges.length
     ? `${semanticDisplayText} high-signal backbone edges from ${semanticVisibleText}`
     : `${semanticDisplayText} visible semantic edges`;
 
@@ -3382,7 +3439,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               <div className="map-overlap-empty">
                 Enable the Semantic overlay first to see cross-repo overlap analysis.
               </div>
-            ) : !usingSummaryOverlap && !crossSemanticEdges.length ? (
+            ) : !usingSummaryOverlap && !overlapSemanticEdges.length ? (
               <div className="map-overlap-empty">
                 {storedSemanticEdgeCount
                   ? "Semantic overlay is on, but no cross-repo overlap edges are visible in the current scope and source filters. If this is a single-repo map, select a broader workspace scope to review overlap across repos."
