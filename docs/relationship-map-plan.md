@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-18T17:37:36-06:00
-Status: Slice 5 decision overlay task complete; next active work is owner review and post-review tuning
+Last Updated: 2026-06-18T22:30:02-06:00
+Status: Video intent recenter captured; next active work is owner review and clear-map tuning
 Owner: Adam Goodwin
 
 ## Purpose
@@ -98,9 +98,52 @@ importance from raw file inclusion, and surface existing decisions plus
 follow-up work directly in the map.
 
 The remaining practical blocker is owner review on real broad workspaces:
-the decision overlay and importance classifier are intentionally heuristic and
-should be tuned where project-specific contracts, implementation boundaries,
-or recommendation evidence match too broadly or too narrowly.
+the decision overlay, importance classifier, semantic overlap triage, and
+multi-repo layout should be tuned so the cockpit keeps the clean Graphify map
+intent while still preserving the richer decision tools now built around it.
+
+## Video Intent Recenter
+
+Status: captured 2026-06-18T22:30:02-06:00 from Adam's reference video,
+`Graphify + Obsidian + Claude Code = CHEAT CODE`.
+
+The reference intent is not to build a literal file browser, nor to make the
+map visually exhaustive. The useful core is:
+
+- Graphify turns a repository, codebase, or document corpus into a knowledge
+  graph of concepts, communities, and relationships.
+- The graph is a map for an AI assistant: it should answer what exists, how
+  concepts relate, where source evidence lives, and why a topic matters without
+  forcing the assistant to scan everything.
+- Source documents and files are evidence behind the map. They should be
+  linked, inspectable, and retrievable, but they should not dominate the first
+  view unless they are important boundaries or source-of-truth materials.
+- Imported/generated knowledge should be staged. The operator should be able to
+  keep it isolated, bring it into a scoped folder, harvest selected parts, or
+  redistribute it deliberately.
+- The clear look matters because the value is orientation. The default map
+  should communicate the few important areas and high-signal relationships
+  first, then let Adam progressively reveal communities, concepts, source docs,
+  decisions, and raw evidence.
+
+Graphify Workspace Cockpit should use that same principle without requiring
+Obsidian as the runtime. The cockpit can keep Scope, Map, Decisions,
+Recommendations, Work Queue, semantic overlap, gap triage, importance ranking,
+and the AI assistant, but those features should orbit a clean Graphify-first
+map. Next UI tuning should therefore prefer:
+
+- staged map levels: workspace or repo groups first, then communities/concepts,
+  then evidence files
+- visible source links and provenance in the inspector instead of many source
+  files on the canvas
+- semantic overlays that explain high-signal overlap, gaps, drift, or shared
+  patterns, not dense raw similarity clouds
+- multi-repo comparison layouts that show projects beside each other with
+  cross-repo semantic links as the primary added signal
+- operator choices that mirror staging options: isolate, include as folder,
+  harvest selected knowledge, or redistribute intentionally
+- calm defaults with optional detail, so richer features remain available
+  without replacing the simple map Adam originally wanted
 
 ## Next Implementation Slices
 

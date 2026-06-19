@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-18T17:37:36-06:00
-Status: relationship-map Slices 1-5 plus scope/working-state/importance-table follow-ups complete; next active work is owner review and post-review tuning
+Last Updated: 2026-06-18T22:30:02-06:00
+Status: relationship-map Slices 1-5 plus video intent recenter captured; next active work is owner review and clear-map tuning
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -120,8 +120,12 @@ model so broad maps show decision-grade knowledge and cross-project contracts
 instead of dependency type files, generated shims, fixtures, lockfiles, and
 ordinary leaf evidence.
 `Slice 4 - File Importance And Workspace Knowledge Lens` and `Slice 5 -
-Decision Overlay` are now task complete. Next work should start from owner
-review and targeted tuning unless Adam names the next slice.
+Decision Overlay` are now task complete. A 2026-06-18 video intent recenter is
+captured in `docs/relationship-map-plan.md`: keep the cockpit Graphify-first,
+use the map as a clean concept/community/source-evidence orientation surface,
+and keep richer decision features available without turning the default view
+into a file dump or dense similarity cloud. Next work should start from owner
+review and targeted clear-map tuning unless Adam names the next slice.
 
 The completed scope/signal history is retained in
 `docs/workspace-scope-and-signal-plan.md`: select a parent folder, represent
