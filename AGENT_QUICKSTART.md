@@ -8,8 +8,9 @@ generated output or old pathway history.
 1. `git status --short`
 2. `AGENTS.md`
 3. `START_HERE.md` for material work or active-plan continuation
-4. `docs/relationship-map-plan.md` for the current slice
-5. Only the files named by the selected chunk
+4. `docs/session-handoff-2026-06-18.md` for the latest shutdown note
+5. `docs/relationship-map-plan.md` for the current slice
+6. Only the files named by the selected chunk
 
 Use `docs/context-map.md` when routing is unclear. Use
 `docs/workspace-scope-and-signal-plan.md` only for completed workspace scope
@@ -41,6 +42,9 @@ checks.
 - Demo graph: committed fixture at `workspace/demo/graph.json`.
 - Generated repo graph: local-only `graphify-out/`, rebuilt with
   `graphify update . --no-cluster` when needed.
+- Current relationship-map state: Slices 1-5 are complete; the latest active
+  work is owner review and clear-map tuning after the multi-repo Evidence
+  comparison-layout and repo-label fixes.
 
 ## Validation Defaults
 

@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-18T22:40:35-06:00
-Status: Multi-repo Evidence repo labels added; next active work is owner review and clear-map tuning
+Last Updated: 2026-06-18T22:45:26-06:00
+Status: shutdown handoff captured; next active work is owner review and clear-map tuning
 Owner: Adam Goodwin
 
 ## Purpose
@@ -25,6 +25,14 @@ evidence and drilldown material unless they are high-signal enough to be visible
 as first-class nodes.
 
 ## Current State
+
+Shutdown handoff 2026-06-18T22:45:26-06:00: see
+`docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
+the video intent recenter, the multi-repo Evidence grid fix, and inert repo
+labels are implemented and pushed. Adam's next useful step is hands-on review:
+verify the labels, semantic links, and comparison layout against real
+two-project selections, then tune the clear-map defaults based on what is
+actually confusing.
 
 Closeout note 2026-06-18T17:37:36-06:00: this plan is the active continuation
 plan after `START_HERE.md`. The scope-focus examples used for smoke testing
@@ -505,8 +513,9 @@ For the next coding session:
 1. `git status --short`
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md` only as the top-level router.
-4. Read this file: `docs/relationship-map-plan.md`.
-5. Start with owner review or post-review tuning unless Adam redirects.
+4. Read `docs/session-handoff-2026-06-18.md`.
+5. Read this file: `docs/relationship-map-plan.md`.
+6. Start with owner review or post-review tuning unless Adam redirects.
 
 Avoid loading the long historical plans unless investigating a regression:
 

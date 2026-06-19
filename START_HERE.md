@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-18T22:30:02-06:00
-Status: relationship-map Slices 1-5 plus video intent recenter captured; next active work is owner review and clear-map tuning
+Last Updated: 2026-06-18T22:45:26-06:00
+Status: shutdown handoff captured; relationship-map path is ready for owner review and clear-map tuning
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,14 +12,25 @@ historical build log by default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/relationship-map-plan.md`.
-4. Start with owner review or post-review tuning unless Adam redirects.
-5. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
-6. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
-7. Open `docs/current-build-pathway.md` only when investigating old chunk
+3. Read `docs/session-handoff-2026-06-18.md` for the latest shutdown note.
+4. Read `docs/relationship-map-plan.md`.
+5. Start with owner review or post-review tuning unless Adam redirects.
+6. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
+7. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
+8. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
+
+Shutdown handoff 2026-06-18T22:45:26-06:00: relationship-map Slices 1-5,
+semantic/physical layer fixes, video intent recenter, multi-repo Evidence
+layout, and inert repo labels are captured. Latest code is pushed through
+`f85f43c Label multi-repo evidence regions`; this shutdown documentation is
+the only new repo change in the current closeout. Adam liked the new
+multi-repo comparison direction and wants to play with it next; the repo labels
+still need visual confirmation after a hard refresh or dev-server restart.
+Begin next work with owner review and clear-map tuning, not a broad new slice,
+unless Adam redirects.
 
 Continuation closeout 2026-06-18T17:37:36-06:00: today's relationship-map,
 scope-focus, working-state polish, semantic-overlap copy fix, file-importance
@@ -124,8 +135,10 @@ Decision Overlay` are now task complete. A 2026-06-18 video intent recenter is
 captured in `docs/relationship-map-plan.md`: keep the cockpit Graphify-first,
 use the map as a clean concept/community/source-evidence orientation surface,
 and keep richer decision features available without turning the default view
-into a file dump or dense similarity cloud. Next work should start from owner
-review and targeted clear-map tuning unless Adam names the next slice.
+into a file dump or dense similarity cloud. Multi-repo Evidence now uses a
+comparison layout and inert repo labels instead of a flat grid. Next work
+should start from owner review and targeted clear-map tuning unless Adam names
+the next slice.
 
 The completed scope/signal history is retained in
 `docs/workspace-scope-and-signal-plan.md`: select a parent folder, represent
