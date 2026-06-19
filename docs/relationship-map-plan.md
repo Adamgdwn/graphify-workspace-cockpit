@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-18T22:36:01-06:00
-Status: Multi-repo Evidence grid regression fixed; next active work is owner review and clear-map tuning
+Last Updated: 2026-06-18T22:40:35-06:00
+Status: Multi-repo Evidence repo labels added; next active work is owner review and clear-map tuning
 Owner: Adam Goodwin
 
 ## Purpose
@@ -163,6 +163,9 @@ Delivered behavior:
   initial preset layout.
 - The fast path no longer runs an additional layout pass after initialization,
   preventing Cytoscape's default grid from winning the first paint.
+- Multi-repo Evidence now adds inert repo name labels above the comparison
+  regions so Adam can identify which project each cluster belongs to without
+  selecting individual nodes.
 - The render spinner still clears through the same fast-path
   `requestAnimationFrame` plus timeout finalization, so broad two-repo maps
   stay responsive without falling back to grid packing.
@@ -174,7 +177,13 @@ Validation:
 - `git diff --check`: passed
 - `rm -rf frontend/dist && source /home/adamgoodwin/.nvm/nvm.sh && npm --prefix frontend run build`:
   passed
-- `graphify update . --no-cluster`: rebuilt 1,614 nodes and 114,655 edges
+- repo-label follow-up `source /home/adamgoodwin/.nvm/nvm.sh && npm --prefix frontend run typecheck`:
+  passed
+- repo-label follow-up `git diff --check`: passed
+- repo-label follow-up `rm -rf frontend/dist && source /home/adamgoodwin/.nvm/nvm.sh && npm --prefix frontend run build`:
+  passed
+- repo-label follow-up `graphify update . --no-cluster`: rebuilt 1,615 nodes
+  and 117,521 edges
 
 ### Scope Focus Fix - Single Repo Generation
 

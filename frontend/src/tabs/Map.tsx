@@ -1188,6 +1188,11 @@ function nodeCloudRadius(count: number): number {
   return Math.max(34, Math.sqrt(count) * 18);
 }
 
+type FullPresetLayout = {
+  positions: Record<string, { x: number; y: number }>;
+  repoLabels: Array<{ id: string; label: string; position: { x: number; y: number } }>;
+};
+
 function placeNodeCloud(
   nodes: FullNode[],
   centerX: number,
@@ -1212,7 +1217,7 @@ function placeNodeCloud(
   });
 }
 
-function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number; y: number }> {
+function buildFullPresetLayout(nodes: FullNode[]): FullPresetLayout {
   const repos = new globalThis.Map<string, FullNode[]>();
   for (const node of nodes) {
     const key = fullNodeRepo(node);
@@ -1274,6 +1279,7 @@ function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number
     });
 
   const positions: Record<string, { x: number; y: number }> = {};
+  const repoLabels: FullPresetLayout["repoLabels"] = [];
   const repoGap = 520;
   const repoWidths = repoLayouts.map((layout) => layout.bounds.maxX - layout.bounds.minX);
   const totalWidth = repoWidths.reduce((sum, width) => sum + width, 0) + repoGap * Math.max(0, repoLayouts.length - 1);
@@ -1290,22 +1296,30 @@ function buildFullPresetPositions(nodes: FullNode[]): Record<string, { x: number
         y: position.y + offsetY,
       };
     }
+    repoLabels.push({
+      id: `repo_label_${index}_${stableLayoutHash(layout.repo)}`,
+      label: layout.repo,
+      position: {
+        x: (layout.bounds.minX + layout.bounds.maxX) / 2 + offsetX,
+        y: layout.bounds.minY + offsetY - 46,
+      },
+    });
 
     cursorX += width + repoGap;
   });
 
-  return positions;
+  return { positions, repoLabels };
 }
 
 function buildFullElements(
   full: FullGraph,
   filter: Filter,
   selectedClusters: Set<string> | null = null,
-  presetPositions: Record<string, { x: number; y: number }> | null = null,
+  presetLayout: FullPresetLayout | null = null,
 ) {
   const visibleNodes = visibleFullNodes(full, filter, selectedClusters);
   const visibleIds = new Set(visibleNodes.map((n) => n.id));
-  const positions = presetPositions ?? {};
+  const positions = presetLayout?.positions ?? {};
 
   const nodes = visibleNodes.map((n) => ({
     data: {
@@ -1321,6 +1335,18 @@ function buildFullElements(
       queued_action_count: n.decision_overlay?.queued_action_count ?? n.queued_action_count ?? 0,
     },
     ...(positions[n.id] ? { position: positions[n.id] } : {}),
+  }));
+  const repoLabelNodes = (presetLayout?.repoLabels ?? []).map((repoLabel) => ({
+    data: {
+      id: repoLabel.id,
+      label: repoLabel.label,
+      color: "#6b8cff",
+    },
+    classes: "repo-label",
+    position: repoLabel.position,
+    selectable: false,
+    grabbable: false,
+    locked: true,
   }));
 
   const seen = new Set<string>();
@@ -1342,7 +1368,7 @@ function buildFullElements(
       },
     }));
 
-  return [...nodes, ...edges];
+  return [...repoLabelNodes, ...nodes, ...edges];
 }
 
 function applyStructuralEdgeVisibility(cy: Core, showStructural: boolean) {
@@ -1383,6 +1409,37 @@ const FULL_CY_STYLE: object[] = [
   {
     selector: "node:hover",
     style: { "border-width": 2, "border-color": "#fff", width: 13, height: 13 },
+  },
+  {
+    selector: "node.repo-label",
+    style: {
+      width: 1,
+      height: 1,
+      "background-opacity": 0,
+      "border-width": 0,
+      label: "data(label)",
+      color: "#c6d4f6",
+      "font-family": '"JetBrains Mono", ui-monospace, monospace',
+      "font-size": 24,
+      "font-weight": 700,
+      "min-zoomed-font-size": 0,
+      "text-halign": "center",
+      "text-valign": "center",
+      "text-outline-color": "#070a12",
+      "text-outline-opacity": 0.94,
+      "text-outline-width": 4,
+      "text-transform": "none",
+      events: "no",
+      opacity: 0.92,
+    },
+  },
+  {
+    selector: "node.repo-label:hover",
+    style: {
+      width: 1,
+      height: 1,
+      "border-width": 0,
+    },
   },
   {
     selector: 'node[decision="invest"]',
@@ -2332,22 +2389,23 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     cyRef.current = null;
 
     const useFastLayout = shouldUseFastFullLayout(fullGraph, filter, selectedClusters);
-    const fastPresetPositions = useFastLayout
-      ? buildFullPresetPositions(visibleFullNodes(fullGraph, filter, selectedClusters))
+    const fastPresetLayout = useFastLayout
+      ? buildFullPresetLayout(visibleFullNodes(fullGraph, filter, selectedClusters))
       : null;
     const cy = cytoscape({
       container: containerRef.current,
-      elements: buildFullElements(fullGraph, filter, selectedClusters, fastPresetPositions),
+      elements: buildFullElements(fullGraph, filter, selectedClusters, fastPresetLayout),
       style: FULL_CY_STYLE as any,
       ...(useFastLayout ? { layout: FULL_FAST_LAYOUT as any } : {}),
       pixelRatio: 1,
       minZoom: 0.02,
       maxZoom: 12,
     });
-    if (fastPresetPositions) {
+    if (fastPresetLayout) {
       cy.batch(() => {
         cy.nodes().forEach((node: any) => {
-          const position = fastPresetPositions[node.id()];
+          const position = fastPresetLayout.positions[node.id()]
+            ?? fastPresetLayout.repoLabels.find((repoLabel) => repoLabel.id === node.id())?.position;
           if (position) node.position(position);
         });
       });
