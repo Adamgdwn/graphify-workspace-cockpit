@@ -1758,13 +1758,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   }
 
   function finishMapRender(renderCycle: number) {
+    const clearRendering = () => {
+      if (renderCycleRef.current === renderCycle) {
+        setMapRendering(false);
+      }
+    };
     requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (renderCycleRef.current === renderCycle) {
-          setMapRendering(false);
-        }
-      });
+      requestAnimationFrame(clearRendering);
     });
+    window.setTimeout(clearRendering, 250);
   }
 
   function normalizeLookup(value: string) {
@@ -2190,8 +2192,13 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     const finishRender = () => {
       if (renderFinished) return;
       renderFinished = true;
-      cy.fit(undefined, 70);
-      finishMapRender(renderCycle);
+      try {
+        cy.fit(undefined, 70);
+      } catch (err) {
+        console.warn("Map render finalization failed", err);
+      } finally {
+        finishMapRender(renderCycle);
+      }
     };
 
     cyRef.current?.destroy();
@@ -2263,6 +2270,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     ensureExtensions();
     const renderCycle = beginMapRender();
     let renderFinished = false;
+    let fastFinishFrame = 0;
+    let fastFinishTimer = 0;
 
     cyRef.current?.destroy();
     cyRef.current = null;
@@ -2298,14 +2307,23 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     const finishRender = () => {
       if (renderFinished) return;
       renderFinished = true;
-      restoreSemanticEdges();
-      cy.fit(undefined, 40);
-      finishMapRender(renderCycle);
+      try {
+        restoreSemanticEdges();
+        cy.fit(undefined, 40);
+      } catch (err) {
+        console.warn("Full map render finalization failed", err);
+      } finally {
+        finishMapRender(renderCycle);
+      }
     };
     const layout = cy.layout((useFastLayout ? FULL_FAST_LAYOUT : FULL_FCOSE_LAYOUT) as any);
     layout.one("layoutstop", finishRender);
     layout.run();
     const renderFallback = window.setTimeout(finishRender, useFastLayout ? 2000 : 20000);
+    if (useFastLayout) {
+      fastFinishFrame = window.requestAnimationFrame(finishRender);
+      fastFinishTimer = window.setTimeout(finishRender, 250);
+    }
 
     cy.on("tap", "node", (e: any) => {
       const node = e.target;
@@ -2345,6 +2363,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
     return () => {
       window.clearTimeout(renderFallback);
+      window.clearTimeout(fastFinishTimer);
+      if (fastFinishFrame) window.cancelAnimationFrame(fastFinishFrame);
       cy.destroy();
       cyRef.current = null;
     };
