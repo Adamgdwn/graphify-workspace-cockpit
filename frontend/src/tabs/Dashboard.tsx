@@ -366,7 +366,7 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
         <div>
           <h1 className="dash-title">Command Center</h1>
           {loading ? (
-            <WorkingStatus inline compact label="Refreshing decision signals" />
+            <WorkingStatus label="Refreshing decision signals" />
           ) : (
             <p className="dash-subtitle">{`${attentionTotal} item${attentionTotal === 1 ? "" : "s"} need operator attention`}</p>
           )}

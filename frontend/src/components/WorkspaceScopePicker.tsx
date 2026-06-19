@@ -525,7 +525,7 @@ export function WorkspaceScopePicker({
       ) : (
         <div className="scope-empty-tree">
           {inspecting ? (
-            <WorkingStatus compact label="Inspecting folders" detail={rootInput || initialRoot} />
+            <WorkingStatus label="Inspecting folders" detail={rootInput || initialRoot} />
           ) : (
             <div className="scope-empty-row">
               <span className="scope-empty-expander">v</span>
@@ -685,7 +685,6 @@ export function WorkspaceScopePicker({
       {message && <p className="settings-ok">{message}</p>}
       {generating && (
         <WorkingStatus
-          compact
           label="Generating workspace map"
           detail="Watching the scoped rebuild"
         />

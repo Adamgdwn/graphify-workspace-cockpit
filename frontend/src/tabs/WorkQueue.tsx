@@ -445,7 +445,7 @@ export function WorkQueue() {
             <div className="wq-log" ref={logRef}>
               {focusMission.log.length === 0 ? (
                 focusMission.status === "running" ? (
-                  <WorkingStatus compact label="Waiting for output" />
+                  <WorkingStatus label="Waiting for output" />
                 ) : (
                   <span className="wq-log-empty">Waiting for output…</span>
                 )

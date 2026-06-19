@@ -573,7 +573,7 @@ function RecCard({
       {packetOpen && (
         packetLoading ? (
           <div className="rec-packet-loading">
-            <WorkingStatus compact label="Loading decision packet" />
+            <WorkingStatus label="Loading decision packet" />
           </div>
         ) : packetError ? (
           <div className="rec-packet-error">Decision packet unavailable: {packetError}</div>

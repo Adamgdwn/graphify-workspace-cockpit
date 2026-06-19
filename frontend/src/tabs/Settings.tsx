@@ -675,7 +675,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             </div>
           </div>
         ) : (
-          <WorkingStatus compact label="Loading settings" />
+          <WorkingStatus label="Loading settings" />
         )}
       </section>
 
@@ -863,8 +863,6 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             {semanticStatus.status === "running" && (
               <>
                 <WorkingStatus
-                  inline
-                  compact
                   label={`Embedding nodes ${semanticStatus.progress} / ${semanticStatus.total}`}
                 />
                 <div style={{ background: "#1a1c2a", borderRadius: 4, height: 6, overflow: "hidden" }}>

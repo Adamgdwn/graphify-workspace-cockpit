@@ -1314,7 +1314,7 @@ body {
   text-align: center;
 }
 
-.working-status:not(.working-status-inline):not(.working-status-compact) {
+.working-status:not(.working-status-inline) {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -1329,10 +1329,6 @@ body {
   flex-direction: row;
   gap: 6px;
   vertical-align: middle;
-}
-
-.working-status-compact {
-  gap: 5px;
 }
 
 .working-nuclear {
@@ -1350,7 +1346,7 @@ body {
   animation: working-spin 1.45s linear infinite;
 }
 
-.working-status:not(.working-status-inline):not(.working-status-compact) .working-nuclear {
+.working-status:not(.working-status-inline) .working-nuclear {
   width: 120px;
   height: 120px;
   font-size: 90px;
@@ -1359,8 +1355,7 @@ body {
     0 0 52px rgba(107, 140, 255, 0.42);
 }
 
-.working-status-inline .working-nuclear,
-.working-status-compact .working-nuclear {
+.working-status-inline .working-nuclear {
   width: 22px;
   height: 22px;
   font-size: 17px;
@@ -1386,24 +1381,6 @@ body {
 
 @keyframes working-spin {
   to { transform: rotate(360deg); }
-}
-
-.map-spinner {
-  display: inline-grid;
-  width: 40px;
-  height: 40px;
-  place-items: center;
-  color: #69e6b1;
-  font-size: 30px;
-  line-height: 1;
-  text-shadow:
-    0 0 10px rgba(105, 230, 177, 0.52),
-    0 0 20px rgba(107, 140, 255, 0.34);
-  animation: working-spin 1.45s linear infinite;
-}
-
-.map-spinner::before {
-  content: "☢";
 }
 
 .map-path-hint {
