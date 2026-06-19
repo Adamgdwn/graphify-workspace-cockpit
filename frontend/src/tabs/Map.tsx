@@ -1301,11 +1301,11 @@ function buildFullElements(
   full: FullGraph,
   filter: Filter,
   selectedClusters: Set<string> | null = null,
-  usePresetPositions = false,
+  presetPositions: Record<string, { x: number; y: number }> | null = null,
 ) {
   const visibleNodes = visibleFullNodes(full, filter, selectedClusters);
   const visibleIds = new Set(visibleNodes.map((n) => n.id));
-  const positions = usePresetPositions ? buildFullPresetPositions(visibleNodes) : {};
+  const positions = presetPositions ?? {};
 
   const nodes = visibleNodes.map((n) => ({
     data: {
@@ -2332,14 +2332,26 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     cyRef.current = null;
 
     const useFastLayout = shouldUseFastFullLayout(fullGraph, filter, selectedClusters);
+    const fastPresetPositions = useFastLayout
+      ? buildFullPresetPositions(visibleFullNodes(fullGraph, filter, selectedClusters))
+      : null;
     const cy = cytoscape({
       container: containerRef.current,
-      elements: buildFullElements(fullGraph, filter, selectedClusters, useFastLayout),
+      elements: buildFullElements(fullGraph, filter, selectedClusters, fastPresetPositions),
       style: FULL_CY_STYLE as any,
+      ...(useFastLayout ? { layout: FULL_FAST_LAYOUT as any } : {}),
       pixelRatio: 1,
       minZoom: 0.02,
       maxZoom: 12,
     });
+    if (fastPresetPositions) {
+      cy.batch(() => {
+        cy.nodes().forEach((node: any) => {
+          const position = fastPresetPositions[node.id()];
+          if (position) node.position(position);
+        });
+      });
+    }
     applyStructuralEdgeVisibility(cy, showStructuralRef.current);
 
     let semanticEdgesRestored = false;
@@ -2371,13 +2383,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         finishMapRender(renderCycle);
       }
     };
-    const layout = cy.layout((useFastLayout ? FULL_FAST_LAYOUT : FULL_FCOSE_LAYOUT) as any);
-    layout.one("layoutstop", finishRender);
-    layout.run();
-    const renderFallback = window.setTimeout(finishRender, useFastLayout ? 2000 : 20000);
+    let renderFallback = 0;
     if (useFastLayout) {
       fastFinishFrame = window.requestAnimationFrame(finishRender);
       fastFinishTimer = window.setTimeout(finishRender, 250);
+    } else {
+      const layout = cy.layout(FULL_FCOSE_LAYOUT as any);
+      layout.one("layoutstop", finishRender);
+      layout.run();
+      renderFallback = window.setTimeout(finishRender, 20000);
     }
 
     cy.on("tap", "node", (e: any) => {

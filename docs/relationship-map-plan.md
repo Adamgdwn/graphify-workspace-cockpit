@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-18T22:30:02-06:00
-Status: Video intent recenter captured; next active work is owner review and clear-map tuning
+Last Updated: 2026-06-18T22:36:01-06:00
+Status: Multi-repo Evidence grid regression fixed; next active work is owner review and clear-map tuning
 Owner: Adam Goodwin
 
 ## Purpose
@@ -146,6 +146,35 @@ map. Next UI tuning should therefore prefer:
   without replacing the simple map Adam originally wanted
 
 ## Next Implementation Slices
+
+### Owner Review Tuning - Multi-Repo Evidence Layout
+
+Status: task complete 2026-06-18T22:36:01-06:00.
+
+Owner-reported issue: a two-repo selection still rendered Evidence as a
+left-to-right grid of file nodes instead of a clear comparison map. That
+violated the video-intent recenter because the first visual read looked like an
+inventory dump instead of two projects with relationships.
+
+Delivered behavior:
+
+- Fast full-graph Evidence mode now computes repo/container comparison
+  positions before Cytoscape is created and passes those positions into the
+  initial preset layout.
+- The fast path no longer runs an additional layout pass after initialization,
+  preventing Cytoscape's default grid from winning the first paint.
+- The render spinner still clears through the same fast-path
+  `requestAnimationFrame` plus timeout finalization, so broad two-repo maps
+  stay responsive without falling back to grid packing.
+
+Validation:
+
+- `source /home/adamgoodwin/.nvm/nvm.sh && npm --prefix frontend run typecheck`:
+  passed
+- `git diff --check`: passed
+- `rm -rf frontend/dist && source /home/adamgoodwin/.nvm/nvm.sh && npm --prefix frontend run build`:
+  passed
+- `graphify update . --no-cluster`: rebuilt 1,614 nodes and 114,655 edges
 
 ### Scope Focus Fix - Single Repo Generation
 
