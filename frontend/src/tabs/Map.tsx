@@ -2412,6 +2412,30 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     }
     applyStructuralEdgeVisibility(cy, showStructuralRef.current);
 
+    // Keep multi-repo region labels at a constant readable screen size.
+    // Cytoscape font-size is in model units, so it scales with zoom by
+    // default. Counter-scale it against the live zoom level so the label
+    // renders at the same on-screen pixel size whether Adam is zoomed in
+    // on one repo or zoomed out across the whole comparison.
+    const REPO_LABEL_SCREEN_PX = 18;
+    const REPO_LABEL_OUTLINE_SCREEN_PX = 3;
+    let repoLabelFrame = 0;
+    const syncRepoLabelScale = () => {
+      repoLabelFrame = 0;
+      const labels = cy.nodes(".repo-label");
+      if (labels.empty()) return;
+      const zoom = cy.zoom() || 1;
+      labels.style({
+        "font-size": REPO_LABEL_SCREEN_PX / zoom,
+        "text-outline-width": REPO_LABEL_OUTLINE_SCREEN_PX / zoom,
+      });
+    };
+    const scheduleRepoLabelScale = () => {
+      if (repoLabelFrame) return;
+      repoLabelFrame = window.requestAnimationFrame(syncRepoLabelScale);
+    };
+    cy.on("zoom", scheduleRepoLabelScale);
+
     let semanticEdgesRestored = false;
     const restoreSemanticEdges = () => {
       if (semanticEdgesRestored) return;
@@ -2435,6 +2459,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       try {
         restoreSemanticEdges();
         cy.fit(undefined, 40);
+        syncRepoLabelScale();
       } catch (err) {
         console.warn("Full map render finalization failed", err);
       } finally {
@@ -2492,6 +2517,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       window.clearTimeout(renderFallback);
       window.clearTimeout(fastFinishTimer);
       if (fastFinishFrame) window.cancelAnimationFrame(fastFinishFrame);
+      if (repoLabelFrame) window.cancelAnimationFrame(repoLabelFrame);
       cy.destroy();
       cyRef.current = null;
     };
