@@ -105,6 +105,12 @@ interface OverlayAction {
   updated_at?: string;
 }
 
+interface SemanticEdge {
+  source: string;
+  target: string;
+  similarity: number;
+}
+
 interface DecisionOverlay {
   decision_classification?: DecisionClassification | "";
   decision_count: number;
@@ -255,8 +261,8 @@ const MAP_MODES: Array<{ id: MapMode; label: string; subLabel: string; hint: str
     id: "trace",
     label: "Trace",
     subLabel: "path",
-    hint: "Choose a source and target to see the shortest summary path.",
-    tooltip: "Path tracing: pick two nodes and show the shortest route through the summary graph.",
+    hint: "Choose a source and target to see the shortest physical or semantic path.",
+    tooltip: "Path tracing: pick two nodes and show the shortest route through the evidence graph, including semantic edges when enabled.",
   },
   {
     id: "overlap",
@@ -959,6 +965,8 @@ const FULL_FCOSE_LAYOUT = {
   packComponents: true,
 };
 
+const SEMANTIC_EDGE_DISPLAY_LIMIT = 2000;
+
 function buildFullElements(full: FullGraph, filter: Filter, selectedClusters: Set<string> | null = null) {
   const visibleIds = new Set(
     full.nodes
@@ -1101,6 +1109,36 @@ const FULL_CY_STYLE: object[] = [
     },
   },
   {
+    selector: "node.path-source",
+    style: {
+      width: 15,
+      height: 15,
+      "border-color": "#f5a623",
+      "border-width": 3,
+      "shadow-blur": 22,
+      "shadow-color": "#f5a623",
+      "shadow-opacity": 0.9,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+      color: "#f5d280",
+    },
+  },
+  {
+    selector: "node.path-target",
+    style: {
+      width: 15,
+      height: 15,
+      "border-color": "#4ade80",
+      "border-width": 3,
+      "shadow-blur": 22,
+      "shadow-color": "#4ade80",
+      "shadow-opacity": 0.9,
+      "shadow-offset-x": 0,
+      "shadow-offset-y": 0,
+      color: "#90f0b8",
+    },
+  },
+  {
     selector: "node.faded",
     style: { opacity: 0.08 },
   },
@@ -1116,6 +1154,14 @@ const FULL_CY_STYLE: object[] = [
   {
     selector: "edge.highlighted",
     style: { "line-color": "#6b8cff", opacity: 1, width: 2 },
+  },
+  {
+    selector: "edge.path-edge",
+    style: {
+      "line-color": "#f5a623",
+      opacity: 1,
+      width: 3,
+    },
   },
   {
     selector: "edge.faded",
@@ -1142,6 +1188,15 @@ const FULL_CY_STYLE: object[] = [
     },
   },
   {
+    selector: "edge.semantic-edge.path-edge",
+    style: {
+      "line-color": "#69e6b1",
+      "line-style": "solid",
+      opacity: 1,
+      width: 3.5,
+    },
+  },
+  {
     selector: "edge.semantic-edge.faded",
     style: { opacity: 0 },
   },
@@ -1164,6 +1219,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const cyRef = useRef<Core | null>(null);
   const appliedContextKeyRef = useRef<string | null>(null);
   const scopeProfileRef = useRef<WorkspaceScopeProfile | null>(null);
+  const renderCycleRef = useRef(0);
 
   // Refs for cy event handlers — avoids stale closures over React state
   const pathModeRef = useRef(false);
@@ -1175,6 +1231,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [fullGraph, setFullGraph] = useState<FullGraph | null>(null);
   const [fullLoading, setFullLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [mapRendering, setMapRendering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SummaryNode | null>(null);
   const [selectedFull, setSelectedFull] = useState<FullNode | null>(null);
@@ -1206,7 +1263,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [showStructural, setShowStructural] = useState(true);
   // semantic similarity overlay
   const [showSemantic, setShowSemantic] = useState(false);
-  const [semanticEdges, setSemanticEdges] = useState<Array<{ source: string; target: string; similarity: number }>>([]);
+  const [semanticEdges, setSemanticEdges] = useState<SemanticEdge[]>([]);
   const [semanticMeta, setSemanticMeta] = useState<{ edge_count: number; created_at: string | null } | null>(null);
   const [summaryOverlap, setSummaryOverlap] = useState<OverlapSummaryResponse | null>(null);
   // overlap analysis panel
@@ -1229,7 +1286,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [generatingScopeMap, setGeneratingScopeMap] = useState(false);
 
   const showSemanticRef = useRef(false);
-  const semanticEdgesRef = useRef<Array<{ source: string; target: string; similarity: number }>>([]);
+  const visibleSemanticEdgesRef = useRef<SemanticEdge[]>([]);
   const showStructuralRef = useRef(true);
   const nodeClusterMapRef = useRef<Record<string, string>>({});
 
@@ -1239,16 +1296,26 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     [fullGraph],
   );
 
-  // Cross-cluster semantic edges — what semantic mode actually shows
-  const crossSemanticEdges = useMemo(() => {
-    const hasMap = fullGraph != null;
-    if (!hasMap) return semanticEdges;
-    return semanticEdges.filter((e) => {
+  // Semantic edges that connect nodes currently available in Evidence view.
+  const visibleSemanticEdges = useMemo(() => {
+    if (!fullGraph) return [];
+    return semanticEdges.filter((e) => nodeClusterMap[e.source] && nodeClusterMap[e.target]);
+  }, [semanticEdges, nodeClusterMap, fullGraph]);
+
+  // Cross-cluster semantic edges drive Overlap; intra-cluster semantic edges still matter for Trace.
+  const crossSemanticEdges = useMemo(() => (
+    visibleSemanticEdges.filter((e) => {
       const sc = nodeClusterMap[e.source];
       const tc = nodeClusterMap[e.target];
       return sc && tc && sc !== tc;
-    });
-  }, [semanticEdges, nodeClusterMap, fullGraph]);
+    })
+  ), [visibleSemanticEdges, nodeClusterMap]);
+
+  const semanticEdgesForDisplay = useMemo(() => (
+    [...visibleSemanticEdges]
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, SEMANTIC_EDGE_DISPLAY_LIMIT)
+  ), [visibleSemanticEdges]);
 
   // Overlap analysis groups — ranked cross-cluster pairs by connection count
   const fullOverlapGroups = useMemo((): OverlapGroup[] => {
@@ -1357,12 +1424,79 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   useEffect(() => { pathSourceRef.current = pathSource; }, [pathSource]);
   useEffect(() => { summaryRef.current = summary; }, [summary]);
   useEffect(() => { showSemanticRef.current = showSemantic; }, [showSemantic]);
-  useEffect(() => { semanticEdgesRef.current = semanticEdges; }, [semanticEdges]);
+  useEffect(() => { visibleSemanticEdgesRef.current = semanticEdgesForDisplay; }, [semanticEdgesForDisplay]);
   useEffect(() => { showStructuralRef.current = showStructural; }, [showStructural]);
   useEffect(() => { nodeClusterMapRef.current = nodeClusterMap; }, [nodeClusterMap]); // eslint-disable-line
 
+  function beginMapRender() {
+    renderCycleRef.current += 1;
+    setMapRendering(true);
+    return renderCycleRef.current;
+  }
+
+  function finishMapRender(renderCycle: number) {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (renderCycleRef.current === renderCycle) {
+          setMapRendering(false);
+        }
+      });
+    });
+  }
+
   function normalizeLookup(value: string) {
     return value.trim().toLowerCase().replace(/\s+/g, " ");
+  }
+
+  function handlePathNodeTap(cy: Core, node: any, nodeId: string): boolean {
+    if (!pathModeRef.current) return false;
+    const src = pathSourceRef.current;
+
+    if (!src) {
+      cy.nodes().removeClass("path-source path-target");
+      cy.elements().removeClass("path-edge faded");
+      node.addClass("path-source");
+      setPathSource(nodeId);
+      setPathNoRoute(false);
+      return true;
+    }
+
+    if (src === nodeId) return true;
+
+    const source = cy.getElementById(src);
+    try {
+      const traversalElements = cy.elements().filter((ele: any) => (
+        ele.isNode() || !ele.hasClass("struct-hidden")
+      ));
+      const dijk = (traversalElements as any).dijkstra({
+        root: source,
+        weight: (edge: any) => {
+          if (!edge.hasClass("semantic-edge")) return 1;
+          const similarity = Number(edge.data("similarity") ?? 0);
+          return 0.75 + Math.max(0, 1 - similarity);
+        },
+      });
+      const path = dijk.pathTo(node);
+
+      if (path && path.edges().length > 0) {
+        cy.elements().addClass("faded").removeClass("path-source path-target path-edge");
+        path.removeClass("faded");
+        path.nodes().first().addClass("path-source");
+        path.nodes().last().addClass("path-target");
+        path.edges().addClass("path-edge");
+        setPathNoRoute(false);
+      } else {
+        cy.elements().removeClass("faded path-source path-target path-edge");
+        setPathNoRoute(true);
+      }
+    } catch {
+      cy.elements().removeClass("faded path-source path-target path-edge");
+      setPathNoRoute(true);
+    }
+
+    setPathSource(null);
+    setPathMode(false);
+    return true;
   }
 
   function evidenceCandidates(context: ActiveCockpitContext): string[] {
@@ -1501,7 +1635,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   }, []);
 
   // Add/remove semantic edges on the live Cytoscape instance when toggle changes.
-  // Shows only cross-cluster edges (inter-repo), capped at top-2000 by similarity.
+  // Trace uses visible semantic edges; overlap analysis still filters to cross-cluster edges.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || viewMode !== "full") return;
@@ -1509,12 +1643,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       cy.elements('[?semantic]').remove();
       return;
     }
-    if (!crossSemanticEdges.length) return;
+    if (!semanticEdgesForDisplay.length) return;
     const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
-    const sorted = [...crossSemanticEdges].sort((a, b) => b.similarity - a.similarity).slice(0, 2000);
     cy.batch(() => {
       const existingIds = new Set(cy.edges('[?semantic]').map((e) => e.id()));
-      const toAdd = sorted
+      const toAdd = semanticEdgesForDisplay
         .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
         .filter((e) => !existingIds.has(`sem__${e.source}__${e.target}`))
         .map((e) => ({
@@ -1530,7 +1663,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }));
       if (toAdd.length) cy.add(toAdd);
     });
-  }, [showSemantic, crossSemanticEdges, viewMode]);
+  }, [showSemantic, semanticEdgesForDisplay, viewMode]);
 
   // Toggle structural edges on/off (class swap — no layout restart)
   useEffect(() => {
@@ -1599,6 +1732,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         return;
       }
       setCanGenerateScopeMap(false);
+      setMapRendering(true);
       setSummary(data);
       setBreadcrumb(project ? [label || project] : []);
       if (shouldOpenExpandedEvidence(data, project)) {
@@ -1619,6 +1753,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       setScopeGate("ready");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setMapRendering(false);
     } finally {
       setLoading(false);
     }
@@ -1712,9 +1847,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       const res = await apiFetch(`/graph/full${qs}`);
       if (!res.ok) throw new Error(await apiErrorMessage(res));
       const data: FullGraph = await res.json();
+      setMapRendering(true);
       setFullGraph(data);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      setMapRendering(false);
     } finally {
       setFullLoading(false);
     }
@@ -1730,6 +1867,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     if (!containerRef.current || !summary || viewMode !== "summary") return;
 
     ensureExtensions();
+    const renderCycle = beginMapRender();
+    let renderFinished = false;
+    const finishRender = () => {
+      if (renderFinished) return;
+      renderFinished = true;
+      cy.fit(undefined, 70);
+      finishMapRender(renderCycle);
+    };
 
     cyRef.current?.destroy();
     cyRef.current = null;
@@ -1738,64 +1883,22 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       container: containerRef.current,
       elements: buildElements(summary, decisions, godNodeIds),
       style: CY_STYLE as any,
-      layout: getLayout(summary) as any,
       pixelRatio: 1,
       minZoom: 0.05,
       maxZoom: 8,
     });
 
     // Auto-fit after animation so the graph fills the canvas neatly
-    cy.one("layoutstop", () => {
-      cy.fit(undefined, 70);
-    });
+    const layout = cy.layout(getLayout(summary) as any);
+    layout.one("layoutstop", finishRender);
+    layout.run();
+    const renderFallback = window.setTimeout(finishRender, 12000);
 
     cy.on("tap", "node", (e: any) => {
       const node = e.target;
       const nodeId: string = node.id();
 
-      if (pathModeRef.current) {
-        const src = pathSourceRef.current;
-
-        if (!src) {
-          cy.nodes().removeClass("path-source path-target");
-          cy.elements().removeClass("path-edge faded");
-          node.addClass("path-source");
-          setPathSource(nodeId);
-          setPathNoRoute(false);
-          return;
-        }
-
-        if (src === nodeId) return;
-
-        // Compute shortest path
-        const source = cy.getElementById(src);
-        try {
-          const dijk = (cy.elements() as any).dijkstra({
-            root: source,
-            weight: () => 1,
-          });
-          const path = dijk.pathTo(node);
-
-          if (path && path.length > 0) {
-            cy.elements().addClass("faded").removeClass("path-source path-target path-edge");
-            path.removeClass("faded");
-            path.nodes().first().addClass("path-source");
-            path.nodes().last().addClass("path-target");
-            path.edges().addClass("path-edge");
-            setPathNoRoute(false);
-          } else {
-            cy.elements().removeClass("faded path-source path-target path-edge");
-            setPathNoRoute(true);
-          }
-        } catch {
-          cy.elements().removeClass("faded path-source path-target path-edge");
-          setPathNoRoute(true);
-        }
-
-        setPathSource(null);
-        setPathMode(false);
-        return;
-      }
+      if (handlePathNodeTap(cy, node, nodeId)) return;
 
       // Normal tap — select + highlight connected edges
       cy.nodes().removeClass("selected");
@@ -1829,6 +1932,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
     cyRef.current = cy;
     return () => {
+      window.clearTimeout(renderFallback);
       cy.destroy();
       cyRef.current = null;
     };
@@ -1839,6 +1943,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     if (viewMode !== "full" || !containerRef.current || !fullGraph) return;
 
     ensureExtensions();
+    const renderCycle = beginMapRender();
+    let renderFinished = false;
+
     cyRef.current?.destroy();
     cyRef.current = null;
 
@@ -1846,21 +1953,46 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       container: containerRef.current,
       elements: buildFullElements(fullGraph, filter, selectedClusters),
       style: FULL_CY_STYLE as any,
-      layout: FULL_FCOSE_LAYOUT as any,
       pixelRatio: 1,
       minZoom: 0.02,
       maxZoom: 12,
     });
 
-    cy.one("layoutstop", () => cy.fit(undefined, 40));
+    const finishRender = () => {
+      if (renderFinished) return;
+      renderFinished = true;
+      cy.fit(undefined, 40);
+      finishMapRender(renderCycle);
+    };
+    const restoreSemanticEdges = () => {
+      if (showSemanticRef.current && visibleSemanticEdgesRef.current.length > 0) {
+        const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
+        const toAdd = visibleSemanticEdgesRef.current
+          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+          .map((e) => ({
+            group: "edges" as const,
+            data: { id: `sem__${e.source}__${e.target}`, source: e.source, target: e.target, similarity: e.similarity, semantic: true },
+            classes: "semantic-edge",
+          }));
+        if (toAdd.length) cy.batch(() => cy.add(toAdd));
+      }
+    };
+    const layout = cy.layout(FULL_FCOSE_LAYOUT as any);
+    layout.one("layoutstop", finishRender);
+    layout.one("layoutstop", restoreSemanticEdges);
+    layout.run();
+    const renderFallback = window.setTimeout(finishRender, 20000);
 
     cy.on("tap", "node", (e: any) => {
       const node = e.target;
+      const nodeId: string = node.id();
+      if (handlePathNodeTap(cy, node, nodeId)) return;
+
       cy.nodes().removeClass("selected");
       cy.edges().removeClass("highlighted");
       node.addClass("selected");
       node.connectedEdges().addClass("highlighted");
-      const n = fullGraph.nodes.find((n) => n.id === node.id()) ?? null;
+      const n = fullGraph.nodes.find((n) => n.id === nodeId) ?? null;
       setSelectedFull(n);
       setSelected(null);
       if (n) {
@@ -1887,32 +2019,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
     cyRef.current = cy;
 
-    // Restore semantic edges if overlay is active (use refs — no layout restart)
-    cy.one("layoutstop", () => {
-      if (showSemanticRef.current && semanticEdgesRef.current.length > 0) {
-        const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
-        const clusterMap = nodeClusterMapRef.current;
-        const hasMap = Object.keys(clusterMap).length > 0;
-        const crossEdges = hasMap
-          ? semanticEdgesRef.current.filter((e) => {
-              const sc = clusterMap[e.source];
-              const tc = clusterMap[e.target];
-              return sc && tc && sc !== tc;
-            })
-          : semanticEdgesRef.current;
-        const sorted = [...crossEdges].sort((a, b) => b.similarity - a.similarity).slice(0, 2000);
-        const toAdd = sorted
-          .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
-          .map((e) => ({
-            group: "edges" as const,
-            data: { id: `sem__${e.source}__${e.target}`, source: e.source, target: e.target, similarity: e.similarity, semantic: true },
-            classes: "semantic-edge",
-          }));
-        if (toAdd.length) cy.batch(() => cy.add(toAdd));
-      }
-    });
-
-    return () => { cy.destroy(); cyRef.current = null; };
+    return () => {
+      window.clearTimeout(renderFallback);
+      cy.destroy();
+      cyRef.current = null;
+    };
   }, [viewMode, fullGraph, filter, selectedClusters]);
 
   // Apply cross-tab evidence context once the relevant graph surface is ready.
@@ -2237,12 +2348,24 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     setFocusNotice(null);
 
     if (mode === "trace") {
-      setViewMode("summary");
       setShowOverlap(false);
       setHighlightedPair(null);
       onActiveContextChange?.(null);
+      setSelected(null);
       setSelectedFull(null);
+      setPathSource(null);
       setPathNoRoute(false);
+      if (broadEvidenceDisabled) {
+        setViewMode("summary");
+        setShowSemantic(false);
+        setFocusNotice({
+          tone: "info",
+          text: `Using summary trace because Evidence view is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes for this scope. Narrow the scope to trace semantic file-level paths.`,
+        });
+      } else {
+        setViewMode("full");
+        if (storedSemanticEdgeCount > 0) setShowSemantic(true);
+      }
       setPathMode(true);
       return;
     }
@@ -2344,7 +2467,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   function startPathFrom(nodeId: string) {
     const cy = cyRef.current;
     if (!cy) return;
+    setMapMode("trace");
+    setShowOverlap(false);
+    setHighlightedPair(null);
     setSelected(null);
+    setSelectedFull(null);
     onActiveContextChange?.(null);
     setPathNoRoute(false);
     cy.nodes().removeClass("path-source path-target");
@@ -2407,6 +2534,27 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const knowledgeHiddenCount = fullGraph?.knowledge_hidden_node_count ?? 0;
   const summaryExceedsEvidenceCap = (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
   const broadEvidenceDisabled = !fullGraph && summaryExceedsEvidenceCap;
+  const mapWorkPending = loading || (fullLoading && viewMode === "full") || mapRendering;
+  const mapWorkLabel = fullLoading && viewMode === "full"
+    ? (knowledgeOnly ? "Loading workspace knowledge" : "Loading full graph")
+    : mapRendering
+      ? "Rendering map"
+      : "Building graph summary";
+  const mapWorkDetail = mapRendering && !loading && !(fullLoading && viewMode === "full")
+    ? "Laying out the workspace view"
+    : "First load may take a moment";
+  const traceLayerText = viewMode === "full"
+    ? showSemantic && semanticEdgesForDisplay.length
+      ? showStructural
+        ? "physical + semantic evidence"
+        : "semantic evidence"
+      : "physical evidence"
+    : "summary physical";
+  const semanticDisplayCount = Math.min(visibleSemanticEdges.length, SEMANTIC_EDGE_DISPLAY_LIMIT);
+  const semanticDisplayText = semanticDisplayCount.toLocaleString();
+  const semanticScopeText = visibleSemanticEdges.length > SEMANTIC_EDGE_DISPLAY_LIMIT
+    ? `top ${semanticDisplayText} of ${visibleSemanticEdges.length.toLocaleString()}`
+    : semanticDisplayText;
 
   if (scopeGate === "checking") {
     return (
@@ -2658,8 +2806,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         title={
           viewMode !== "full"
             ? "Switch to Full graph and show semantic similarity edges"
-            : crossSemanticEdges.length
-            ? `${showSemantic ? "Hide" : "Show"} ${crossSemanticEdges.length} cross-repo similarity edges (${semanticMeta?.edge_count ?? 0} total)`
+            : visibleSemanticEdges.length
+            ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} visible semantic edges (${crossSemanticEdges.length.toLocaleString()} cross-group overlap, ${semanticMeta?.edge_count ?? 0} stored total). Trace can route through visible semantic edges.`
             : semanticMeta?.edge_count
             ? `Semantic overlay has ${semanticMeta.edge_count} stored edges, but none match the current full-graph scope and source filters.`
             : "No semantic edges yet - run Semantic Analysis in Settings"
@@ -2673,7 +2821,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }
         type="button"
       >
-        Semantic{crossSemanticEdges.length ? ` (${crossSemanticEdges.length})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
+        Semantic{visibleSemanticEdges.length ? ` (${semanticDisplayText})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
       </button>
     </>
   );
@@ -2720,14 +2868,17 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     <button
       className={`map-path-btn${pathMode ? " map-path-active" : ""}`}
       onClick={() => {
-        if (viewMode !== "summary" || mapMode !== "trace") {
+        if (mapMode !== "trace") {
           switchMapMode("trace");
           return;
         }
         setPathMode((p) => !p);
       }}
-      title={viewMode === "summary" ? "Trace shortest path between two nodes" : "Switch to Summary view to trace paths"}
-      style={viewMode !== "summary" ? { opacity: 0.75 } : {}}
+      title={
+        viewMode === "full"
+          ? "Trace the shortest route through visible physical and semantic Evidence edges"
+          : "Trace the shortest route through the summary graph"
+      }
       type="button"
     >
       {pathMode
@@ -2826,11 +2977,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             </div>
           )}
 
-          {(loading || (fullLoading && viewMode === "full")) && (
+          {mapWorkPending && (
             <div className="map-overlay">
               <WorkingStatus
-                label={fullLoading && viewMode === "full" ? (knowledgeOnly ? "Loading workspace knowledge" : "Loading full graph") : "Building graph summary"}
-                detail="First load may take a moment"
+                label={mapWorkLabel}
+                detail={mapWorkDetail}
               />
             </div>
           )}
@@ -2848,8 +2999,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           {pathMode && !pathNoRoute && (
             <div className="map-path-hint">
               {pathSource
-                ? "● Click a target node to trace path"
-                : "○ Click a source node to begin"}
+                ? `● Click a target node to trace ${traceLayerText}`
+                : `○ Click a source node to begin ${traceLayerText} trace`}
             </div>
           )}
 
@@ -3320,6 +3471,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                   {selectedFull.source_excerpt?.unavailable_reason || "No source excerpt available for this node."}
                 </div>
               )}
+            </div>
+
+            <div className="map-panel-actions">
+              <button
+                className="map-action-btn"
+                onClick={() => startPathFrom(selectedFull.id)}
+              >
+                Trace path from here
+              </button>
             </div>
 
             {selectedFull.source_file && (
