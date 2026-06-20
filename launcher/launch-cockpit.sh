@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-# Graphify Workspace Cockpit launcher.
+# Graphify Workspace Cockpit launcher (Linux/macOS).
 # Starts backend and frontend if not already running, then opens the browser.
+# On first run it bootstraps the backend venv and frontend dependencies.
+#
+# Click-to-launch: run launcher/install-desktop-entry.sh once to add an app-menu
+# icon. Windows users: see launcher/launch-cockpit.bat or the Docker path in
+# docs/deployment-guide.md.
+#
+# PLANNED: a true double-click app with native installers (Tauri/Electron) once
+# real-world usability on another machine is confirmed.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

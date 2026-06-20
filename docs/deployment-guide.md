@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Last Updated: 2026-06-16
+Last Updated: 2026-06-19
 
 This guide covers running the Graphify Workspace Cockpit beyond the default
 local dev setup — on a Windows machine via Docker Desktop, on a Linux server,
@@ -10,12 +10,20 @@ and optionally with HTTPS via Caddy.
 
 ## Local Dev (any OS)
 
-See the main [README](../README.md) for the quickstart. Clone, install, run
-`scripts/start.sh`. No Docker required.
+See the main [README](../README.md) Quick Start. The fastest path is the
+one-command launcher — `launcher/launch-cockpit.sh` on Linux/macOS,
+`launcher\launch-cockpit.bat` on Windows — which bootstraps and starts both
+services; `scripts/start.sh` is the manual equivalent. No Docker required.
 
 ---
 
 ## Windows — Docker Desktop
+
+> **Non-Docker option:** there's now a best-effort native launcher — double-click
+> `launcher\launch-cockpit.bat` (needs Python 3.10+ and Node 18+ on PATH). It
+> isn't yet tested across native Windows setups, so the Docker path below remains
+> the verified option. A true double-click app with a native installer is planned
+> once usability on more machines is confirmed.
 
 ### Prerequisites
 

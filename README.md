@@ -56,9 +56,65 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 
 ---
 
+## Quick Start (one command)
+
+The fastest way to run the cockpit. The launcher sets up the backend and frontend
+on first run, starts both, and opens your browser at `http://localhost:5173`.
+Assumes Python 3.10+ and Node 18+ are installed (see Prerequisites); the Docker
+path below needs neither.
+
+**Linux / macOS**
+
+```bash
+git clone <repo-url>
+cd graphify-workspace-cockpit
+./launcher/launch-cockpit.sh
+```
+
+For a click-to-launch icon in your application menu (Linux), run this once:
+
+```bash
+bash launcher/install-desktop-entry.sh
+```
+
+Then start the cockpit any time from your app menu — no terminal needed.
+
+**Windows**
+
+```bat
+git clone <repo-url>
+cd graphify-workspace-cockpit
+```
+
+Then double-click `launcher\launch-cockpit.bat`.
+
+> The Windows launcher is **best-effort** and not yet tested across native Windows
+> setups. If it misbehaves, use the verified Docker path below.
+
+**Any OS (Docker)**
+
+```bash
+docker-compose up --build
+```
+
+Docker is the verified cross-platform option — see
+[docs/deployment-guide.md](docs/deployment-guide.md) for Windows Docker Desktop
+and Linux server instructions.
+
+> **Coming later:** a true double-click desktop app with native installers for
+> Windows and Linux — no terminal, no prerequisites — is planned once real-world
+> usability on other machines is confirmed. For now, the launchers above and the
+> Docker path are the supported ways to run it.
+
+Prefer to set up each piece by hand? See **Setup: Local Dev Mode** below.
+
+---
+
 ## Setup: Local Dev Mode
 
-This is the fastest way to get started. No Docker required.
+This is the manual path — set up each piece yourself. Use it if you want full
+control or the one-command launcher above doesn't fit your environment. No Docker
+required.
 
 **1. Clone and install**
 
