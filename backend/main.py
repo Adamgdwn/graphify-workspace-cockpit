@@ -3098,8 +3098,9 @@ def _save_semantic_edges(
     model: str,
     threshold: float,
     created_at: str,
-    graph: dict,
+    graph: dict | None = None,
 ) -> None:
+    graph = graph or _load_graph()
     write_json_atomic(SEMANTIC_EDGES_FILE, {
         "edges": semantic_edges,
         "model": model,
