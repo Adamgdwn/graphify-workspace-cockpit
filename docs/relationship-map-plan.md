@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-18T22:45:26-06:00
-Status: shutdown handoff captured; next active work is owner review and clear-map tuning
+Last Updated: 2026-06-19T18:05:00-06:00
+Status: owner sign-off — video-ready; next active work is polish/tuning, not a rebuild
 Owner: Adam Goodwin
 
 ## Purpose
@@ -25,6 +25,14 @@ evidence and drilldown material unless they are high-signal enough to be visible
 as first-class nodes.
 
 ## Current State
+
+Owner sign-off 2026-06-19: Adam reviewed the multi-repo Evidence comparison map
+(Timeshare-Connect / vector-conversion-tool / mermaid-tool with cross-repo
+semantic links) and called it "video ready." The path is owner-approved;
+remaining work is polish/tuning, not a rebuild. Same-day: shipped constant
+on-screen-size repo labels (commit `995adc3`) and refreshed the canonical
+workspace graph (35,637 → 41,881 nodes). The original Graphify token-saving
+workflow was verified intact and additive to the cockpit.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,

@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-18T22:45:26-06:00
-Status: shutdown handoff captured; relationship-map path is ready for owner review and clear-map tuning
+Last Updated: 2026-06-19T18:05:00-06:00
+Status: owner sign-off — relationship-map is video-ready; remaining work is polish/tuning, not a rebuild
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -21,6 +21,19 @@ historical build log by default.
    history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
+
+Owner sign-off 2026-06-19: Adam reviewed the multi-repo Evidence comparison map
+and called it "freaking terrific … video ready." The relationship-map path is
+owner-approved; future work is polish/tuning (labels, semantic-edge
+explanations, map defaults, ignore tuning), not a rebuild or a new broad slice
+unless Adam redirects. Two same-day items: (1) shipped clear-map tuning so
+multi-repo region labels hold a constant ~18px on-screen size at any zoom
+(commit `995adc3`, pushed); (2) refreshed the canonical cross-repo workspace
+graph at `Tools/graphify/workspace/out` (was 7 days stale) with an AST-only
+incremental `graphify update`, 35,637 → 41,881 nodes, 0 leakage, backup at
+`out/graph.json.bak-2026-06-19`. The original Graphify token-saving workflow was
+verified intact: the cockpit consumes the same CLI through a subprocess service
+boundary and is additive, not a fork.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: relationship-map Slices 1-5,
 semantic/physical layer fixes, video intent recenter, multi-repo Evidence
