@@ -1,8 +1,41 @@
-# Graphify Workspace Cockpit
+<p align="center">
+  <img src="launcher/icon.png" alt="Graphify Workspace Cockpit logo" width="112" />
+</p>
 
-A local-first decision cockpit for developers and builders who use [Graphify](https://github.com/safishamsi/graphify) to map their workspace.
+<h1 align="center">Graphify Workspace Cockpit</h1>
 
-> Show me what I have, explain what it means, recommend what to do next, and wait for permission before acting.
+<p align="center">
+  <b>See your whole codebase the way you actually think about it — then decide what to do next, with the evidence right in front of you.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/safishamsi/graphify"><img src="https://img.shields.io/badge/built%20on-Graphify-6f42c1" alt="Built on Graphify"></a>
+  <img src="https://img.shields.io/badge/local--first-yes-2ea44f" alt="Local-first">
+  <img src="https://img.shields.io/badge/actions-approval--gated-1f6feb" alt="Approval-gated actions">
+  <img src="https://img.shields.io/badge/stack-FastAPI%20%2B%20React-8957e5" alt="FastAPI + React">
+  <img src="https://img.shields.io/badge/license-MIT-2ea44f" alt="License: MIT">
+</p>
+
+A local-first decision cockpit for developers and builders who use [Graphify](https://github.com/safishamsi/graphify) to map their workspace. Point it at one folder, get every repo underneath it as a single, queryable map — then ask questions across all of them, record the calls you make, and let nothing run until you approve it.
+
+> Show me what I have, explain what it means, recommend what to do next — and wait for permission before acting.
+
+---
+
+## The idea (in 30 seconds)
+
+AI coding agents are powerful — but they pay tokens to *re-read your code* every time they answer a question. And across a dozen repos, you lose the big picture entirely.
+
+**Graphify** solves the first half: it turns a codebase into a semantic graph you can *query* instead of *read*. Ask "where does auth live?" and you get back the handful of nodes that matter — not forty files.
+
+**This cockpit** solves the second half. It takes that graph and turns it into a place to actually make decisions:
+
+- 🗺️ **One map across every repo.** Point Graphify at a parent folder and see all your projects — and the connections *between* them — at once.
+- 💬 **Ask in plain language.** Questions answered straight from the graph, with the evidence nodes you can click into.
+- 🧭 **Decisions that stick.** Mark any area *invest / ship / monitor / archive* — future you, and any AI agent you hand this to, sees the call you already made.
+- 🔒 **Nothing runs without you.** Recommendations are proposals; every action waits behind a dry-run preview and an explicit approval.
+
+Local-first and read-only by default — your graph, your decisions, and your secrets stay on your machine.
 
 ---
 
@@ -292,6 +325,12 @@ development.
 - [docs/tool-permission-matrix.md](docs/tool-permission-matrix.md) — what the cockpit can and cannot do
 - [docs/risks/risk-register.md](docs/risks/risk-register.md) — known risks and controls
 - [docs/vision.md](docs/vision.md) — strategic direction and multi-device architecture
+
+---
+
+## Help it reach the next builder
+
+If the cockpit saves you time or tokens, a ⭐ on the repo genuinely helps other Graphify users find it. Issues, ideas, and pull requests are welcome — this is built in the open, in the same spirit Graphify was shared in the first place.
 
 ---
 
