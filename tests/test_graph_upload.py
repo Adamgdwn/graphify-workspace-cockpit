@@ -21,6 +21,7 @@ def _patch_graph_state(monkeypatch, tmp_path: Path) -> tuple[Path, Path, Path]:
     state_dir = tmp_path / "state"
     graphs_dir = state_dir / "graphs"
     settings_file = state_dir / "settings.json"
+    semantic_edges_file = state_dir / "semantic-edges.json"
     demo_graph = tmp_path / "demo" / "graph.json"
     demo_graph.parent.mkdir(parents=True, exist_ok=True)
     demo_graph.write_bytes((FIXTURES / "demo_graph_links.json").read_bytes())
@@ -30,6 +31,7 @@ def _patch_graph_state(monkeypatch, tmp_path: Path) -> tuple[Path, Path, Path]:
     monkeypatch.setattr(main, "WORKSPACE_STATE", state_dir)
     monkeypatch.setattr(main, "GRAPHS_DIR", graphs_dir)
     monkeypatch.setattr(main, "SETTINGS_FILE", settings_file)
+    monkeypatch.setattr(main, "SEMANTIC_EDGES_FILE", semantic_edges_file)
     monkeypatch.setattr(main, "_DEMO_GRAPH", str(demo_graph))
     monkeypatch.setattr(main, "DEFAULT_GRAPH", str(demo_graph))
     monkeypatch.setattr(main, "_graph_cache", None)
@@ -69,6 +71,24 @@ def test_upload_valid_graph_normalizes_writes_and_activates(
     saved_graph = json.loads(saved_path.read_text())
     assert "edges" not in saved_graph
     assert saved_graph["links"][0]["relation"] == "uses"
+
+
+def test_upload_clears_stale_semantic_edges(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    _, _, _ = _patch_graph_state(monkeypatch, tmp_path)
+    main.SEMANTIC_EDGES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    main.SEMANTIC_EDGES_FILE.write_text(json.dumps({
+        "edges": [{"source": "old", "target": "other", "similarity": 0.91}],
+        "created_at": "2026-06-17T00:00:00+00:00",
+    }))
+    client = TestClient(main.app)
+
+    response = _upload(client, "fresh graph.json", _valid_graph())
+
+    assert response.status_code == 201
+    assert not main.SEMANTIC_EDGES_FILE.exists()
 
 
 @pytest.mark.parametrize(

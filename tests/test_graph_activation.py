@@ -24,6 +24,7 @@ def _patch_graph_state(monkeypatch, tmp_path: Path) -> tuple[Path, Path, Path]:
     state_dir = tmp_path / "state"
     graphs_dir = state_dir / "graphs"
     settings_file = state_dir / "settings.json"
+    semantic_edges_file = state_dir / "semantic-edges.json"
     demo_graph = _write_graph(tmp_path / "demo" / "graph.json")
     uploaded_graph = _write_graph(graphs_dir / "uploaded graph.json")
 
@@ -33,6 +34,7 @@ def _patch_graph_state(monkeypatch, tmp_path: Path) -> tuple[Path, Path, Path]:
     monkeypatch.setattr(main, "WORKSPACE_STATE", state_dir)
     monkeypatch.setattr(main, "GRAPHS_DIR", graphs_dir)
     monkeypatch.setattr(main, "SETTINGS_FILE", settings_file)
+    monkeypatch.setattr(main, "SEMANTIC_EDGES_FILE", semantic_edges_file)
     monkeypatch.setattr(main, "_DEMO_GRAPH", str(demo_graph))
     monkeypatch.setattr(main, "DEFAULT_GRAPH", str(demo_graph))
     monkeypatch.setattr(main, "_graph_cache", None)
@@ -65,6 +67,40 @@ def test_activate_uploaded_graph_by_listed_name(monkeypatch, tmp_path: Path) -> 
     assert response.status_code == 200
     assert response.json() == {"activated": uploaded_graph.name, "path": str(uploaded_graph)}
     assert json.loads(settings_file.read_text())["graph_path"] == str(uploaded_graph)
+
+
+def test_activate_clears_stale_semantic_edges(monkeypatch, tmp_path: Path) -> None:
+    _, uploaded_graph, _ = _patch_graph_state(monkeypatch, tmp_path)
+    main.SEMANTIC_EDGES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    main.SEMANTIC_EDGES_FILE.write_text(json.dumps({
+        "edges": [{"source": "old", "target": "other", "similarity": 0.91}],
+        "created_at": "2026-06-17T00:00:00+00:00",
+    }))
+    client = TestClient(main.app)
+
+    response = client.post(f"/graphs/{quote(uploaded_graph.name)}/activate")
+
+    assert response.status_code == 200
+    assert not main.SEMANTIC_EDGES_FILE.exists()
+
+
+def test_semantic_edges_response_marks_unfingerprinted_cache_stale(monkeypatch, tmp_path: Path) -> None:
+    _patch_graph_state(monkeypatch, tmp_path)
+    main.SEMANTIC_EDGES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    main.SEMANTIC_EDGES_FILE.write_text(json.dumps({
+        "edges": [{"source": "old", "target": "other", "similarity": 0.91}],
+        "created_at": "2026-06-17T00:00:00+00:00",
+    }))
+    client = TestClient(main.app)
+
+    response = client.get("/graph/semantic-edges")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["edge_count"] == 1
+    assert body["current_graph_edge_match_count"] == 0
+    assert body["graph_matches"] is False
+    assert body["graph_stale"] is True
 
 
 def test_activate_missing_graph_returns_useful_detail(monkeypatch, tmp_path: Path) -> None:

@@ -111,6 +111,15 @@ interface SemanticEdge {
   similarity: number;
 }
 
+interface SemanticEdgeMeta {
+  edge_count: number;
+  created_at: string | null;
+  graph_matches?: boolean;
+  graph_stale?: boolean;
+  current_graph_edge_match_count?: number;
+  current_graph_node_count?: number;
+}
+
 interface DecisionOverlay {
   decision_classification?: DecisionClassification | "";
   decision_count: number;
@@ -1966,7 +1975,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   // semantic similarity overlay
   const [showSemantic, setShowSemantic] = useState(false);
   const [semanticEdges, setSemanticEdges] = useState<SemanticEdge[]>([]);
-  const [semanticMeta, setSemanticMeta] = useState<{ edge_count: number; created_at: string | null } | null>(null);
+  const [semanticMeta, setSemanticMeta] = useState<SemanticEdgeMeta | null>(null);
   const [summaryOverlap, setSummaryOverlap] = useState<OverlapSummaryResponse | null>(null);
   // overlap analysis panel
   const [showOverlap, setShowOverlap] = useState(false);
@@ -2162,6 +2171,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const usingSummaryOverlap = viewMode !== "full";
   const overlapGroups = usingSummaryOverlap ? summaryOverlapGroupsData : fullOverlapGroups;
   const storedSemanticEdgeCount = semanticMeta?.edge_count ?? semanticEdges.length;
+  const semanticCacheStale = Boolean(semanticMeta?.graph_stale);
   const outOfScopeSemanticEdgeCount = fullGraph
     ? Math.max(0, storedSemanticEdgeCount - visibleSemanticEdges.length)
     : 0;
@@ -2470,7 +2480,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       .then((d) => {
         if (!d) return;
         setSemanticEdges(d.edges ?? []);
-        setSemanticMeta({ edge_count: (d.edges ?? []).length, created_at: d.created_at ?? null });
+        setSemanticMeta({
+          edge_count: d.edge_count ?? (d.edges ?? []).length,
+          created_at: d.created_at ?? null,
+          graph_matches: d.graph_matches,
+          graph_stale: d.graph_stale,
+          current_graph_edge_match_count: d.current_graph_edge_match_count,
+          current_graph_node_count: d.current_graph_node_count,
+        });
       })
       .catch(() => {});
   }, []);
@@ -3550,10 +3567,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       ? ` (${semanticDisplayText}/${semanticVisibleText})`
       : ` (${semanticDisplayText})`
     : "";
+  const semanticStaleCaveat = semanticCacheStale
+    ? `${storedSemanticEdgeCount.toLocaleString()} stored semantic edges were built for a different graph. Run Semantic Analysis in Settings for the current repo/scope.`
+    : "";
   const semanticScopeCaveat = semanticCacheMostlyOutOfScope
     ? `${outOfScopeSemanticEdgeCount.toLocaleString()} stored semantic edges are outside this Evidence scope; run Semantic Analysis in Settings for current cross-folder links.`
     : "";
-  const semanticActionabilityCaveat = fullGraph && semanticRawVisibleCount > 0 && semanticActionableCount === 0
+  const semanticActionabilityCaveat = semanticCacheStale
+    ? ""
+    : fullGraph && semanticRawVisibleCount > 0 && semanticActionableCount === 0
     ? semanticCandidateCount === 0
       ? `${semanticVisibleText} raw semantic edges match this Evidence scope, but none cross the ${overlapScopeLabel} boundary needed for bright evidence.`
       : `${semanticCandidateText} ${overlapScopeLabel} semantic candidates match this Evidence scope, but none clear the actionability filter.`
@@ -3566,16 +3588,21 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const semanticOverlayNotice = [
     semanticDisplayCount
       ? `Showing ${semanticDisplayText} actionable semantic edges in this Evidence view.`
+      : semanticCacheStale
+      ? "Semantic cache is stale for this Evidence view."
       : semanticRawVisibleCount
       ? "No actionable semantic edges in this Evidence view."
       : "",
+    semanticStaleCaveat,
     semanticActionabilityCaveat,
     semanticBackboneCaveat,
-    semanticScopeCaveat,
+    semanticCacheStale ? "" : semanticScopeCaveat,
   ].filter(Boolean).join(" ");
   const semanticOverlayNoticeTone: "info" | "warn" = semanticDisplayCount ? "info" : "warn";
   const semanticScopeText = semanticDisplayCount
     ? `${semanticDisplayText} actionable ${overlapScopeLabel} semantic edges from ${semanticCandidateText} boundary candidates and ${semanticVisibleText} raw in-scope matches`
+    : semanticCacheStale
+    ? "stale semantic cache for this graph"
     : semanticRawVisibleCount
     ? semanticCandidateCount
       ? `0 actionable ${overlapScopeLabel} semantic edges from ${semanticCandidateText} boundary candidates and ${semanticVisibleText} raw in-scope matches`
@@ -3584,7 +3611,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
 
   useEffect(() => {
     if (viewMode !== "full" || !showSemantic || !fullGraph) return;
-    if (semanticOverlayNotice && (semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
+    if (semanticOverlayNotice && (semanticCacheStale || semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
       setFocusNotice({
         tone: semanticOverlayNoticeTone,
         text: semanticOverlayNotice,
@@ -3599,6 +3626,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     fullGraph,
     semanticActionabilityCaveat,
     semanticBackboneCaveat,
+    semanticCacheStale,
     semanticCacheMostlyOutOfScope,
     semanticDisplayCount,
     semanticOverlayNotice,
@@ -3854,7 +3882,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             setPathMode(false);
             setPathNoRoute(false);
             setShowSemantic(true);
-            if (semanticOverlayNotice && (semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
+            if (semanticOverlayNotice && (semanticCacheStale || semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
               setFocusNotice({
                 tone: semanticOverlayNoticeTone,
                 text: semanticOverlayNotice,
@@ -3870,7 +3898,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           setShowSemantic((current) => {
             const next = !current;
             if (next) {
-              if (semanticOverlayNotice && (semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
+              if (semanticOverlayNotice && (semanticCacheStale || semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
                 setFocusNotice({
                   tone: semanticOverlayNoticeTone,
                   text: semanticOverlayNotice,
@@ -3889,7 +3917,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           viewMode !== "full"
             ? "Switch to Evidence and show actionable semantic edges for this scope"
             : semanticDisplayCount
-            ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} (${semanticActionableText} actionable before backbone, ${semanticMeta?.edge_count ?? 0} stored total). Display uses actionability first, then mutual top-${SEMANTIC_BACKBONE_NEIGHBOR_LIMIT} neighbors so dense pockets stay readable; Trace routes through this backbone.${semanticActionabilityCaveat ? ` ${semanticActionabilityCaveat}` : ""}${semanticBackboneCaveat ? ` ${semanticBackboneCaveat}` : ""}${semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
+            ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} (${semanticActionableText} actionable before backbone, ${semanticMeta?.edge_count ?? 0} stored total). Display uses actionability first, then mutual top-${SEMANTIC_BACKBONE_NEIGHBOR_LIMIT} neighbors so dense pockets stay readable; Trace routes through this backbone.${semanticActionabilityCaveat ? ` ${semanticActionabilityCaveat}` : ""}${semanticBackboneCaveat ? ` ${semanticBackboneCaveat}` : ""}${semanticCacheStale ? "" : semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
+            : semanticCacheStale
+            ? `${showSemantic ? "Hide" : "Show"} semantic overlay. ${semanticScopeText}. ${semanticStaleCaveat}`
             : semanticRawVisibleCount
             ? `${showSemantic ? "Hide" : "Show"} semantic overlay. ${semanticScopeText}. The bright layer is filtered for duplicate, drift, gap, cross-app, or shared-pattern signal.${semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
             : semanticMeta?.edge_count

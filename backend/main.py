@@ -377,16 +377,71 @@ def _load_settings_dict() -> dict:
     return {}
 
 
+def _graph_fingerprint(graph: dict) -> str:
+    h = hashlib.sha256()
+    nodes = sorted(graph.get("nodes", []), key=lambda n: str(n.get("id", "")))
+    for node in nodes:
+        h.update(str(node.get("id", "")).encode())
+        h.update(b"\0")
+        h.update(str(node.get("label", "")).encode())
+        h.update(b"\0")
+        h.update(str(node.get("source_file", "")).encode())
+        h.update(b"\0")
+        h.update(str(node.get("source_root_name", "")).encode())
+        h.update(b"\n")
+    h.update(b"links\n")
+    links = sorted(
+        graph.get("links", []),
+        key=lambda link: (
+            str(link.get("source", "")),
+            str(link.get("target", "")),
+            str(link.get("relation", "")),
+        ),
+    )
+    for link in links:
+        h.update(str(link.get("source", "")).encode())
+        h.update(b"\0")
+        h.update(str(link.get("target", "")).encode())
+        h.update(b"\0")
+        h.update(str(link.get("relation", "")).encode())
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def _semantic_edges_match_graph(graph: dict) -> bool:
+    if not SEMANTIC_EDGES_FILE.exists():
+        return True
+    try:
+        data = json.loads(SEMANTIC_EDGES_FILE.read_text())
+    except Exception:
+        return False
+    stored_fingerprint = str(data.get("graph_fingerprint") or "")
+    return bool(stored_fingerprint and stored_fingerprint == _graph_fingerprint(graph))
+
+
+def _clear_semantic_edges_if_graph_changed(path: Path, previous_graph_path: str) -> None:
+    if not SEMANTIC_EDGES_FILE.exists():
+        return
+    clear_cache = previous_graph_path != str(path)
+    if not clear_cache:
+        try:
+            graph = normalize_graph(json.loads(path.read_text()), require_link_targets=True)
+            clear_cache = not _semantic_edges_match_graph(graph)
+        except Exception:
+            clear_cache = True
+    if clear_cache:
+        try:
+            SEMANTIC_EDGES_FILE.unlink()
+        except OSError:
+            pass
+
+
 def _activate_rebuild_graph(path: Path) -> None:
     previous_graph_path = _graph_path()
     settings = _load_settings_dict()
     settings["graph_path"] = str(path)
     write_json_atomic(SETTINGS_FILE, settings)
-    if previous_graph_path != str(path) and SEMANTIC_EDGES_FILE.exists():
-        try:
-            SEMANTIC_EDGES_FILE.unlink()
-        except OSError:
-            pass
+    _clear_semantic_edges_if_graph_changed(path, previous_graph_path)
 
 
 def _load_saved_workspace_scope() -> dict | None:
@@ -2507,14 +2562,7 @@ async def upload_graph(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=400, detail="Graph filename is not safe.") from exc
 
     write_json_atomic(dest, normalized)
-    settings: dict = {}
-    if SETTINGS_FILE.exists():
-        try:
-            settings = json.loads(SETTINGS_FILE.read_text())
-        except Exception:
-            pass
-    settings["graph_path"] = str(dest)
-    write_json_atomic(SETTINGS_FILE, settings)
+    _activate_rebuild_graph(dest)
     _graph_cache = None
     _summary_cache = {}
     return {
@@ -2603,14 +2651,7 @@ def activate_graph(name: str) -> dict:
         raise HTTPException(status_code=422, detail=f"Invalid JSON: {exc}") from exc
     except GraphValidationError as exc:
         raise HTTPException(status_code=422, detail=f"Invalid graph: {exc}") from exc
-    settings: dict = {}
-    if SETTINGS_FILE.exists():
-        try:
-            settings = json.loads(SETTINGS_FILE.read_text())
-        except Exception:
-            pass
-    settings["graph_path"] = str(candidate)
-    write_json_atomic(SETTINGS_FILE, settings)
+    _activate_rebuild_graph(candidate)
     _graph_cache = None
     _summary_cache = {}
     return {"activated": name, "path": str(candidate)}
@@ -3057,13 +3098,62 @@ def _save_semantic_edges(
     model: str,
     threshold: float,
     created_at: str,
+    graph: dict,
 ) -> None:
     write_json_atomic(SEMANTIC_EDGES_FILE, {
         "edges": semantic_edges,
         "model": model,
         "threshold": threshold,
         "created_at": created_at,
+        "graph_fingerprint": _graph_fingerprint(graph),
+        "graph_node_count": len(graph.get("nodes", [])),
     })
+
+
+def _semantic_edges_response(data: dict | None = None) -> dict:
+    payload = dict(data or {
+        "edges": [],
+        "model": None,
+        "threshold": None,
+        "created_at": None,
+        "graph_fingerprint": None,
+        "graph_node_count": 0,
+    })
+    edges = payload.get("edges")
+    if not isinstance(edges, list):
+        edges = []
+        payload["edges"] = edges
+
+    current_fingerprint: str | None = None
+    current_node_count = 0
+    current_edge_match_count = 0
+    try:
+        graph = _load_graph()
+        current_fingerprint = _graph_fingerprint(graph)
+        current_nodes = {str(node.get("id") or "") for node in graph.get("nodes", [])}
+        current_node_count = len(current_nodes)
+        current_edge_match_count = sum(
+            1
+            for edge in edges
+            if str(edge.get("source") or "") in current_nodes
+            and str(edge.get("target") or "") in current_nodes
+        )
+    except Exception:
+        pass
+
+    stored_fingerprint = payload.get("graph_fingerprint")
+    edge_count = len(edges)
+    graph_matches = bool(
+        (edge_count == 0 and not stored_fingerprint)
+        or (stored_fingerprint and current_fingerprint and stored_fingerprint == current_fingerprint)
+    )
+    payload["edge_count"] = edge_count
+    payload["current_graph_fingerprint"] = current_fingerprint
+    payload["current_graph_node_count"] = current_node_count
+    payload["current_graph_edge_match_count"] = current_edge_match_count
+    payload["graph_matches"] = graph_matches
+    payload["graph_stale"] = bool(edge_count > 0 and not graph_matches)
+    return payload
 
 
 def _run_semantic_pass(model: str, threshold: float) -> None:
@@ -3132,7 +3222,7 @@ def _run_semantic_pass(model: str, threshold: float) -> None:
                         })
 
         ts = datetime.now(tz=timezone.utc).isoformat()
-        _save_semantic_edges(semantic_edges, model, threshold, ts)
+        _save_semantic_edges(semantic_edges, model, threshold, ts, g)
 
         _SEMANTIC_STATUS.update({
             "status": "complete",
@@ -3170,11 +3260,11 @@ def semantic_pass_status() -> dict:
 def get_semantic_edges() -> dict:
     """Return stored semantic similarity edges."""
     if not SEMANTIC_EDGES_FILE.exists():
-        return {"edges": [], "model": None, "threshold": None, "created_at": None}
+        return _semantic_edges_response()
     try:
-        return json.loads(SEMANTIC_EDGES_FILE.read_text())
+        return _semantic_edges_response(json.loads(SEMANTIC_EDGES_FILE.read_text()))
     except Exception:
-        return {"edges": [], "model": None, "threshold": None, "created_at": None}
+        return _semantic_edges_response()
 
 
 @app.get("/graph/overlap-summary")

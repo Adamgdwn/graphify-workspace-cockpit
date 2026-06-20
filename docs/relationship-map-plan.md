@@ -1,6 +1,6 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-20T14:25:31-06:00
+Last Updated: 2026-06-20T14:38:21-06:00
 Status: owner sign-off — video-ready; next active work is polish/tuning, not a rebuild
 Owner: Adam Goodwin
 
@@ -63,6 +63,13 @@ Polish note 2026-06-20T14:25:31-06:00: map render overlays now clear on
 interrupted render cleanup and have a small watchdog, preventing hot reloads or
 mid-render state changes from leaving the Evidence map stuck behind "Rendering
 map" after Cytoscape has already produced a graph or error state.
+
+Polish note 2026-06-20T14:38:21-06:00: the single-repo semantic zero-state was
+mostly stale cache identity, not an overly strict actionability threshold. The
+backend now stamps semantic edges with a graph fingerprint, clears stale
+semantic caches on graph upload/activation, and exposes stale/current metadata
+so the Map can tell Adam to rerun Semantic Analysis for the current repo/scope
+instead of implying the filter rejected valid current edges.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
