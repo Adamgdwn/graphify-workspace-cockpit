@@ -1,6 +1,6 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-19T18:05:00-06:00
+Last Updated: 2026-06-20T14:09:52-06:00
 Status: owner sign-off — video-ready; next active work is polish/tuning, not a rebuild
 Owner: Adam Goodwin
 
@@ -33,6 +33,27 @@ remaining work is polish/tuning, not a rebuild. Same-day: shipped constant
 on-screen-size repo labels (commit `995adc3`) and refreshed the canonical
 workspace graph (35,637 → 41,881 nodes). The original Graphify token-saving
 workflow was verified intact and additive to the cockpit.
+
+Polish note 2026-06-20T13:40:39-06:00: semantic overlay visibility is now
+actionability-first. Raw semantic matches can remain stored, but bright green
+Evidence links are filtered/ranked for cross-folder or cross-repo decision
+signals: duplicate/waste, gap, drift risk, shared pattern, intentional
+reference, or cross-app similarity. The video script now includes this semantic
+evolution beat and recording pointers for raw-vs-actionable counts.
+
+Polish note 2026-06-20T13:57:24-06:00: bright semantic Evidence edges now have
+a direct inspector. Clicking a semantic edge highlights both endpoints and
+shows the practical "so what": insight kind, actionability score, similarity,
+decision signals, endpoints, repos, and a trace-from-source action. Overlap
+cards also show the same actionability signals when LLM triage has not supplied
+richer evidence yet.
+
+Polish note 2026-06-20T14:09:52-06:00: semantic zero-state copy now separates
+"raw edges exist but do not cross the boundary" from "boundary candidates
+failed the actionability score." In the current Applications evidence scope,
+the 14 matching raw semantic edges are same-container/local links, so hiding
+them is correct; the UI should not imply that real cross-folder candidates were
+discarded by an overly strict score.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
@@ -85,6 +106,11 @@ Completed foundations:
   derived from active decisions, relevant recommendations, and queued actions.
   Map nodes glow by primary decision classification, and selected node details
   show the related decision context.
+- Semantic overlay display is actionability-first: raw stored matches are
+  filtered into bright Evidence links only when they carry a pragmatic
+  cross-folder or cross-repo reason.
+- Clicking a bright semantic Evidence edge opens a semantic-link inspector with
+  the "so what" signals used to rank and admit the connection.
 
 Historical evidence lives in `docs/workspace-scope-and-signal-plan.md`.
 Completed stabilization evidence lives in `docs/stabilization-plan.md`.
@@ -291,7 +317,7 @@ Validation:
 
 Status: completed 2026-06-17T17:33:47-06:00.
 
-Goal: make overlap useful on broad maps without requiring a 5,000-node full
+Goal: make overlap useful on broad maps without requiring a 10,000-node full
 graph payload.
 
 Delivered behavior:

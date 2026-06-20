@@ -1129,7 +1129,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
 def graph_full(
     include_low_signal: bool = False,
     knowledge_only: bool = False,
-    max_nodes: int = 5000,
+    max_nodes: int = 10000,
     force: bool = False,
 ) -> dict:
     """Return all raw nodes and links for full-graph rendering in the Map."""

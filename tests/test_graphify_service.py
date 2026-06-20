@@ -390,6 +390,59 @@ def test_graph_full_hides_low_signal_nodes_by_default(monkeypatch, tmp_path: Pat
     assert expanded_body["include_low_signal"] is True
 
 
+def test_graph_endpoints_preserve_scoped_signal_metadata(monkeypatch, tmp_path: Path) -> None:
+    app = tmp_path / "code" / "app"
+    graph = tmp_path / "scoped-graph.json"
+    graph.write_text(json.dumps({
+        "_meta": {
+            "workspace_scope": {
+                "profile_name": "Single App",
+                "root": str(tmp_path / "code"),
+                "included_paths": [str(app)],
+                "excluded_paths": [],
+                "scanned_root_count": 1,
+                "removed_node_count": 3,
+            },
+        },
+        "nodes": [
+            {
+                "id": "worker",
+                "label": "worker.py",
+                "source_file": "worker.py",
+                "file_type": "code",
+                "source_root": str(app),
+                "source_root_name": "app",
+                "repo_project_name": "app",
+                "signal_tier": "important",
+                "signal_reason": "scoped rebuild classification",
+                "importance_tier": "important",
+                "importance_reason": "scoped rebuild classification",
+            },
+        ],
+        "links": [],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+    client = TestClient(main.app)
+
+    summary = client.get("/graph/summary").json()
+    full = client.get("/graph/full").json()
+
+    assert summary["total_nodes"] == 1
+    assert [node["label"] for node in summary["nodes"]] == ["app"]
+    assert summary["workspace_scope"]["profile_name"] == "Single App"
+    assert [node["id"] for node in full["nodes"]] == ["worker"]
+    assert full["signal_counts"]["important"] == 1
+
+
 def test_graph_full_workspace_knowledge_lens_prioritizes_decision_files(monkeypatch, tmp_path: Path) -> None:
     graph = tmp_path / "knowledge-graph.json"
     graph.write_text(json.dumps({

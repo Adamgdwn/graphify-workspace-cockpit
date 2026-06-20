@@ -139,6 +139,13 @@ repos** — the same concept showing up in two different projects. That's the th
 you can't see when each repo lives in its own graph, and it's the reason to build
 one unified graph at all.
 
+And the semantic layer had to evolve. The first version could say "these two
+things are similar," but that is not enough. The bright green links now have to
+answer a more practical question: *so what?* Is this duplicate work, a drift risk,
+a missing bridge, a shared pattern, or a cross-app capability? Raw similarity can
+still be stored, but the map only spends attention on links that might change a
+decision.
+
 ---
 
 ### 4 — Why there's a node limit, and what it protects (4:00–4:45)
@@ -153,7 +160,7 @@ Broad testing had the full-evidence view trying to draw over twenty-two thousand
 nodes at once and dragging the browser to a crawl before I could even narrow the
 scope.
 
-So there's a hard cap: the full file-level Evidence view tops out at **5,000
+So there's a hard cap: the full file-level Evidence view tops out at **10,000
 visible nodes**. Past that, the backend refuses the request, and the map keeps you
 in the overview-and-drill-down path instead — pick a region, then go deep.
 
@@ -272,8 +279,8 @@ workspace root away from this.
   every time the graph is rebuilt. The script deliberately uses round phrasing
   ("around forty thousand nodes," "over twenty-two thousand") so it stays true
   between refreshes. The one exact figure that's a *design constant*, not a live
-  count, is the 5,000-node Evidence cap — that's safe to state precisely.
-- **The node cap is real and demonstrable.** `FULL_GRAPH_NODE_LIMIT = 5000` in
+  count, is the 10,000-node Evidence cap — that's safe to state precisely.
+- **The node cap is real and demonstrable.** `FULL_GRAPH_NODE_LIMIT = 10000` in
   `frontend/src/tabs/Map.tsx`; the backend returns `413 GRAPH_FULL_TOO_LARGE` on
   oversized `/graph/full` requests with the message "Full evidence graph is too
   large for default browser rendering. Use the overview/drilldown map or narrow
@@ -292,6 +299,16 @@ workspace root away from this.
 - **Pick the demo repos live.** The recorded sign-off used Timeshare-Connect /
   vector-conversion-tool / mermaid-tool as the comparison trio because they show a
   clean cross-repo semantic link. Use whatever set reads clearest on the day.
+- **Semantic overlay is actionability-first now.** Bright green means a
+  cross-folder or cross-repo link cleared the "so what?" filter: duplicate, gap,
+  drift, shared pattern, intentional reference, or cross-app similarity. If the
+  button shows something like `Semantic (0/14)`, read it as 0 actionable links out
+  of 14 raw in-scope matches, not as a failure.
+- **Out-of-scope semantic-cache warnings are narratable.** If the map says stored
+  semantic edges are outside the Evidence scope, that means the semantic cache was
+  built against a broader or different graph. Say "the stored cache is broader
+  than this selected folder," then rerun Semantic Analysis for the recording scope
+  if you need fresh cross-folder links.
 - **Smoke-check before recording:**
   `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs` — verifies
   backend health, graph summary, Ask evidence, and the core endpoints. Full demo

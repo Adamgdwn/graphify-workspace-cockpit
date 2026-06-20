@@ -21,6 +21,9 @@ EntryKind = Literal["directory", "file", "symlink", "other"]
 SignalTier = Literal["overview", "important", "evidence", "hidden", "excluded"]
 ImportanceTier = Literal["anchor", "interface", "important", "evidence", "hidden", "excluded"]
 
+SIGNAL_TIERS = {"overview", "important", "evidence", "hidden", "excluded"}
+IMPORTANCE_TIERS = {"anchor", "interface", "important", "evidence", "hidden", "excluded"}
+
 DEFAULT_EXCLUDE_PATTERNS = [
     "node_modules/",
     ".venv/",
@@ -899,6 +902,17 @@ def apply_signal_tiers_to_graph(graph: Mapping, *, scan_root: Path | None = None
             continue
         node = dict(raw_node)
         node_id = str(node.get("id") or "")
+        existing_importance = str(node.get("importance_tier") or "")
+        existing_signal = str(node.get("signal_tier") or "")
+        if (
+            scan_root is None
+            and existing_importance in IMPORTANCE_TIERS
+            and existing_signal in SIGNAL_TIERS
+        ):
+            node.setdefault("importance_reason", node.get("signal_reason") or "preclassified graph metadata")
+            node.setdefault("signal_reason", node.get("importance_reason") or "preclassified graph metadata")
+            nodes.append(node)
+            continue
         source_path = _resolve_node_source_path(node, scan_root) if scan_root else None
         importance, reason = classify_file_importance(
             node,

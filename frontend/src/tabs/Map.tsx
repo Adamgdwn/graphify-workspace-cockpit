@@ -210,7 +210,7 @@ interface FullGraph {
 
 type Filter = "all" | "code" | "document";
 type ViewMode = "summary" | "full";
-const FULL_GRAPH_NODE_LIMIT = 5000;
+const FULL_GRAPH_NODE_LIMIT = 10000;
 type MapMode = "explore" | "trace" | "overlap" | "review";
 type ScopeGateState = "checking" | "ready" | "setup";
 
@@ -243,6 +243,7 @@ function shouldOpenExpandedEvidence(summary: GraphSummary, project?: string): bo
     !project
     && includedCount >= 1
     && includedCount <= 3
+    && summary.nodes.length <= includedCount
     && summary.total_nodes <= FULL_GRAPH_NODE_LIMIT
   );
 }
@@ -270,8 +271,8 @@ const MAP_MODES: Array<{ id: MapMode; label: string; subLabel: string; hint: str
     id: "overlap",
     label: "Overlap",
     subLabel: "semantic",
-    hint: "Review semantic connections, cross-repo overlap, and consolidation candidates.",
-    tooltip: "Semantic overlap: show similarity edges, group cross-repo connections, and triage duplicate or related work.",
+    hint: "Review semantic connections, cross-folder overlap, and consolidation candidates.",
+    tooltip: "Semantic overlap: show similarity edges, group cross-folder or cross-repo connections, and triage duplicate or related work.",
   },
   {
     id: "review",
@@ -339,6 +340,9 @@ interface OverlapPair {
   fileB: string;
   similarity: number;
   sameName: boolean;
+  actionabilityScore?: number;
+  insightKind?: SemanticInsightKind;
+  decisionSignals?: string[];
 }
 
 interface OverlapGroup {
@@ -350,6 +354,8 @@ interface OverlapGroup {
   sameNameCount: number;
   topPairs: OverlapPair[];
   source: "full" | "summary";
+  actionabilityScore?: number;
+  decisionSignals?: string[];
 }
 
 type SemanticInsightKind =
@@ -361,6 +367,20 @@ type SemanticInsightKind =
   | "intentional_reference"
   | "low_value"
   | "unknown";
+
+interface ActionableSemanticEdge extends SemanticEdge {
+  actionabilityScore: number;
+  insightKind: SemanticInsightKind;
+  decisionSignals: string[];
+}
+
+interface SelectedSemanticLink {
+  edge: ActionableSemanticEdge;
+  sourceNode: FullNode | null;
+  targetNode: FullNode | null;
+  sourceGroup: string;
+  targetGroup: string;
+}
 
 interface SemanticInsightSummary {
   kind: SemanticInsightKind;
@@ -474,7 +494,8 @@ function heuristicOverlapInsight(group: OverlapGroup): SemanticInsightSummary {
   const maxSimilarity = group.maxSimilarity || group.avgSimilarity || 0;
   const sameNameBoost = group.sameNameCount > 0 ? 0.18 : 0;
   const densityBoost = Math.min(0.18, group.edgeCount / 250);
-  const score = Math.min(0.98, 0.34 + group.avgSimilarity * 0.34 + densityBoost + sameNameBoost);
+  const heuristicScore = 0.34 + group.avgSimilarity * 0.34 + densityBoost + sameNameBoost;
+  const score = Math.min(0.98, Math.max(heuristicScore, group.actionabilityScore ?? 0));
   let kind: SemanticInsightKind = "low_value";
   let impact = "Similarity is present, but it needs LLM triage before it should drive cleanup work.";
 
@@ -517,6 +538,31 @@ function triageInsight(triage: TriageResult | undefined, group: OverlapGroup): S
     source: "llm",
     impact: triage.decision_impact || fallback.impact,
   };
+}
+
+function semanticInsightImpact(kind: SemanticInsightKind, signals: string[] = []): string {
+  if (kind === "waste_duplicate") {
+    return "This link looks actionable because the endpoints may be duplicate work or duplicate knowledge that deserves one canonical home.";
+  }
+  if (kind === "drift_risk") {
+    return "This link is strong enough that the two sides may drift unless one source of truth or an explicit relationship is named.";
+  }
+  if (kind === "gap_missing_bridge") {
+    return "This link connects related work without a clear physical bridge, so it may point to missing documentation, ownership, or integration.";
+  }
+  if (kind === "cross_app_similarity") {
+    return "This link crosses application boundaries and may reveal shared capability, reused workflow, or competing implementations.";
+  }
+  if (kind === "shared_pattern") {
+    return "This link suggests a reusable pattern or vocabulary that may be worth naming if it matters across this scope.";
+  }
+  if (kind === "intentional_reference") {
+    return "This link appears related and already has some structural support, so treat it as a reference to confirm rather than cleanup by default.";
+  }
+  if (signals.length > 0) {
+    return "This link cleared the semantic actionability filter because several practical signals lined up.";
+  }
+  return "This semantic link needs human judgment before it should drive a change.";
 }
 
 function relationList(relations?: string[]): string {
@@ -1074,13 +1120,15 @@ const FULL_FAST_LAYOUT_EDGE_THRESHOLD = 1600;
 const SEMANTIC_EDGE_DISPLAY_LIMIT = 2000;
 const SEMANTIC_BACKBONE_NEIGHBOR_LIMIT = 4;
 const SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT = 6;
+const SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE = 0.52;
+const FULL_CONTAINER_LABEL_LIMIT = 36;
 
 function semanticEdgeKey(source: string, target: string) {
   return source < target ? `${source}\u0000${target}` : `${target}\u0000${source}`;
 }
 
-function buildSemanticBackbone(edges: SemanticEdge[]): SemanticEdge[] {
-  const uniqueByPair = new globalThis.Map<string, SemanticEdge>();
+function buildSemanticBackbone<T extends SemanticEdge>(edges: T[]): T[] {
+  const uniqueByPair = new globalThis.Map<string, T>();
   for (const edge of edges) {
     const key = semanticEdgeKey(edge.source, edge.target);
     const existing = uniqueByPair.get(key);
@@ -1091,7 +1139,7 @@ function buildSemanticBackbone(edges: SemanticEdge[]): SemanticEdge[] {
 
   const uniqueEdges = [...uniqueByPair.values()];
   const sortedEdges = [...uniqueEdges].sort((a, b) => b.similarity - a.similarity);
-  const edgesByNode = new globalThis.Map<string, SemanticEdge[]>();
+  const edgesByNode = new globalThis.Map<string, T[]>();
   for (const edge of uniqueEdges) {
     edgesByNode.set(edge.source, [...(edgesByNode.get(edge.source) ?? []), edge]);
     edgesByNode.set(edge.target, [...(edgesByNode.get(edge.target) ?? []), edge]);
@@ -1108,7 +1156,7 @@ function buildSemanticBackbone(edges: SemanticEdge[]): SemanticEdge[] {
     rankByNode.set(nodeId, ranked);
   }
 
-  const selected: SemanticEdge[] = [];
+  const selected: T[] = [];
   const degreeByNode = new globalThis.Map<string, number>();
   for (const edge of sortedEdges) {
     const key = semanticEdgeKey(edge.source, edge.target);
@@ -1143,6 +1191,188 @@ function fullNodeContainer(node: FullNode): string {
     .split("/")
     .filter(Boolean)[0];
   return node.container || pathHead || node.type || "root";
+}
+
+function fullNodeGroup(node: FullNode, repoCount: number): string {
+  const repo = fullNodeRepo(node);
+  const container = fullNodeContainer(node);
+  if (repoCount > 1) return `${repo} / ${container}`;
+  return container || node.cluster || repo;
+}
+
+function nodePath(node: FullNode | undefined): string {
+  return (node?.source_file || node?.relative_path || "").replace(/\\/g, "/").trim();
+}
+
+function pathBasename(path: string): string {
+  return path.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
+}
+
+function normalizedName(value: string | undefined): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function boundaryKey(a: string, b: string): string {
+  return a < b ? `${a}\u0000${b}` : `${b}\u0000${a}`;
+}
+
+function nodeSignalWeight(node: FullNode | undefined): number {
+  if (!node) return 0;
+  if (node.importance_tier === "anchor") return 0.08;
+  if (node.importance_tier === "interface") return 0.07;
+  if (node.importance_tier === "important" || node.signal_tier === "important") return 0.05;
+  if (node.signal_tier === "overview") return 0.04;
+  return 0;
+}
+
+function semanticSimilarityBoost(similarity: number): number {
+  if (!Number.isFinite(similarity)) return 0;
+  return Math.min(0.22, Math.max(0, ((similarity - 0.78) / 0.2) * 0.22));
+}
+
+function uniqueSignals(signals: string[]): string[] {
+  return [...new Set(signals.map((signal) => signal.trim()).filter(Boolean))].slice(0, 4);
+}
+
+function buildActionableSemanticEdges(
+  edges: SemanticEdge[],
+  nodeMap: Record<string, FullNode>,
+  groupMap: Record<string, string>,
+  physicalEdgeKeys: Set<string>,
+  physicalGroupKeys: Set<string>,
+  repoCount: number,
+): ActionableSemanticEdge[] {
+  const groupEdgeCounts = new globalThis.Map<string, number>();
+  const groupSameNameCounts = new globalThis.Map<string, number>();
+
+  for (const edge of edges) {
+    const source = nodeMap[edge.source];
+    const target = nodeMap[edge.target];
+    const sourceGroup = groupMap[edge.source];
+    const targetGroup = groupMap[edge.target];
+    if (!source || !target || !sourceGroup || !targetGroup || sourceGroup === targetGroup) continue;
+    const key = boundaryKey(sourceGroup, targetGroup);
+    const sourceBase = pathBasename(nodePath(source));
+    const targetBase = pathBasename(nodePath(target));
+    const sameName = Boolean(sourceBase && sourceBase === targetBase);
+    groupEdgeCounts.set(key, (groupEdgeCounts.get(key) ?? 0) + 1);
+    if (sameName) groupSameNameCounts.set(key, (groupSameNameCounts.get(key) ?? 0) + 1);
+  }
+
+  const scored = edges.map((edge): ActionableSemanticEdge | null => {
+    const source = nodeMap[edge.source];
+    const target = nodeMap[edge.target];
+    const sourceGroup = groupMap[edge.source];
+    const targetGroup = groupMap[edge.target];
+    if (!source || !target || !sourceGroup || !targetGroup) return null;
+
+    const sourcePath = nodePath(source);
+    const targetPath = nodePath(target);
+    const sameFile = Boolean(sourcePath && targetPath && sourcePath === targetPath);
+    const sourceBase = pathBasename(sourcePath);
+    const targetBase = pathBasename(targetPath);
+    const sameName = Boolean(sourceBase && sourceBase === targetBase);
+    const sourceLabel = normalizedName(source.label);
+    const targetLabel = normalizedName(target.label);
+    const sameLabel = Boolean(sourceLabel && sourceLabel === targetLabel);
+    const sourceRepo = fullNodeRepo(source);
+    const targetRepo = fullNodeRepo(target);
+    const crossRepo = Boolean(sourceRepo && targetRepo && sourceRepo !== targetRepo);
+    const crossGroup = sourceGroup !== targetGroup;
+    const pairKey = boundaryKey(sourceGroup, targetGroup);
+    const pairEdgeCount = groupEdgeCounts.get(pairKey) ?? 1;
+    const pairSameNameCount = groupSameNameCounts.get(pairKey) ?? 0;
+    const directPhysicalLink = physicalEdgeKeys.has(semanticEdgeKey(edge.source, edge.target));
+    const groupPhysicalLink = physicalGroupKeys.has(pairKey);
+
+    const decisionSignals: string[] = [];
+    let score = 0.08;
+
+    if (crossRepo) {
+      score += 0.3;
+      decisionSignals.push("cross-repo");
+    } else if (crossGroup) {
+      score += 0.24;
+      decisionSignals.push(repoCount > 1 ? "cross-project" : "cross-folder");
+    } else {
+      score -= 0.35;
+    }
+
+    score += semanticSimilarityBoost(edge.similarity);
+    if (edge.similarity >= 0.92) decisionSignals.push("very high similarity");
+    else if (edge.similarity >= 0.86) decisionSignals.push("high similarity");
+
+    if (sameName && !sameFile) {
+      score += 0.24;
+      decisionSignals.push("same filename");
+    } else if (sameLabel && !sameFile) {
+      score += 0.12;
+      decisionSignals.push("same label");
+    }
+
+    const densityBoost = Math.min(0.16, (Math.log1p(pairEdgeCount) / Math.log1p(30)) * 0.16);
+    score += densityBoost;
+    if (pairEdgeCount >= 4) decisionSignals.push(`${pairEdgeCount} related links`);
+    if (pairSameNameCount >= 2) {
+      score += 0.08;
+      decisionSignals.push(`${pairSameNameCount} same-name pairs`);
+    }
+
+    const signalWeight = nodeSignalWeight(source) + nodeSignalWeight(target);
+    score += signalWeight;
+    if (signalWeight >= 0.08) decisionSignals.push("important nodes");
+
+    if (crossGroup && !directPhysicalLink && !groupPhysicalLink) {
+      score += 0.11;
+      decisionSignals.push("missing physical bridge");
+    } else if (crossGroup && !directPhysicalLink && groupPhysicalLink) {
+      score += 0.04;
+      decisionSignals.push("boundary already linked");
+    } else if (directPhysicalLink) {
+      score -= 0.08;
+    }
+
+    if (sameFile) {
+      score -= 0.45;
+      decisionSignals.push("same source file");
+    }
+
+    const boundedScore = Math.min(0.99, Math.max(0, score));
+    let insightKind: SemanticInsightKind = "low_value";
+    if (boundedScore >= SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE && crossGroup && !sameFile) {
+      if (sameName && edge.similarity >= 0.84) {
+        insightKind = "waste_duplicate";
+      } else if (edge.similarity >= 0.93) {
+        insightKind = "drift_risk";
+      } else if (!groupPhysicalLink) {
+        insightKind = "gap_missing_bridge";
+      } else if (crossRepo) {
+        insightKind = "cross_app_similarity";
+      } else if (pairEdgeCount >= 4) {
+        insightKind = "shared_pattern";
+      } else {
+        insightKind = "intentional_reference";
+      }
+    }
+
+    return {
+      ...edge,
+      actionabilityScore: boundedScore,
+      insightKind,
+      decisionSignals: uniqueSignals(decisionSignals),
+    };
+  });
+
+  return scored
+    .filter((edge): edge is ActionableSemanticEdge => (
+      Boolean(edge)
+        && edge!.insightKind !== "low_value"
+        && edge!.actionabilityScore >= SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE
+    ))
+    .sort((a, b) => {
+      if (b.actionabilityScore !== a.actionabilityScore) return b.actionabilityScore - a.actionabilityScore;
+      return b.similarity - a.similarity;
+    });
 }
 
 function visibleFullNodes(full: FullGraph, filter: Filter, selectedClusters: Set<string> | null = null): FullNode[] {
@@ -1191,6 +1421,7 @@ function nodeCloudRadius(count: number): number {
 type FullPresetLayout = {
   positions: Record<string, { x: number; y: number }>;
   repoLabels: Array<{ id: string; label: string; position: { x: number; y: number } }>;
+  containerLabels: Array<{ id: string; label: string; position: { x: number; y: number } }>;
 };
 
 function placeNodeCloud(
@@ -1250,6 +1481,8 @@ function buildFullPresetLayout(nodes: FullNode[]): FullPresetLayout {
 
       const goldenAngle = Math.PI * (3 - Math.sqrt(5));
       const largestRadius = groups[0]?.radius ?? 0;
+      const containerLabels: FullPresetLayout["containerLabels"] = [];
+      const shouldLabelContainers = groups.length <= FULL_CONTAINER_LABEL_LIMIT;
       groups.forEach((group, index) => {
         const radius = index === 0
           ? 0
@@ -1258,6 +1491,16 @@ function buildFullPresetLayout(nodes: FullNode[]): FullPresetLayout {
         const centerX = Math.cos(angle) * radius;
         const centerY = Math.sin(angle) * radius;
         placeNodeCloud(group.nodes, centerX, centerY, `${repo}:${group.container}`, localPositions);
+        if (shouldLabelContainers) {
+          containerLabels.push({
+            id: `container_label_${stableLayoutHash(`${repo}:${group.container}`)}_${index}`,
+            label: group.container,
+            position: {
+              x: centerX,
+              y: centerY - group.radius - 34,
+            },
+          });
+        }
       });
 
       const coords = Object.values(localPositions);
@@ -1269,6 +1512,7 @@ function buildFullPresetLayout(nodes: FullNode[]): FullPresetLayout {
       return {
         repo,
         positions: localPositions,
+        containerLabels,
         bounds: {
           minX: minX - padding,
           maxX: maxX + padding,
@@ -1280,6 +1524,7 @@ function buildFullPresetLayout(nodes: FullNode[]): FullPresetLayout {
 
   const positions: Record<string, { x: number; y: number }> = {};
   const repoLabels: FullPresetLayout["repoLabels"] = [];
+  const containerLabels: FullPresetLayout["containerLabels"] = [];
   const repoGap = 520;
   const repoWidths = repoLayouts.map((layout) => layout.bounds.maxX - layout.bounds.minX);
   const totalWidth = repoWidths.reduce((sum, width) => sum + width, 0) + repoGap * Math.max(0, repoLayouts.length - 1);
@@ -1304,11 +1549,21 @@ function buildFullPresetLayout(nodes: FullNode[]): FullPresetLayout {
         y: layout.bounds.minY + offsetY - 46,
       },
     });
+    for (const containerLabel of layout.containerLabels) {
+      containerLabels.push({
+        id: `${containerLabel.id}_${index}`,
+        label: containerLabel.label,
+        position: {
+          x: containerLabel.position.x + offsetX,
+          y: containerLabel.position.y + offsetY,
+        },
+      });
+    }
 
     cursorX += width + repoGap;
   });
 
-  return { positions, repoLabels };
+  return { positions, repoLabels, containerLabels };
 }
 
 function buildFullElements(
@@ -1320,6 +1575,7 @@ function buildFullElements(
   const visibleNodes = visibleFullNodes(full, filter, selectedClusters);
   const visibleIds = new Set(visibleNodes.map((n) => n.id));
   const positions = presetLayout?.positions ?? {};
+  const repoCount = new Set(visibleNodes.map(fullNodeRepo)).size;
 
   const nodes = visibleNodes.map((n) => ({
     data: {
@@ -1328,7 +1584,7 @@ function buildFullElements(
       type: n.type,
       cluster: n.cluster,
       source_file: n.source_file,
-      color: clusterColor(n.cluster),
+      color: clusterColor(fullNodeGroup(n, repoCount)),
       decision: n.decision_overlay?.decision_classification || n.decision_classification || "",
       decision_count: n.decision_overlay?.decision_count ?? n.decision_count ?? 0,
       recommendation_count: n.decision_overlay?.recommendation_count ?? n.recommendation_count ?? 0,
@@ -1344,6 +1600,18 @@ function buildFullElements(
     },
     classes: "repo-label",
     position: repoLabel.position,
+    selectable: false,
+    grabbable: false,
+    locked: true,
+  }));
+  const containerLabelNodes = (presetLayout?.containerLabels ?? []).map((containerLabel) => ({
+    data: {
+      id: containerLabel.id,
+      label: containerLabel.label,
+      color: "#6b8cff",
+    },
+    classes: "container-label",
+    position: containerLabel.position,
     selectable: false,
     grabbable: false,
     locked: true,
@@ -1368,20 +1636,24 @@ function buildFullElements(
       },
     }));
 
-  return [...repoLabelNodes, ...nodes, ...edges];
+  return [...repoLabelNodes, ...containerLabelNodes, ...nodes, ...edges];
 }
 
-function applyStructuralEdgeVisibility(cy: Core, showStructural: boolean) {
+function applyStructuralEdgeVisibility(cy: Core, showStructural: boolean, emphasizeSemantic = false) {
   cy.batch(() => {
     cy.edges().forEach((edge: any) => {
       if (edge.hasClass("semantic-edge")) {
         edge.removeClass("struct-hidden");
+        edge.removeClass("struct-muted");
         return;
       }
       if (showStructural) {
         edge.removeClass("struct-hidden");
+        if (emphasizeSemantic) edge.addClass("struct-muted");
+        else edge.removeClass("struct-muted");
       } else {
         edge.addClass("struct-hidden");
+        edge.removeClass("struct-muted");
       }
     });
   });
@@ -1543,6 +1815,26 @@ const FULL_CY_STYLE: object[] = [
     },
   },
   {
+    selector: "node.container-label",
+    style: {
+      width: 1,
+      height: 1,
+      "background-opacity": 0,
+      "border-width": 0,
+      label: "data(label)",
+      color: "#c6d4f6",
+      "font-family": '"JetBrains Mono", ui-monospace, monospace',
+      "font-size": 14,
+      "font-weight": 700,
+      "min-zoomed-font-size": 0,
+      "text-halign": "center",
+      "text-valign": "center",
+      "text-outline-color": "#070a12",
+      "text-outline-width": 2,
+      "text-outline-opacity": 0.94,
+    },
+  },
+  {
     selector: "node.faded",
     style: { opacity: 0.08 },
   },
@@ -1572,23 +1864,27 @@ const FULL_CY_STYLE: object[] = [
     style: { opacity: 0.03 },
   },
   {
+    selector: "edge.struct-muted",
+    style: { opacity: 0.16 },
+  },
+  {
     selector: "edge.semantic-edge",
     style: {
-      "curve-style": "straight",
-      "line-color": "#22c55e",
-      "line-style": "dashed",
-      "line-dash-pattern": [6, 4],
-      width: 1.5,
-      opacity: 0.7,
+      "curve-style": "bezier",
+      "line-color": "#39ff88",
+      "line-style": "solid",
+      "z-index": 30,
+      width: 3,
+      opacity: 0.96,
     },
   },
   {
     selector: "edge.semantic-edge.highlighted",
     style: {
-      "line-color": "#22c55e",
+      "line-color": "#69e6b1",
       "line-style": "solid",
       opacity: 1,
-      width: 2.5,
+      width: 4,
     },
   },
   {
@@ -1639,6 +1935,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SummaryNode | null>(null);
   const [selectedFull, setSelectedFull] = useState<FullNode | null>(null);
+  const [selectedSemanticLink, setSelectedSemanticLink] = useState<SelectedSemanticLink | null>(null);
   const [breadcrumb, setBreadcrumb] = useState<string[]>([]);
   const [filter, setFilter] = useState<Filter>("all");
   const [mapMode, setMapMode] = useState<MapMode>("explore");
@@ -1690,13 +1987,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [generatingScopeMap, setGeneratingScopeMap] = useState(false);
 
   const showSemanticRef = useRef(false);
-  const visibleSemanticEdgesRef = useRef<SemanticEdge[]>([]);
+  const visibleSemanticEdgesRef = useRef<ActionableSemanticEdge[]>([]);
   const showStructuralRef = useRef(true);
   const overlapNodeGroupMapRef = useRef<Record<string, string>>({});
 
-  // Cross-cluster node lookup — built once when fullGraph loads
-  const nodeClusterMap = useMemo(
-    () => Object.fromEntries(fullGraph?.nodes.map((n) => [n.id, n.cluster]) ?? []) as Record<string, string>,
+  const fullNodeMap = useMemo(
+    () => Object.fromEntries(fullGraph?.nodes.map((n) => [n.id, n]) ?? []) as Record<string, FullNode>,
     [fullGraph],
   );
   const nodeRepoMap = useMemo(
@@ -1715,11 +2011,26 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     () => Object.fromEntries(
       fullGraph?.nodes.map((n) => [
         n.id,
-        visibleRepoCount > 1 ? `${fullNodeRepo(n)} / ${fullNodeContainer(n)}` : n.cluster,
+        fullNodeGroup(n, visibleRepoCount),
       ]) ?? [],
     ) as Record<string, string>,
     [fullGraph, visibleRepoCount],
   );
+  const physicalEdgeKeys = useMemo(() => {
+    if (!fullGraph) return new Set<string>();
+    return new Set(fullGraph.edges.map((edge) => semanticEdgeKey(edge.source, edge.target)));
+  }, [fullGraph]);
+  const physicalGroupKeys = useMemo(() => {
+    if (!fullGraph) return new Set<string>();
+    const keys = new Set<string>();
+    for (const edge of fullGraph.edges) {
+      const sourceGroup = overlapNodeGroupMap[edge.source];
+      const targetGroup = overlapNodeGroupMap[edge.target];
+      if (!sourceGroup || !targetGroup || sourceGroup === targetGroup) continue;
+      keys.add(boundaryKey(sourceGroup, targetGroup));
+    }
+    return keys;
+  }, [fullGraph, overlapNodeGroupMap]);
 
   // Semantic edges that connect nodes currently available in Evidence view.
   const visibleSemanticEdges = useMemo(() => {
@@ -1730,11 +2041,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   // Cross-cluster semantic edges drive Overlap; intra-cluster semantic edges still matter for Trace.
   const crossSemanticEdges = useMemo(() => (
     visibleSemanticEdges.filter((e) => {
-      const sc = nodeClusterMap[e.source];
-      const tc = nodeClusterMap[e.target];
+      const sc = overlapNodeGroupMap[e.source];
+      const tc = overlapNodeGroupMap[e.target];
       return sc && tc && sc !== tc;
     })
-  ), [visibleSemanticEdges, nodeClusterMap]);
+  ), [visibleSemanticEdges, overlapNodeGroupMap]);
   const crossRepoSemanticEdges = useMemo(() => (
     visibleSemanticEdges.filter((e) => {
       const sourceRepo = nodeRepoMap[e.source];
@@ -1743,19 +2054,40 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     })
   ), [visibleSemanticEdges, nodeRepoMap]);
 
-  const semanticEdgesForDisplay = useMemo(
-    () => buildSemanticBackbone(visibleRepoCount > 1 ? crossRepoSemanticEdges : visibleSemanticEdges),
-    [crossRepoSemanticEdges, visibleRepoCount, visibleSemanticEdges],
-  );
-  const overlapSemanticEdges = useMemo(
+  const semanticCandidateEdges = useMemo(
     () => (visibleRepoCount > 1 ? crossRepoSemanticEdges : crossSemanticEdges),
     [crossRepoSemanticEdges, crossSemanticEdges, visibleRepoCount],
+  );
+  const actionableSemanticEdges = useMemo(
+    () => buildActionableSemanticEdges(
+      semanticCandidateEdges,
+      fullNodeMap,
+      overlapNodeGroupMap,
+      physicalEdgeKeys,
+      physicalGroupKeys,
+      visibleRepoCount,
+    ),
+    [
+      fullNodeMap,
+      overlapNodeGroupMap,
+      physicalEdgeKeys,
+      physicalGroupKeys,
+      semanticCandidateEdges,
+      visibleRepoCount,
+    ],
+  );
+  const semanticEdgesForDisplay = useMemo(
+    () => buildSemanticBackbone(actionableSemanticEdges),
+    [actionableSemanticEdges],
+  );
+  const overlapSemanticEdges = useMemo(
+    () => actionableSemanticEdges,
+    [actionableSemanticEdges],
   );
 
   // Overlap analysis groups — ranked cross-cluster pairs by connection count
   const fullOverlapGroups = useMemo((): OverlapGroup[] => {
     if (!fullGraph || !overlapSemanticEdges.length) return [];
-    const nodeMap = Object.fromEntries(fullGraph.nodes.map((n) => [n.id, n]));
     const basename = (f: string) => f.split("/").pop() ?? f;
     const groups: Record<string, { clusterA: string; clusterB: string; edges: OverlapPair[] }> = {};
     for (const edge of overlapSemanticEdges) {
@@ -1766,8 +2098,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       const cb = sc <= tc ? tc : sc;
       const key = `${ca}___${cb}`;
       if (!groups[key]) groups[key] = { clusterA: ca, clusterB: cb, edges: [] };
-      const na = nodeMap[edge.source];
-      const nb = nodeMap[edge.target];
+      const na = fullNodeMap[edge.source];
+      const nb = fullNodeMap[edge.target];
       const fileA = na?.source_file ?? "";
       const fileB = nb?.source_file ?? "";
       groups[key].edges.push({
@@ -1778,6 +2110,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         fileA,
         fileB,
         sameName: !!fileA && !!fileB && basename(fileA) === basename(fileB),
+        actionabilityScore: edge.actionabilityScore,
+        insightKind: edge.insightKind,
+        decisionSignals: edge.decisionSignals,
       });
     }
     return Object.values(groups)
@@ -1785,9 +2120,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         const avg = g.edges.reduce((s, e) => s + e.similarity, 0) / g.edges.length;
         const maxSim = Math.max(...g.edges.map((e) => e.similarity));
         const sameNameCount = g.edges.filter((e) => e.sameName).length;
+        const actionabilityScore = Math.max(...g.edges.map((e) => e.actionabilityScore ?? 0));
+        const decisionSignals = uniqueSignals(g.edges.flatMap((e) => e.decisionSignals ?? []));
         // sort: same-name first, then by similarity desc
         const sorted = [...g.edges].sort((a, b) => {
           if (a.sameName !== b.sameName) return a.sameName ? -1 : 1;
+          if ((b.actionabilityScore ?? 0) !== (a.actionabilityScore ?? 0)) {
+            return (b.actionabilityScore ?? 0) - (a.actionabilityScore ?? 0);
+          }
           return b.similarity - a.similarity;
         });
         return {
@@ -1799,14 +2139,20 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           sameNameCount,
           topPairs: sorted.slice(0, 6),
           source: "full" as const,
+          actionabilityScore,
+          decisionSignals,
         };
       })
-      // sort: groups with same-name matches first, then by edge count
+      // sort: groups with stronger pragmatic signal first, then same-name and density
       .sort((a, b) => {
+        if ((b.actionabilityScore ?? 0) !== (a.actionabilityScore ?? 0)) {
+          return (b.actionabilityScore ?? 0) - (a.actionabilityScore ?? 0);
+        }
         if ((a.sameNameCount > 0) !== (b.sameNameCount > 0)) return a.sameNameCount > 0 ? -1 : 1;
-        return b.edgeCount - a.edgeCount;
+        if (b.edgeCount !== a.edgeCount) return b.edgeCount - a.edgeCount;
+        return b.maxSimilarity - a.maxSimilarity;
       });
-  }, [overlapSemanticEdges, overlapNodeGroupMap, fullGraph]);
+  }, [overlapSemanticEdges, overlapNodeGroupMap, fullGraph, fullNodeMap]);
 
   const summaryOverlapGroupsData = useMemo(
     () => overlapSummaryGroups(summaryOverlap),
@@ -1815,6 +2161,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const usingSummaryOverlap = viewMode !== "full";
   const overlapGroups = usingSummaryOverlap ? summaryOverlapGroupsData : fullOverlapGroups;
   const storedSemanticEdgeCount = semanticMeta?.edge_count ?? semanticEdges.length;
+  const outOfScopeSemanticEdgeCount = fullGraph
+    ? Math.max(0, storedSemanticEdgeCount - visibleSemanticEdges.length)
+    : 0;
+  const semanticCacheMostlyOutOfScope = Boolean(
+    fullGraph
+      && storedSemanticEdgeCount > 0
+      && outOfScopeSemanticEdgeCount > Math.max(100, visibleSemanticEdges.length * 20),
+  );
   const overlapConnectionCount = usingSummaryOverlap
     ? summaryOverlap?.total_cross_edges ?? 0
     : overlapSemanticEdges.length;
@@ -1998,6 +2352,68 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     return true;
   }
 
+  function semanticEdgeDataFromElement(edgeElement: any): ActionableSemanticEdge | null {
+    const source = String(edgeElement.data("source") ?? "");
+    const target = String(edgeElement.data("target") ?? "");
+    if (!source || !target) return null;
+    const rawKind = String(edgeElement.data("insight_kind") ?? "unknown") as SemanticInsightKind;
+    const signals = edgeElement.data("decision_signals");
+    return {
+      source,
+      target,
+      similarity: Number(edgeElement.data("similarity") ?? 0),
+      actionabilityScore: Number(edgeElement.data("actionability") ?? 0),
+      insightKind: SEMANTIC_INSIGHT_LABELS[rawKind] ? rawKind : "unknown",
+      decisionSignals: Array.isArray(signals)
+        ? signals.map((signal) => String(signal).trim()).filter(Boolean)
+        : String(signals ?? "").split(",").map((signal) => signal.trim()).filter(Boolean),
+    };
+  }
+
+  function clearSemanticLinkSelection(clearContext = true) {
+    const cy = cyRef.current;
+    if (cy) {
+      cy.edges(".semantic-edge").removeClass("highlighted");
+      cy.nodes().removeClass("selected");
+    }
+    setSelectedSemanticLink(null);
+    if (clearContext) onActiveContextChange?.(null);
+  }
+
+  function selectSemanticEdgeElement(edgeElement: any) {
+    const edge = semanticEdgeDataFromElement(edgeElement);
+    if (!edge) return;
+    const sourceNode = fullNodeMap[edge.source] ?? null;
+    const targetNode = fullNodeMap[edge.target] ?? null;
+    const sourceGroup = overlapNodeGroupMap[edge.source] ?? sourceNode?.cluster ?? UNKNOWN_VALUE;
+    const targetGroup = overlapNodeGroupMap[edge.target] ?? targetNode?.cluster ?? UNKNOWN_VALUE;
+    const cy = cyRef.current;
+    if (cy) {
+      cy.batch(() => {
+        cy.nodes().removeClass("selected");
+        cy.edges().removeClass("highlighted");
+        edgeElement.addClass("highlighted");
+        edgeElement.connectedNodes().addClass("selected");
+      });
+    }
+    setSelectedSemanticLink({ edge, sourceNode, targetNode, sourceGroup, targetGroup });
+    setSelectedFull(null);
+    setSelected(null);
+    setShowOverlap(false);
+    setHighlightedPair(null);
+    onActiveContextChange?.({
+      kind: "overlap-pair",
+      source: "map",
+      clusterA: sourceGroup,
+      clusterB: targetGroup,
+      sourceNodeId: edge.source,
+      targetNodeId: edge.target,
+      labelA: sourceNode?.label ?? edge.source,
+      labelB: targetNode?.label ?? edge.target,
+      similarity: edge.similarity,
+    });
+  }
+
   // Fetch decisions (non-critical — silently ignored if backend down)
   useEffect(() => {
     apiFetch(`/decisions`)
@@ -2072,12 +2488,13 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   }, []);
 
   // Add/remove semantic edges on the live Cytoscape instance when toggle changes.
-  // Trace uses visible semantic edges; overlap analysis still filters to cross-cluster edges.
+  // The bright overlay uses actionable semantic edges; raw local similarity stays out of the main Evidence view.
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || viewMode !== "full") return;
     if (!showSemantic) {
       cy.elements('[?semantic]').remove();
+      setSelectedSemanticLink(null);
       return;
     }
     const nodeIds = new Set<string>(cy.nodes().map((n) => n.id()));
@@ -2093,20 +2510,23 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             source: e.source,
             target: e.target,
             similarity: e.similarity,
+            actionability: e.actionabilityScore,
+            insight_kind: e.insightKind,
+            decision_signals: e.decisionSignals,
             semantic: true,
           },
           classes: "semantic-edge",
         }));
       if (toAdd.length) cy.add(toAdd);
     });
-    applyStructuralEdgeVisibility(cy, showStructuralRef.current);
+    applyStructuralEdgeVisibility(cy, showStructuralRef.current, showSemantic);
   }, [showSemantic, semanticEdgesForDisplay, viewMode]);
 
   // Toggle structural edges on/off (class swap — no layout restart)
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy || viewMode !== "full") return;
-    applyStructuralEdgeVisibility(cy, showStructural);
+    applyStructuralEdgeVisibility(cy, showStructural, showSemanticRef.current);
   }, [showStructural, viewMode, semanticEdgesForDisplay.length]);
 
   // Recompute god nodes whenever summary changes
@@ -2139,6 +2559,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     setError(null);
     setSelected(null);
     setSelectedFull(null);
+    setSelectedSemanticLink(null);
     setFullGraph(null);
     setFilter("all");
     setPathMode(false);
@@ -2346,6 +2767,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       const nodeData =
         summaryRef.current?.nodes.find((n) => n.id === nodeId) ?? null;
       setSelected(nodeData);
+      setSelectedSemanticLink(null);
       if (nodeData) {
         onActiveContextChange?.({
           kind: "node",
@@ -2363,6 +2785,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         cy.nodes().removeClass("selected");
         cy.edges().removeClass("highlighted");
         setSelected(null);
+        setSelectedSemanticLink(null);
         onActiveContextChange?.(null);
       }
     });
@@ -2405,29 +2828,34 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       cy.batch(() => {
         cy.nodes().forEach((node: any) => {
           const position = fastPresetLayout.positions[node.id()]
-            ?? fastPresetLayout.repoLabels.find((repoLabel) => repoLabel.id === node.id())?.position;
+            ?? fastPresetLayout.repoLabels.find((repoLabel) => repoLabel.id === node.id())?.position
+            ?? fastPresetLayout.containerLabels.find((containerLabel) => containerLabel.id === node.id())?.position;
           if (position) node.position(position);
         });
       });
     }
-    applyStructuralEdgeVisibility(cy, showStructuralRef.current);
+    applyStructuralEdgeVisibility(cy, showStructuralRef.current, showSemanticRef.current);
 
-    // Keep multi-repo region labels at a constant readable screen size.
+    // Keep region labels at a constant readable screen size.
     // Cytoscape font-size is in model units, so it scales with zoom by
     // default. Counter-scale it against the live zoom level so the label
     // renders at the same on-screen pixel size whether Adam is zoomed in
     // on one repo or zoomed out across the whole comparison.
     const REPO_LABEL_SCREEN_PX = 18;
     const REPO_LABEL_OUTLINE_SCREEN_PX = 3;
+    const CONTAINER_LABEL_SCREEN_PX = 12;
+    const CONTAINER_LABEL_OUTLINE_SCREEN_PX = 2;
     let repoLabelFrame = 0;
     const syncRepoLabelScale = () => {
       repoLabelFrame = 0;
-      const labels = cy.nodes(".repo-label");
-      if (labels.empty()) return;
       const zoom = cy.zoom() || 1;
-      labels.style({
+      cy.nodes(".repo-label").style({
         "font-size": REPO_LABEL_SCREEN_PX / zoom,
         "text-outline-width": REPO_LABEL_OUTLINE_SCREEN_PX / zoom,
+      });
+      cy.nodes(".container-label").style({
+        "font-size": CONTAINER_LABEL_SCREEN_PX / zoom,
+        "text-outline-width": CONTAINER_LABEL_OUTLINE_SCREEN_PX / zoom,
       });
     };
     const scheduleRepoLabelScale = () => {
@@ -2446,12 +2874,21 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           .filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
           .map((e) => ({
             group: "edges" as const,
-            data: { id: `sem__${e.source}__${e.target}`, source: e.source, target: e.target, similarity: e.similarity, semantic: true },
+            data: {
+              id: `sem__${e.source}__${e.target}`,
+              source: e.source,
+              target: e.target,
+              similarity: e.similarity,
+              actionability: (e as ActionableSemanticEdge).actionabilityScore,
+              insight_kind: (e as ActionableSemanticEdge).insightKind,
+              decision_signals: (e as ActionableSemanticEdge).decisionSignals,
+              semantic: true,
+            },
             classes: "semantic-edge",
           }));
         if (toAdd.length) cy.batch(() => cy.add(toAdd));
       }
-      applyStructuralEdgeVisibility(cy, showStructuralRef.current);
+      applyStructuralEdgeVisibility(cy, showStructuralRef.current, showSemanticRef.current);
     };
     const finishRender = () => {
       if (renderFinished) return;
@@ -2489,6 +2926,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       const n = fullGraph.nodes.find((n) => n.id === nodeId) ?? null;
       setSelectedFull(n);
       setSelected(null);
+      setSelectedSemanticLink(null);
       if (n) {
         onActiveContextChange?.({
           kind: "node",
@@ -2502,11 +2940,17 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       }
     });
 
+    cy.on("tap", "edge.semantic-edge", (e: any) => {
+      e.stopPropagation?.();
+      selectSemanticEdgeElement(e.target);
+    });
+
     cy.on("tap", (e: any) => {
       if (e.target === cy) {
         cy.nodes().removeClass("selected");
         cy.edges().removeClass("highlighted");
         setSelectedFull(null);
+        setSelectedSemanticLink(null);
         onActiveContextChange?.(null);
       }
     });
@@ -2554,6 +2998,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       setHighlightedPair([activeContext.clusterA, activeContext.clusterB]);
       setSelectedFull(null);
       setSelected(null);
+      setSelectedSemanticLink(null);
 
       const cy = cyRef.current;
       if (cy && activeContext.sourceNodeId && activeContext.targetNodeId) {
@@ -2619,6 +3064,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         if (!focusVisibleCluster(clusterMatch, `${sourceLabel}: ${requested}`)) return;
         setSelectedFull(null);
         setSelected(null);
+        setSelectedSemanticLink(null);
         setShowOverlap(false);
         setHighlightedPair(null);
         appliedContextKeyRef.current = key;
@@ -2626,6 +3072,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       }
 
       setSelectedFull(null);
+      setSelectedSemanticLink(null);
       setFocusNotice({ tone: "warn", text: `${sourceLabel} not found in the active graph: ${requested}` });
       appliedContextKeyRef.current = key;
       return;
@@ -2644,6 +3091,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     if (!focusVisibleNode(match.id, `${sourceLabel}: ${requested}`)) return;
     setSelectedFull(match);
     setSelected(null);
+    setSelectedSemanticLink(null);
     setShowOverlap(false);
     setHighlightedPair(null);
     appliedContextKeyRef.current = key;
@@ -2711,6 +3159,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   useEffect(() => {
     if (!showSemantic && viewMode === "full") {
       setHighlightedPair(null);
+      setSelectedSemanticLink(null);
       onActiveContextChange?.(null);
     }
   }, [showSemantic, viewMode, onActiveContextChange]);
@@ -2853,6 +3302,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       onActiveContextChange?.(null);
       setSelected(null);
       setSelectedFull(null);
+      setSelectedSemanticLink(null);
       setPathSource(null);
       setPathNoRoute(false);
       if (broadEvidenceDisabled) {
@@ -2878,6 +3328,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         setViewMode("summary");
         setShowSemantic(false);
         setHighlightedPair(null);
+        setSelectedSemanticLink(null);
         setShowOverlap(true);
         setFocusNotice({
           tone: "info",
@@ -2888,12 +3339,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       setViewMode("full");
       setKnowledgeOnly(false);
       setShowSemantic(true);
+      setSelectedSemanticLink(null);
       setShowOverlap(true);
       return;
     }
 
     setShowOverlap(false);
     setHighlightedPair(null);
+    setSelectedSemanticLink(null);
     onActiveContextChange?.(null);
   }
 
@@ -2907,6 +3360,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     if (!match) return;
     focusVisibleNode(nodeId, `Focused ${match.label}.`);
     setSelected(match);
+    setSelectedSemanticLink(null);
     onActiveContextChange?.({
       kind: "node",
       source: "map",
@@ -2972,6 +3426,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     setHighlightedPair(null);
     setSelected(null);
     setSelectedFull(null);
+    setSelectedSemanticLink(null);
     onActiveContextChange?.(null);
     setPathNoRoute(false);
     cy.nodes().removeClass("path-source path-target");
@@ -3057,13 +3512,80 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       : "physical evidence"
     : "summary physical";
   const semanticDisplayCount = semanticEdgesForDisplay.length;
+  const semanticActionableCount = actionableSemanticEdges.length;
+  const semanticCandidateCount = semanticCandidateEdges.length;
+  const semanticRawVisibleCount = visibleSemanticEdges.length;
+  const semanticLowValueHiddenCount = Math.max(0, semanticRawVisibleCount - semanticActionableCount);
+  const semanticReadabilityHiddenCount = Math.max(0, semanticActionableCount - semanticDisplayCount);
   const semanticDisplayText = semanticDisplayCount.toLocaleString();
-  const semanticVisibleText = visibleSemanticEdges.length.toLocaleString();
-  const semanticScopeText = visibleRepoCount > 1
-    ? `${semanticDisplayText} cross-repo high-signal edges from ${crossRepoSemanticEdges.length.toLocaleString()}`
-    : semanticDisplayCount < visibleSemanticEdges.length
-    ? `${semanticDisplayText} high-signal backbone edges from ${semanticVisibleText}`
-    : `${semanticDisplayText} visible semantic edges`;
+  const semanticActionableText = semanticActionableCount.toLocaleString();
+  const semanticCandidateText = semanticCandidateCount.toLocaleString();
+  const semanticVisibleText = semanticRawVisibleCount.toLocaleString();
+  const semanticLowValueHiddenText = semanticLowValueHiddenCount.toLocaleString();
+  const semanticReadabilityHiddenText = semanticReadabilityHiddenCount.toLocaleString();
+  const overlapScopeLabel = visibleRepoCount > 1 ? "cross-repo" : "cross-folder";
+  const semanticButtonCountText = fullGraph
+    ? semanticRawVisibleCount > semanticDisplayCount
+      ? ` (${semanticDisplayText}/${semanticVisibleText})`
+      : ` (${semanticDisplayText})`
+    : "";
+  const semanticScopeCaveat = semanticCacheMostlyOutOfScope
+    ? `${outOfScopeSemanticEdgeCount.toLocaleString()} stored semantic edges are outside this Evidence scope; run Semantic Analysis in Settings for current cross-folder links.`
+    : "";
+  const semanticActionabilityCaveat = fullGraph && semanticRawVisibleCount > 0 && semanticActionableCount === 0
+    ? semanticCandidateCount === 0
+      ? `${semanticVisibleText} raw semantic edges match this Evidence scope, but none cross the ${overlapScopeLabel} boundary needed for bright evidence.`
+      : `${semanticCandidateText} ${overlapScopeLabel} semantic candidates match this Evidence scope, but none clear the actionability filter.`
+    : fullGraph && semanticLowValueHiddenCount > 0
+    ? `${semanticLowValueHiddenText} raw in-scope semantic edges are hidden as low-value local similarity.`
+    : "";
+  const semanticBackboneCaveat = semanticReadabilityHiddenCount > 0
+    ? `${semanticReadabilityHiddenText} actionable edges are held back by the readability backbone.`
+    : "";
+  const semanticOverlayNotice = [
+    semanticDisplayCount
+      ? `Showing ${semanticDisplayText} actionable semantic edges in this Evidence view.`
+      : semanticRawVisibleCount
+      ? "No actionable semantic edges in this Evidence view."
+      : "",
+    semanticActionabilityCaveat,
+    semanticBackboneCaveat,
+    semanticScopeCaveat,
+  ].filter(Boolean).join(" ");
+  const semanticOverlayNoticeTone: "info" | "warn" = semanticDisplayCount ? "info" : "warn";
+  const semanticScopeText = semanticDisplayCount
+    ? `${semanticDisplayText} actionable ${overlapScopeLabel} semantic edges from ${semanticCandidateText} boundary candidates and ${semanticVisibleText} raw in-scope matches`
+    : semanticRawVisibleCount
+    ? semanticCandidateCount
+      ? `0 actionable ${overlapScopeLabel} semantic edges from ${semanticCandidateText} boundary candidates and ${semanticVisibleText} raw in-scope matches`
+      : `0 ${overlapScopeLabel} semantic candidates from ${semanticVisibleText} raw in-scope matches`
+    : "0 visible semantic edges";
+
+  useEffect(() => {
+    if (viewMode !== "full" || !showSemantic || !fullGraph) return;
+    if (semanticOverlayNotice && (semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
+      setFocusNotice({
+        tone: semanticOverlayNoticeTone,
+        text: semanticOverlayNotice,
+      });
+    } else if (!semanticDisplayCount && storedSemanticEdgeCount) {
+      setFocusNotice({
+        tone: "warn",
+        text: "Stored semantic edges do not match this Evidence scope. Run Semantic Analysis in Settings to rebuild them.",
+      });
+    }
+  }, [
+    fullGraph,
+    semanticActionabilityCaveat,
+    semanticBackboneCaveat,
+    semanticCacheMostlyOutOfScope,
+    semanticDisplayCount,
+    semanticOverlayNotice,
+    semanticOverlayNoticeTone,
+    showSemantic,
+    storedSemanticEdgeCount,
+    viewMode,
+  ]);
 
   if (scopeGate === "checking") {
     return (
@@ -3189,6 +3711,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             setViewMode(m);
             setSelected(null);
             setSelectedFull(null);
+            setSelectedSemanticLink(null);
             if (m === "full") {
               setKnowledgeOnly(false);
               setPathMode(false);
@@ -3220,6 +3743,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           return;
         }
         setSelectedFull(null);
+        setSelectedSemanticLink(null);
         setFullGraph(null);
         setKnowledgeOnly(false);
         setShowLowSignal((value) => !value);
@@ -3246,6 +3770,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       onClick={() => {
         const activatingKnowledge = !(knowledgeOnly && viewMode === "full");
         setSelectedFull(null);
+        setSelectedSemanticLink(null);
         setFullGraph(null);
         setShowLowSignal(false);
         setKnowledgeOnly(activatingKnowledge);
@@ -3308,15 +3833,44 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             setPathMode(false);
             setPathNoRoute(false);
             setShowSemantic(true);
+            if (semanticOverlayNotice && (semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
+              setFocusNotice({
+                tone: semanticOverlayNoticeTone,
+                text: semanticOverlayNotice,
+              });
+            } else if (fullGraph && !semanticDisplayCount && storedSemanticEdgeCount) {
+              setFocusNotice({
+                tone: "warn",
+                text: "Stored semantic edges do not match this Evidence scope. Run Semantic Analysis in Settings to rebuild them.",
+              });
+            }
             return;
           }
-          setShowSemantic((s) => !s);
+          setShowSemantic((current) => {
+            const next = !current;
+            if (next) {
+              if (semanticOverlayNotice && (semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
+                setFocusNotice({
+                  tone: semanticOverlayNoticeTone,
+                  text: semanticOverlayNotice,
+                });
+              } else if (!semanticDisplayCount && storedSemanticEdgeCount) {
+                setFocusNotice({
+                  tone: "warn",
+                  text: "Stored semantic edges do not match this Evidence scope. Run Semantic Analysis in Settings to rebuild them.",
+                });
+              }
+            }
+            return next;
+          });
         }}
         title={
           viewMode !== "full"
-            ? "Switch to Full graph and show semantic similarity edges"
+            ? "Switch to Evidence and show actionable semantic edges for this scope"
             : semanticDisplayCount
-            ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} (${crossSemanticEdges.length.toLocaleString()} cross-group overlap, ${semanticMeta?.edge_count ?? 0} stored total). Display uses mutual top-${SEMANTIC_BACKBONE_NEIGHBOR_LIMIT} neighbors so dense pockets stay readable; Trace routes through this backbone.`
+            ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} (${semanticActionableText} actionable before backbone, ${semanticMeta?.edge_count ?? 0} stored total). Display uses actionability first, then mutual top-${SEMANTIC_BACKBONE_NEIGHBOR_LIMIT} neighbors so dense pockets stay readable; Trace routes through this backbone.${semanticActionabilityCaveat ? ` ${semanticActionabilityCaveat}` : ""}${semanticBackboneCaveat ? ` ${semanticBackboneCaveat}` : ""}${semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
+            : semanticRawVisibleCount
+            ? `${showSemantic ? "Hide" : "Show"} semantic overlay. ${semanticScopeText}. The bright layer is filtered for duplicate, drift, gap, cross-app, or shared-pattern signal.${semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
             : semanticMeta?.edge_count
             ? `Semantic overlay has ${semanticMeta.edge_count} stored edges, but none match the current full-graph scope and source filters.`
             : "No semantic edges yet - run Semantic Analysis in Settings"
@@ -3330,7 +3884,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }
         type="button"
       >
-        Semantic{semanticDisplayCount ? ` (${semanticDisplayText})` : semanticMeta?.edge_count ? ` (${semanticMeta.edge_count})` : ""}
+        Semantic{semanticButtonCountText}
       </button>
     </>
   );
@@ -3354,11 +3908,11 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           ? `${showOverlap ? "Close" : "Open"} summary overlap analysis - ${overlapGroups.length} group pairs detected`
           : !showSemantic
           ? "Enable Semantic overlay to run overlap analysis"
-          : !crossSemanticEdges.length
+          : !overlapSemanticEdges.length
           ? storedSemanticEdgeCount
-            ? "Semantic overlay is on, but no cross-repo overlap edges match the current scope or source filters."
+            ? `Semantic overlay is on, but no actionable ${overlapScopeLabel} overlap edges match the current scope or source filters.`
             : "No semantic edges yet - run Semantic Analysis in Settings"
-          : `${showOverlap ? "Close" : "Open"} overlap analysis - ${overlapGroups.length} cluster pairs detected`
+          : `${showOverlap ? "Close" : "Open"} overlap analysis - ${overlapGroups.length} ${overlapScopeLabel} pairs detected`
       }
       style={
         showOverlap
@@ -3535,19 +4089,19 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             </div>
             {!usingSummaryOverlap && !showSemantic ? (
               <div className="map-overlap-empty">
-                Enable the Semantic overlay first to see cross-repo overlap analysis.
+                Enable the Semantic overlay first to see {overlapScopeLabel} overlap analysis.
               </div>
             ) : !usingSummaryOverlap && !overlapSemanticEdges.length ? (
               <div className="map-overlap-empty">
                 {storedSemanticEdgeCount
-                  ? "Semantic overlay is on, but no cross-repo overlap edges are visible in the current scope and source filters. If this is a single-repo map, select a broader workspace scope to review overlap across repos."
+                  ? `Semantic overlay is on, but no actionable ${overlapScopeLabel} overlap edges are visible in the current scope and source filters.`
                   : "No semantic edges are available yet. Run Semantic Analysis in Settings, then return to Overlap."}
               </div>
             ) : overlapGroups.length === 0 ? (
               <div className="map-overlap-empty">
                 {usingSummaryOverlap
                   ? "No summary-level overlap pairs detected for the current map."
-                  : "No cross-repo overlaps detected."}
+                  : `No ${overlapScopeLabel} overlaps detected.`}
               </div>
             ) : (
               <>
@@ -3649,11 +4203,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                     const differences = dossierList(triage?.differences);
                     const canonicalitySignals = dossierList(triage?.canonicality_signals);
                     const openQuestions = dossierList(triage?.open_questions);
-                    const decisionSignals = [
+                    const triageDecisionSignals = [
                       triage?.waste_signal,
                       triage?.gap_signal,
                       triage?.cross_app_similarity,
                     ].map((item) => item?.trim()).filter(Boolean).slice(0, 3);
+                    const actionabilitySignals = (g.decisionSignals ?? []).slice(0, 5);
+                    const displayedDecisionSignals = triageDecisionSignals.length
+                      ? triageDecisionSignals
+                      : actionabilitySignals;
                     return (
                       <div
                         key={taskKey}
@@ -3692,9 +4250,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                             <span className="map-overlap-actionability">{insightPercent}% actionable</span>
                           </div>
                           {insight.impact && <p>{insight.impact}</p>}
-                          {triage && decisionSignals.length > 0 && (
+                          {displayedDecisionSignals.length > 0 && (
                             <ul className="map-overlap-decision-signals">
-                              {decisionSignals.map((item, i) => <li key={i}>{item}</li>)}
+                              {displayedDecisionSignals.map((item, i) => <li key={i}>{item}</li>)}
                             </ul>
                           )}
                         </div>
@@ -3883,8 +4441,96 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           </aside>
         )}
 
+        {/* Semantic-edge inspect panel */}
+        {selectedSemanticLink && viewMode === "full" && !showOverlap && (
+          <aside className="map-panel map-semantic-panel">
+            <div className="map-panel-head">
+              <span className="map-panel-name">Semantic Link</span>
+              <button className="map-panel-close" onClick={() => clearSemanticLinkSelection()} aria-label="Close">✕</button>
+            </div>
+            <div className="map-panel-section">
+              <span className={`map-type-badge map-semantic-kind-${semanticInsightClass(selectedSemanticLink.edge.insightKind)}`}>
+                {SEMANTIC_INSIGHT_LABELS[selectedSemanticLink.edge.insightKind]}
+              </span>
+            </div>
+
+            <div className="map-semantic-score-grid">
+              <div className="map-stat">
+                <span className="map-stat-label">Actionable</span>
+                <span className="map-stat-value">{boundedPercent(selectedSemanticLink.edge.actionabilityScore, 0)}%</span>
+              </div>
+              <div className="map-stat">
+                <span className="map-stat-label">Similarity</span>
+                <span className="map-stat-value">{boundedPercent(selectedSemanticLink.edge.similarity, 0)}%</span>
+              </div>
+            </div>
+
+            <div className="map-inspector-block">
+              <div className="map-inspector-title">Why this matters</div>
+              <p className="map-inspector-purpose">
+                {semanticInsightImpact(selectedSemanticLink.edge.insightKind, selectedSemanticLink.edge.decisionSignals)}
+              </p>
+            </div>
+
+            {selectedSemanticLink.edge.decisionSignals.length > 0 && (
+              <div className="map-inspector-block">
+                <div className="map-inspector-title">Decision signals</div>
+                <div className="map-semantic-signal-list">
+                  {selectedSemanticLink.edge.decisionSignals.map((signal) => (
+                    <span key={signal}>{signal}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="map-inspector-block">
+              <div className="map-inspector-title">Endpoints</div>
+              <div className="map-semantic-endpoints">
+                <section className="map-semantic-endpoint">
+                  <span className="map-semantic-endpoint-kicker">{selectedSemanticLink.sourceGroup}</span>
+                  <strong>{selectedSemanticLink.sourceNode?.label ?? selectedSemanticLink.edge.source}</strong>
+                  <small>{presentValue(selectedSemanticLink.sourceNode?.relative_path || selectedSemanticLink.sourceNode?.source_file)}</small>
+                </section>
+                <section className="map-semantic-endpoint">
+                  <span className="map-semantic-endpoint-kicker">{selectedSemanticLink.targetGroup}</span>
+                  <strong>{selectedSemanticLink.targetNode?.label ?? selectedSemanticLink.edge.target}</strong>
+                  <small>{presentValue(selectedSemanticLink.targetNode?.relative_path || selectedSemanticLink.targetNode?.source_file)}</small>
+                </section>
+              </div>
+            </div>
+
+            <div className="map-provenance-grid">
+              <div className="map-provenance-row">
+                <span>Source repo</span>
+                <strong>{presentValue(selectedSemanticLink.sourceNode?.repo || selectedSemanticLink.sourceNode?.source_root_name)}</strong>
+              </div>
+              <div className="map-provenance-row">
+                <span>Target repo</span>
+                <strong>{presentValue(selectedSemanticLink.targetNode?.repo || selectedSemanticLink.targetNode?.source_root_name)}</strong>
+              </div>
+              <div className="map-provenance-row map-provenance-wide">
+                <span>Source node</span>
+                <strong>{selectedSemanticLink.edge.source}</strong>
+              </div>
+              <div className="map-provenance-row map-provenance-wide">
+                <span>Target node</span>
+                <strong>{selectedSemanticLink.edge.target}</strong>
+              </div>
+            </div>
+
+            <div className="map-panel-actions">
+              <button
+                className="map-action-btn"
+                onClick={() => startPathFrom(selectedSemanticLink.edge.source)}
+              >
+                Trace from source
+              </button>
+            </div>
+          </aside>
+        )}
+
         {/* Full-graph inspect panel */}
-        {selectedFull && viewMode === "full" && !showOverlap && (
+        {selectedFull && viewMode === "full" && !showOverlap && !selectedSemanticLink && (
           <aside className="map-panel">
             <div className="map-panel-head">
               <span className="map-panel-name">{selectedFull.label}</span>
