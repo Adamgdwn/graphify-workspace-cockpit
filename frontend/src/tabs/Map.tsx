@@ -840,20 +840,21 @@ const CY_STYLE: object[] = [
     style: {
       "curve-style": "bezier",
       width: "data(edgeWidth)",
-      "line-color": "#1e2d4a",
-      "target-arrow-color": "#2a3d60",
+      "line-color": "#4f72b8",
+      "target-arrow-color": "#5f82c8",
       "target-arrow-shape": "triangle",
       "arrow-scale": 0.75,
-      opacity: 0.6,
+      opacity: 0.78,
     },
   },
   {
     selector: "edge.highlighted",
     style: {
-      "line-color": "#6b8cff",
-      "target-arrow-color": "#6b8cff",
+      "line-color": "#b8caff",
+      "target-arrow-color": "#b8caff",
       opacity: 1,
-      width: 3,
+      width: 4,
+      "z-index": 20,
     },
   },
   {
@@ -1843,13 +1844,13 @@ const FULL_CY_STYLE: object[] = [
     style: {
       "curve-style": "haystack",
       width: "data(edgeWidth)",
-      "line-color": "#4a7abf",
-      opacity: 0.75,
+      "line-color": "#78a7ff",
+      opacity: 0.84,
     },
   },
   {
     selector: "edge.highlighted",
-    style: { "line-color": "#6b8cff", opacity: 1, width: 2 },
+    style: { "line-color": "#c7d7ff", opacity: 1, width: 3, "z-index": 20 },
   },
   {
     selector: "edge.path-edge",
@@ -2234,6 +2235,24 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     });
     window.setTimeout(clearRendering, 250);
   }
+
+  function cancelMapRender(renderCycle: number) {
+    if (renderCycleRef.current === renderCycle) {
+      setMapRendering(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!mapRendering || loading || fullLoading) return;
+    const watchdog = window.setTimeout(() => {
+      const cy = cyRef.current;
+      const destroyed = Boolean((cy as any)?.destroyed?.());
+      if (error || !cy || destroyed || cy.elements().length > 0) {
+        setMapRendering(false);
+      }
+    }, 12000);
+    return () => window.clearTimeout(watchdog);
+  }, [error, fullGraph, fullLoading, loading, mapRendering, summary, viewMode]);
 
   function normalizeLookup(value: string) {
     return value.trim().toLowerCase().replace(/\s+/g, " ");
@@ -2793,6 +2812,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     cyRef.current = cy;
     return () => {
       window.clearTimeout(renderFallback);
+      cancelMapRender(renderCycle);
       cy.destroy();
       cyRef.current = null;
     };
@@ -2962,6 +2982,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       window.clearTimeout(fastFinishTimer);
       if (fastFinishFrame) window.cancelAnimationFrame(fastFinishFrame);
       if (repoLabelFrame) window.cancelAnimationFrame(repoLabelFrame);
+      cancelMapRender(renderCycle);
       cy.destroy();
       cyRef.current = null;
     };

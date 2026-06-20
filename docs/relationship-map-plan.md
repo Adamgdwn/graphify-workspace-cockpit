@@ -1,6 +1,6 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-20T14:09:52-06:00
+Last Updated: 2026-06-20T14:25:31-06:00
 Status: owner sign-off — video-ready; next active work is polish/tuning, not a rebuild
 Owner: Adam Goodwin
 
@@ -54,6 +54,15 @@ failed the actionability score." In the current Applications evidence scope,
 the 14 matching raw semantic edges are same-container/local links, so hiding
 them is correct; the UI should not imply that real cross-folder candidates were
 discarded by an overly strict score.
+
+Polish note 2026-06-20T14:16:50-06:00: physical/structural map edges are
+slightly brighter in both Overview and Evidence, with selected-node connections
+using a stronger pale-blue highlight so pullback shots still read clearly.
+
+Polish note 2026-06-20T14:25:31-06:00: map render overlays now clear on
+interrupted render cleanup and have a small watchdog, preventing hot reloads or
+mid-render state changes from leaving the Evidence map stuck behind "Rendering
+map" after Cytoscape has already produced a graph or error state.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
