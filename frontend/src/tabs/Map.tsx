@@ -1130,8 +1130,222 @@ const FULL_FAST_LAYOUT_EDGE_THRESHOLD = 1600;
 const SEMANTIC_EDGE_DISPLAY_LIMIT = 2000;
 const SEMANTIC_BACKBONE_NEIGHBOR_LIMIT = 4;
 const SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT = 6;
-const SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE = 0.52;
+const SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE = 0.58;
 const FULL_CONTAINER_LABEL_LIMIT = 36;
+
+const SEMANTIC_SCAFFOLD_FILENAMES = new Set([
+  ".gitignore",
+  "agents.md",
+  "changelog.md",
+  "code_of_conduct.md",
+  "contributing.md",
+  "deployment-guide.md",
+  "docker-compose.yml",
+  "dockerfile",
+  "governance-check.sh",
+  "governance-preflight.sh",
+  "install.sh",
+  "agent-inventory.md",
+  "license",
+  "license.md",
+  "manual.md",
+  "model-registry.md",
+  "overview.md",
+  "package-lock.json",
+  "package.json",
+  "pnpm-lock.yaml",
+  "preflight.sh",
+  "prompt-register.md",
+  "pyproject.toml",
+  "readme.md",
+  "requirements.txt",
+  "risk-register.md",
+  "roadmap.md",
+  "security.md",
+  "setup.cfg",
+  "setup.py",
+  "smoke-test.sh",
+  "test.sh",
+  "todo.md",
+  "tool-permission-matrix.md",
+  "tsconfig.json",
+  "vite.config.ts",
+  "yarn.lock",
+]);
+
+const SEMANTIC_GENERIC_FILE_STEMS = new Set([
+  "__init__",
+  "agent-inventory",
+  "api",
+  "app",
+  "bootstrap",
+  "build",
+  "cli",
+  "client",
+  "common",
+  "config",
+  "constants",
+  "demo",
+  "example",
+  "governance-check",
+  "governance-preflight",
+  "helper",
+  "helpers",
+  "index",
+  "main",
+  "model",
+  "models",
+  "model-registry",
+  "preflight",
+  "prompt-register",
+  "risk-register",
+  "roadmap",
+  "runner",
+  "sample",
+  "schema",
+  "script",
+  "scripts",
+  "server",
+  "service",
+  "services",
+  "settings",
+  "setup",
+  "test",
+  "tests",
+  "tool-permission-matrix",
+  "types",
+  "util",
+  "utilities",
+  "utils",
+]);
+
+const SEMANTIC_GENERIC_LABELS = new Set([
+  "__init__",
+  "agentinventory",
+  "any",
+  "app",
+  "build",
+  "cli",
+  "config",
+  "currentriskclassification",
+  "do_get",
+  "do_post",
+  "fail",
+  "get",
+  "keyrisks",
+  "keydecisions",
+  "logger",
+  "main",
+  "modelregistry",
+  "namespace",
+  "pass",
+  "path",
+  "post",
+  "promptregister",
+  "require_file",
+  "riskregister",
+  "roadmap",
+  "run",
+  "run_once",
+  "setup",
+  "summary",
+  "test",
+  "toolpermissionmatrix",
+  "warn",
+]);
+
+const SEMANTIC_SCAFFOLD_PATH_PARTS = new Set([
+  ".github",
+  "children",
+  "demo",
+  "demos",
+  "doc",
+  "docs",
+  "documentation",
+  "example",
+  "examples",
+  "root",
+  "risk",
+  "risks",
+  "script",
+  "scripts",
+  "test",
+  "tests",
+  "workflow",
+  "workflows",
+]);
+
+const SEMANTIC_DOMAIN_STOPWORDS = new Set([
+  "about",
+  "action",
+  "actions",
+  "agent",
+  "agents",
+  "build",
+  "check",
+  "checks",
+  "code",
+  "common",
+  "config",
+  "content",
+  "demo",
+  "docs",
+  "document",
+  "documentation",
+  "example",
+  "file",
+  "files",
+  "from",
+  "graph",
+  "helper",
+  "helpers",
+  "high",
+  "import",
+  "imports",
+  "index",
+  "json",
+  "local",
+  "main",
+  "module",
+  "node",
+  "nodes",
+  "nearby",
+  "overview",
+  "payload",
+  "project",
+  "readme",
+  "read",
+  "reads",
+  "repo",
+  "repos",
+  "root",
+  "runner",
+  "sample",
+  "script",
+  "scripts",
+  "service",
+  "settings",
+  "setup",
+  "source",
+  "text",
+  "test",
+  "tests",
+  "types",
+  "update",
+  "updates",
+  "utils",
+  "with",
+  "write",
+  "writes",
+  "workspace",
+  "appears",
+  "annotations",
+  "future",
+  "self",
+  "starts",
+  "symbol",
+  "symbols",
+]);
 
 function semanticEdgeKey(source: string, target: string) {
   return source < target ? `${source}\u0000${target}` : `${target}\u0000${source}`;
@@ -1218,8 +1432,121 @@ function pathBasename(path: string): string {
   return path.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
 }
 
+function pathParts(path: string): string[] {
+  return path
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function fileStemFromBasename(basename: string): string {
+  const normalized = basename.trim().toLowerCase();
+  if (!normalized) return "";
+  return normalized
+    .replace(/\.(test|spec|story|stories)(?=\.)/g, "")
+    .replace(/\.[^.]+$/, "");
+}
+
 function normalizedName(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase();
+}
+
+function normalizedSemanticSymbol(value: string | undefined): string {
+  return normalizedName(value)
+    .replace(/[`'"]/g, "")
+    .replace(/\([^)]*\)$/, "")
+    .replace(/^[./#]+/, "")
+    .replace(/[^\w.-]+/g, "")
+    .trim();
+}
+
+function isSemanticGenericLabel(value: string | undefined): boolean {
+  const symbol = normalizedSemanticSymbol(value);
+  if (!symbol) return false;
+  if (SEMANTIC_GENERIC_LABELS.has(symbol)) return true;
+  if (SEMANTIC_GENERIC_FILE_STEMS.has(symbol)) return true;
+  if (/^(get|set|is|has|run|load|save|create|update|delete|handle)[_-]?[a-z0-9]{0,4}$/.test(symbol)) return true;
+  return symbol.length <= 2;
+}
+
+function isSemanticScaffoldFilename(basename: string): boolean {
+  const normalized = basename.trim().toLowerCase();
+  if (!normalized) return false;
+  const stem = fileStemFromBasename(normalized);
+  return SEMANTIC_SCAFFOLD_FILENAMES.has(normalized) || SEMANTIC_SCAFFOLD_FILENAMES.has(stem);
+}
+
+function semanticNodeScaffoldScore(node: FullNode): number {
+  const sourcePath = nodePath(node);
+  const basename = pathBasename(sourcePath);
+  const stem = fileStemFromBasename(basename);
+  const parts = [
+    ...pathParts(node.relative_path || node.source_file || ""),
+    normalizedName(node.container),
+    normalizedName(node.cluster),
+  ].filter(Boolean);
+  let score = 0;
+
+  if (isSemanticScaffoldFilename(basename)) score += 0.55;
+  if (SEMANTIC_GENERIC_FILE_STEMS.has(stem)) score += 0.22;
+  if (isSemanticGenericLabel(node.label) || isSemanticGenericLabel(node.symbol)) score += 0.28;
+
+  const scaffoldPartCount = parts.filter((part) => SEMANTIC_SCAFFOLD_PATH_PARTS.has(part)).length;
+  if (scaffoldPartCount > 0) score += 0.16;
+  if (scaffoldPartCount > 1) score += 0.08;
+
+  if (node.importance_tier === "anchor" || node.importance_tier === "interface") score -= 0.14;
+  else if (node.importance_tier === "important" || node.signal_tier === "important") score -= 0.08;
+
+  return Math.min(1, Math.max(0, score));
+}
+
+function semanticDomainTerms(node: FullNode): Set<string> {
+  const text = [
+    node.label,
+    node.symbol,
+    node.purpose,
+    node.relative_path,
+    node.source_file,
+  ].filter(Boolean).join(" ");
+  const terms = text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .map((term) => term.trim())
+    .filter((term) => (
+      term.length >= 4
+      && !SEMANTIC_DOMAIN_STOPWORDS.has(term)
+      && !SEMANTIC_GENERIC_FILE_STEMS.has(term)
+      && !SEMANTIC_GENERIC_LABELS.has(term)
+      && !SEMANTIC_SCAFFOLD_PATH_PARTS.has(term)
+    ));
+  return new Set(terms);
+}
+
+function semanticNodeSpecificity(node: FullNode): number {
+  const basename = pathBasename(nodePath(node));
+  const stem = fileStemFromBasename(basename);
+  const domainTerms = semanticDomainTerms(node);
+  let score = Math.min(0.18, domainTerms.size * 0.03);
+
+  if (stem && !SEMANTIC_GENERIC_FILE_STEMS.has(stem) && !isSemanticScaffoldFilename(basename)) {
+    score += 0.06;
+  }
+  if (node.importance_tier === "anchor" || node.importance_tier === "interface") score += 0.08;
+  else if (node.importance_tier === "important" || node.signal_tier === "important") score += 0.05;
+  if (node.purpose && normalizedName(node.purpose).length > 24) score += 0.03;
+
+  return Math.min(0.3, score);
+}
+
+function sharedSemanticDomainTerms(source: FullNode, target: FullNode): string[] {
+  const sourceTerms = semanticDomainTerms(source);
+  const targetTerms = semanticDomainTerms(target);
+  return [...sourceTerms]
+    .filter((term) => targetTerms.has(term))
+    .sort((a, b) => a.localeCompare(b))
+    .slice(0, 3);
 }
 
 function boundaryKey(a: string, b: string): string {
@@ -1281,6 +1608,8 @@ function buildActionableSemanticEdges(
     const sameFile = Boolean(sourcePath && targetPath && sourcePath === targetPath);
     const sourceBase = pathBasename(sourcePath);
     const targetBase = pathBasename(targetPath);
+    const sourceStem = fileStemFromBasename(sourceBase);
+    const targetStem = fileStemFromBasename(targetBase);
     const sameName = Boolean(sourceBase && sourceBase === targetBase);
     const sourceLabel = normalizedName(source.label);
     const targetLabel = normalizedName(target.label);
@@ -1294,6 +1623,60 @@ function buildActionableSemanticEdges(
     const pairSameNameCount = groupSameNameCounts.get(pairKey) ?? 0;
     const directPhysicalLink = physicalEdgeKeys.has(semanticEdgeKey(edge.source, edge.target));
     const groupPhysicalLink = physicalGroupKeys.has(pairKey);
+    const sourceScaffoldScore = semanticNodeScaffoldScore(source);
+    const targetScaffoldScore = semanticNodeScaffoldScore(target);
+    const scaffoldPairScore = sourceScaffoldScore + targetScaffoldScore;
+    const scaffoldPair = scaffoldPairScore >= 0.9;
+    const sameScaffoldName = Boolean(
+      sameName
+        && (
+          isSemanticScaffoldFilename(sourceBase)
+          || isSemanticScaffoldFilename(targetBase)
+          || SEMANTIC_GENERIC_FILE_STEMS.has(sourceStem)
+          || SEMANTIC_GENERIC_FILE_STEMS.has(targetStem)
+        ),
+    );
+    const sourceGenericLabel = isSemanticGenericLabel(source.label) || isSemanticGenericLabel(source.symbol);
+    const targetGenericLabel = isSemanticGenericLabel(target.label) || isSemanticGenericLabel(target.symbol);
+    const genericEndpoint = sourceGenericLabel || targetGenericLabel;
+    const genericLabelPair = Boolean(
+      sameLabel
+        && (
+          sourceGenericLabel
+          || targetGenericLabel
+        ),
+    );
+    const domainSameName = Boolean(sameName && !sameScaffoldName && !sameFile);
+    const sharedDomainTerms = sharedSemanticDomainTerms(source, target);
+    const signalWeight = nodeSignalWeight(source) + nodeSignalWeight(target);
+    const importantSemanticEndpoint = Boolean(
+      source.importance_tier === "anchor"
+        || source.importance_tier === "interface"
+        || source.importance_tier === "important"
+        || source.signal_tier === "important"
+        || target.importance_tier === "anchor"
+        || target.importance_tier === "interface"
+        || target.importance_tier === "important"
+        || target.signal_tier === "important"
+        || signalWeight >= 0.1
+    );
+    const sourceSpecificity = semanticNodeSpecificity(source);
+    const targetSpecificity = semanticNodeSpecificity(target);
+    const specificEndpointPair = sourceSpecificity >= 0.12 && targetSpecificity >= 0.12;
+    const domainSameLabel = Boolean(sameLabel && !genericLabelPair && !sameFile);
+    const usefulSharedTerms = Boolean(sharedDomainTerms.length > 0 && !genericEndpoint);
+    const hasDomainSignal = Boolean(
+      domainSameName
+        || domainSameLabel
+        || usefulSharedTerms
+    );
+    const strongNonScaffoldSimilarity = Boolean(
+      edge.similarity >= 0.94
+        && !scaffoldPair
+        && !sameScaffoldName
+        && !genericEndpoint
+        && specificEndpointPair
+    );
 
     const decisionSignals: string[] = [];
     let score = 0.08;
@@ -1312,32 +1695,64 @@ function buildActionableSemanticEdges(
     if (edge.similarity >= 0.92) decisionSignals.push("very high similarity");
     else if (edge.similarity >= 0.86) decisionSignals.push("high similarity");
 
-    if (sameName && !sameFile) {
-      score += 0.24;
+    if (usefulSharedTerms && !scaffoldPair) {
+      score += Math.min(0.1, sharedDomainTerms.length * 0.04);
+      decisionSignals.push(`shared term: ${sharedDomainTerms.slice(0, 2).join(", ")}`);
+    }
+
+    if (domainSameName) {
+      score += 0.22;
       decisionSignals.push("same filename");
-    } else if (sameLabel && !sameFile) {
+    } else if (sameScaffoldName) {
+      score -= 0.1;
+      decisionSignals.push("shared scaffolding");
+    } else if (domainSameLabel) {
       score += 0.12;
       decisionSignals.push("same label");
+    } else if (genericLabelPair) {
+      score -= 0.08;
+      decisionSignals.push("generic label");
+    }
+
+    if (genericEndpoint && !domainSameName && !domainSameLabel) {
+      score -= 0.1;
+      decisionSignals.push("generic symbol");
     }
 
     const densityBoost = Math.min(0.16, (Math.log1p(pairEdgeCount) / Math.log1p(30)) * 0.16);
-    score += densityBoost;
-    if (pairEdgeCount >= 4) decisionSignals.push(`${pairEdgeCount} related links`);
-    if (pairSameNameCount >= 2) {
+    if (hasDomainSignal && !scaffoldPair) {
+      score += densityBoost;
+      if (pairEdgeCount >= 4) decisionSignals.push(`${pairEdgeCount} related links`);
+    } else if (pairEdgeCount >= 4) {
+      score += Math.min(0.03, densityBoost * 0.25);
+    }
+    if (pairSameNameCount >= 2 && domainSameName && !scaffoldPair) {
       score += 0.08;
       decisionSignals.push(`${pairSameNameCount} same-name pairs`);
     }
 
-    const signalWeight = nodeSignalWeight(source) + nodeSignalWeight(target);
     score += signalWeight;
-    if (signalWeight >= 0.08) decisionSignals.push("important nodes");
+    if (importantSemanticEndpoint) decisionSignals.push("important nodes");
+
+    if (scaffoldPair) {
+      score -= Math.min(0.42, 0.2 + scaffoldPairScore * 0.12);
+      decisionSignals.push("shared scaffolding");
+    } else if (scaffoldPairScore >= 0.45) {
+      score -= Math.min(0.18, scaffoldPairScore * 0.08);
+    }
 
     if (crossGroup && !directPhysicalLink && !groupPhysicalLink) {
-      score += 0.11;
-      decisionSignals.push("missing physical bridge");
+      if (hasDomainSignal && !scaffoldPair) {
+        score += 0.11;
+        decisionSignals.push("missing physical bridge");
+      } else if (strongNonScaffoldSimilarity) {
+        score += 0.04;
+      }
     } else if (crossGroup && !directPhysicalLink && groupPhysicalLink) {
-      score += 0.04;
-      decisionSignals.push("boundary already linked");
+      if (hasDomainSignal && !scaffoldPair) {
+        score += 0.04;
+        decisionSignals.push("boundary already linked");
+      }
     } else if (directPhysicalLink) {
       score -= 0.08;
     }
@@ -1348,17 +1763,23 @@ function buildActionableSemanticEdges(
     }
 
     const boundedScore = Math.min(0.99, Math.max(0, score));
+    const clearsPragmaticGate = hasDomainSignal || strongNonScaffoldSimilarity;
     let insightKind: SemanticInsightKind = "low_value";
-    if (boundedScore >= SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE && crossGroup && !sameFile) {
-      if (sameName && edge.similarity >= 0.84) {
+    if (
+      boundedScore >= SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE
+      && crossGroup
+      && !sameFile
+      && clearsPragmaticGate
+    ) {
+      if (domainSameName && edge.similarity >= 0.84) {
         insightKind = "waste_duplicate";
-      } else if (edge.similarity >= 0.93) {
+      } else if (edge.similarity >= 0.93 && !scaffoldPair) {
         insightKind = "drift_risk";
-      } else if (!groupPhysicalLink) {
+      } else if (!groupPhysicalLink && hasDomainSignal) {
         insightKind = "gap_missing_bridge";
-      } else if (crossRepo) {
+      } else if (crossRepo && !scaffoldPair) {
         insightKind = "cross_app_similarity";
-      } else if (pairEdgeCount >= 4) {
+      } else if (pairEdgeCount >= 4 && hasDomainSignal) {
         insightKind = "shared_pattern";
       } else {
         insightKind = "intentional_reference";
@@ -3589,7 +4010,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       ? `${semanticVisibleText} raw semantic edges match this Evidence scope, but none cross the ${overlapScopeLabel} boundary needed for bright evidence.`
       : `${semanticCandidateText} ${overlapScopeLabel} semantic candidates match this Evidence scope, but none clear the actionability filter.`
     : fullGraph && semanticLowValueHiddenCount > 0
-    ? `${semanticLowValueHiddenText} raw in-scope semantic edges are hidden as low-value local similarity.`
+    ? `${semanticLowValueHiddenText} raw in-scope semantic edges are hidden as low-value or shared-scaffolding similarity.`
     : "";
   const semanticBackboneCaveat = semanticReadabilityHiddenCount > 0
     ? `${semanticReadabilityHiddenText} actionable edges are held back by the readability backbone.`
@@ -3937,7 +4358,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             : semanticAnalysisMissing
             ? `${showSemantic ? "Hide" : "Show"} semantic overlay. Semantic Analysis has not run for this map yet. Run it in Settings after choosing this exact map/scope.`
             : semanticRawVisibleCount
-            ? `${showSemantic ? "Hide" : "Show"} semantic overlay. ${semanticScopeText}. The bright layer is filtered for duplicate, drift, gap, cross-app, or shared-pattern signal.${semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
+            ? `${showSemantic ? "Hide" : "Show"} semantic overlay. ${semanticScopeText}. The bright layer is filtered for duplicate, drift, gap, cross-app, or shared-pattern signal and hides generic scaffolding by default.${semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
             : semanticMeta?.edge_count
             ? `Semantic overlay has ${semanticMeta.edge_count} stored edges, but none match the current full-graph scope and source filters.`
             : "No semantic edges yet - run Semantic Analysis in Settings"

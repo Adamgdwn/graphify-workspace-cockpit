@@ -1,6 +1,6 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-20T21:55:27-06:00
+Last Updated: 2026-06-20T22:30:05-06:00
 Status: owner sign-off — video-ready; next active work is polish/tuning, not a rebuild
 Owner: Adam Goodwin
 
@@ -92,6 +92,14 @@ showing the wrong root or excerpt. The active semantic cache for the tested
 two-repo map had 21,008 stored edges, 7,426 visible raw matches, and 966 raw
 cross-repo matches; remaining UX work is to let Map run/rerun semantic analysis
 for the current scope directly instead of routing Adam to Settings.
+
+Polish note 2026-06-20T22:30:05-06:00: semantic actionability is now stricter
+about "so what?" signal. The Map keeps raw semantic matches available, but the
+bright Evidence layer demotes shared repo scaffolding, copied governance docs,
+generic symbols, extractor vocabulary, and density-only similarity. In the
+current Governed Agent Lab / chuwi-optimizer scope, the simulated promotion set
+falls from hundreds of cross-repo candidates to 5 code-concept links (`loop`
+and `memory`), which is a better default for decision-grade overlap review.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
