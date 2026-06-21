@@ -28,10 +28,26 @@ interface Recommendation {
   action_plan?: ActionPlan;
   overlap_dossier?: OverlapDossier | null;
   context?: RecommendationContext;
+  scope?: RecommendationScope;
+}
+
+interface RecommendationScope {
+  kind: "current_map" | "other_map" | "system";
+  label: string;
+  matches_current_map?: boolean;
+  graph_name?: string | null;
+  graph_node_count?: number | null;
 }
 
 interface RecommendationContext {
   scope_name?: string;
+  map?: {
+    kind?: string;
+    graph_fingerprint?: string | null;
+    graph_name?: string;
+    graph_node_count?: number;
+    summary_node_count?: number | null;
+  };
   included_context?: Array<{
     id: string;
     label: string;
@@ -234,6 +250,17 @@ function savingsItems(plan: ActionPlan): string[] {
 function pct(value?: number): string {
   if (typeof value !== "number" || Number.isNaN(value)) return "unknown";
   return `${Math.round(value * 100)}%`;
+}
+
+function recommendationScopeKind(rec: Recommendation): RecommendationScope["kind"] {
+  return rec.scope?.kind ?? "system";
+}
+
+function recommendationScopeLabel(rec: Recommendation): string {
+  const kind = recommendationScopeKind(rec);
+  if (kind === "current_map") return "Current Map";
+  if (kind === "other_map") return rec.scope?.graph_name ? `Other Map: ${rec.scope.graph_name}` : "Other Map";
+  return "System";
 }
 
 function ActionPlanBlock({ plan }: { plan: ActionPlan }) {
@@ -447,6 +474,7 @@ function RecCard({
   const statusColor = STATUS_COLOR[rec.status] ?? "#9ca3af";
   const riskColor   = RISK_COLOR[rec.risk]   ?? "#9ca3af";
   const effortColor = RISK_COLOR[rec.effort] ?? "#9ca3af";
+  const scopeKind = recommendationScopeKind(rec);
   const [packetOpen, setPacketOpen] = useState(false);
   const [packet, setPacket] = useState<DecisionPacket | null>(null);
   const [packetLoading, setPacketLoading] = useState(false);
@@ -483,6 +511,9 @@ function RecCard({
         <div className="rec-card-title-row">
           <span className="rec-card-title">{rec.title}</span>
           <span className="rec-mode-badge">{MODE_LABELS[rec.mode] ?? rec.mode}</span>
+          <span className={`rec-scope-badge rec-scope-${scopeKind.replace("_", "-")}`}>
+            {recommendationScopeLabel(rec)}
+          </span>
         </div>
         <span
           className="rec-status-badge"
@@ -498,6 +529,9 @@ function RecCard({
       {rec.context && (
         <div className="rec-context-strip">
           <span>{rec.context.scope_name || "Active scope"}</span>
+          {rec.context.map?.graph_name && (
+            <span>{rec.context.map.graph_name}</span>
+          )}
           <span>
             {(rec.context.included_context?.length ?? 0)} groups included
           </span>
@@ -642,6 +676,15 @@ function RecCard({
 
 const FILTERS = ["all", "pending", "accepted", "deferred", "rejected"] as const;
 type FilterValue = (typeof FILTERS)[number];
+const SCOPE_FILTERS = ["current-map", "system", "other-maps", "all"] as const;
+type ScopeFilterValue = (typeof SCOPE_FILTERS)[number];
+
+const SCOPE_FILTER_LABELS: Record<ScopeFilterValue, string> = {
+  "current-map": "Current Map",
+  system: "System",
+  "other-maps": "Other Maps",
+  all: "All",
+};
 
 export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (context: ActiveCockpitContext) => void }) {
   const [recs, setRecs]               = useState<Recommendation[]>([]);
@@ -649,6 +692,7 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
   const [generating, setGenerating]   = useState<RecMode | null>(null);
   const [error, setError]             = useState<string | null>(null);
   const [filter, setFilter]           = useState<FilterValue>("all");
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilterValue>("current-map");
   const [queuing, setQueuing]         = useState<string | null>(null);
   const [queuedIds, setQueuedIds]     = useState<Set<string>>(new Set());
   const etagRef = useRef<string>("");
@@ -691,6 +735,7 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
       }
       const newRec: Recommendation = await r.json();
       setRecs((prev) => [newRec, ...prev]);
+      setScopeFilter("current-map");
       setFilter("pending");
       addToast(`${MODE_LABELS[mode]} recommendation generated`, "success");
     } catch (e) {
@@ -741,13 +786,26 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
   }
 
   function handleExport() {
-    const exportData = filter === "all" ? recs : recs.filter((r) => r.status === filter);
+    const exportData = filtered;
     downloadJson(exportData, "recommendations.json");
     addToast("Recommendations exported", "info");
   }
 
-  const filtered     = filter === "all" ? recs : recs.filter((r) => r.status === filter);
-  const pendingCount = recs.filter((r) => r.status === "pending").length;
+  const scopedRecs = recs.filter((rec) => {
+    const kind = recommendationScopeKind(rec);
+    if (scopeFilter === "current-map") return kind === "current_map";
+    if (scopeFilter === "system") return kind === "system";
+    if (scopeFilter === "other-maps") return kind === "other_map";
+    return true;
+  });
+  const filtered     = filter === "all" ? scopedRecs : scopedRecs.filter((r) => r.status === filter);
+  const scopeCounts: Record<ScopeFilterValue, number> = {
+    "current-map": recs.filter((rec) => recommendationScopeKind(rec) === "current_map").length,
+    system: recs.filter((rec) => recommendationScopeKind(rec) === "system").length,
+    "other-maps": recs.filter((rec) => recommendationScopeKind(rec) === "other_map").length,
+    all: recs.length,
+  };
+  const pendingCount = scopedRecs.filter((r) => r.status === "pending").length;
 
   return (
     <div className="rec-pane">
@@ -762,6 +820,22 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
             onClick={() => generate(mode)}
           >
             {generating === mode ? "Generating…" : MODE_LABELS[mode]}
+          </button>
+        ))}
+      </div>
+
+      <div className="rec-filter-bar rec-scope-filter-bar" aria-label="Recommendation scope">
+        {SCOPE_FILTERS.map((scope) => (
+          <button
+            key={scope}
+            className={`rec-filter-btn${scopeFilter === scope ? " active" : ""}`}
+            onClick={() => setScopeFilter(scope)}
+            type="button"
+          >
+            {SCOPE_FILTER_LABELS[scope]}
+            {scopeCounts[scope] > 0 && (
+              <span className="rec-filter-count">{scopeCounts[scope]}</span>
+            )}
           </button>
         ))}
       </div>
@@ -801,7 +875,12 @@ export function Recommendations({ onEvidenceNavigate }: { onEvidenceNavigate?: (
         )}
         {!loading && filtered.length === 0 && (
           <div className="rec-empty">
-            {filter === "all" ? (
+            {scopeFilter === "current-map" ? (
+              <>
+                <p className="rec-empty-msg">No recommendations for the current map.</p>
+                <p className="rec-empty-hint">System and older map cards are still available in the scope filters above.</p>
+              </>
+            ) : filter === "all" ? (
               <>
                 <p className="rec-empty-msg">No recommendations yet.</p>
                 <p className="rec-empty-hint">Use the Generate buttons above to create your first recommendation from the workspace graph.</p>

@@ -125,6 +125,46 @@ function samePathList(left: Iterable<string> | undefined, right: Iterable<string
   return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
+function indexScopeNodes(node: WorkspaceScopeNode, nodes = new Map<string, WorkspaceScopeNode>()): Map<string, WorkspaceScopeNode> {
+  nodes.set(node.path, node);
+  for (const child of node.children) {
+    indexScopeNodes(child, nodes);
+  }
+  return nodes;
+}
+
+function isDescendantPath(path: string, possibleParent: string): boolean {
+  const parent = possibleParent.endsWith("/") ? possibleParent : `${possibleParent}/`;
+  return path.startsWith(parent);
+}
+
+function topLevelSelectedPaths(paths: Iterable<string>): string[] {
+  const selected = normalizedPathList(paths).sort((left, right) => left.length - right.length || left.localeCompare(right));
+  const topLevel: string[] = [];
+  for (const path of selected) {
+    if (topLevel.some((parent) => path !== parent && isDescendantPath(path, parent))) continue;
+    topLevel.push(path);
+  }
+  return topLevel;
+}
+
+function selectedScopeTotals(tree: WorkspaceScopeNode, selectedPaths: Iterable<string>) {
+  const nodes = indexScopeNodes(tree);
+  return topLevelSelectedPaths(selectedPaths).reduce(
+    (totals, path) => {
+      const node = nodes.get(path);
+      if (!node) {
+        totals.missingSelected += 1;
+        return totals;
+      }
+      totals.estimatedFiles += node.estimated_file_count;
+      totals.ignoredByDefault += node.estimated_excluded_count;
+      return totals;
+    },
+    { estimatedFiles: 0, ignoredByDefault: 0, missingSelected: 0 },
+  );
+}
+
 function titleFromPath(path: string): string {
   const segment = path.split("/").filter(Boolean).pop() ?? path;
   const words = segment.replace(/[_-]+/g, " ").trim().split(/\s+/).filter(Boolean);
@@ -197,6 +237,10 @@ export function WorkspaceScopePicker({
 
   const includedCount = included.size;
   const excludedCount = excluded.size;
+  const selectedTotals = useMemo(
+    () => scope ? selectedScopeTotals(scope.tree, included) : { estimatedFiles: 0, ignoredByDefault: 0, missingSelected: 0 },
+    [included, scope],
+  );
   const draftRoot = scope?.root.path ?? rootInput.trim();
   const hasUnsavedScopeChanges = Boolean(
     profile
@@ -623,7 +667,7 @@ export function WorkspaceScopePicker({
         <>
           <div className="scope-count-grid">
             <div>
-              <span className="scope-count-value">{scope.root.estimated_file_count.toLocaleString()}</span>
+              <span className="scope-count-value">{selectedTotals.estimatedFiles.toLocaleString()}</span>
               <span className="scope-count-label">estimated files</span>
             </div>
             <div>
@@ -631,10 +675,15 @@ export function WorkspaceScopePicker({
               <span className="scope-count-label">selected folders</span>
             </div>
             <div>
-              <span className="scope-count-value">{scope.root.estimated_excluded_count.toLocaleString()}</span>
+              <span className="scope-count-value">{selectedTotals.ignoredByDefault.toLocaleString()}</span>
               <span className="scope-count-label">ignored by defaults</span>
             </div>
           </div>
+          {selectedTotals.missingSelected > 0 && (
+            <p className="settings-dim scope-count-note">
+              {selectedTotals.missingSelected.toLocaleString()} selected path{selectedTotals.missingSelected === 1 ? "" : "s"} are outside the inspected summary depth, so their file estimates are not included here.
+            </p>
+          )}
           <div className="scope-toolbar">
             <span className="settings-dim">
               Current selection: {includedCount.toLocaleString()} selected, {excludedCount.toLocaleString()} ignored

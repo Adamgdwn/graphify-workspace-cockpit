@@ -8,7 +8,8 @@
 ALTER TABLE recommendations
   ADD COLUMN IF NOT EXISTS action_plan JSONB,
   ADD COLUMN IF NOT EXISTS overlap JSONB,
-  ADD COLUMN IF NOT EXISTS overlap_dossier JSONB;
+  ADD COLUMN IF NOT EXISTS overlap_dossier JSONB,
+  ADD COLUMN IF NOT EXISTS context JSONB;
 
 ALTER TABLE actions
   ADD COLUMN IF NOT EXISTS action_plan JSONB;
@@ -19,5 +20,7 @@ COMMENT ON COLUMN recommendations.overlap IS
   'Optional semantic overlap metadata used by duplicate/review recommendations.';
 COMMENT ON COLUMN recommendations.overlap_dossier IS
   'Optional triage dossier captured from overlap analysis.';
+COMMENT ON COLUMN recommendations.context IS
+  'Optional graph, map, and scope context captured when the recommendation was created.';
 COMMENT ON COLUMN actions.action_plan IS
   'Optional structured plan copied from the accepted recommendation.';

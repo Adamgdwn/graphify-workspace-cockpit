@@ -1,6 +1,6 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-20T14:38:21-06:00
+Last Updated: 2026-06-20T21:55:27-06:00
 Status: owner sign-off — video-ready; next active work is polish/tuning, not a rebuild
 Owner: Adam Goodwin
 
@@ -70,6 +70,28 @@ backend now stamps semantic edges with a graph fingerprint, clears stale
 semantic caches on graph upload/activation, and exposes stale/current metadata
 so the Map can tell Adam to rerun Semantic Analysis for the current repo/scope
 instead of implying the filter rejected valid current edges.
+
+Polish note 2026-06-20T16:49:22-06:00: the video shoot exposed two operator
+clarity gaps. The Map now distinguishes "Semantic Analysis has not run for this
+map" from "semantic edges were filtered out," and recommendation cards now carry
+active-map identity in their context so the UI can split Current Map, Other Map,
+and System recommendations instead of showing one global pending pile.
+
+Polish note 2026-06-20T21:43:48-06:00: Workspace Scope summary cards now use
+the current checked folder selection for estimated files and default-ignored
+files instead of the inspected root totals, so draft scopes do not keep showing
+the broad 10,000-file cap after Adam selects a narrower folder.
+
+Polish note 2026-06-20T21:55:27-06:00: two-repo review exposed a label/source
+metadata issue rather than a failed scoped generation. Evidence graphs below
+the old 600-node multi-repo fast-layout threshold skipped repo label nodes, so
+multi-repo Evidence now uses the preset comparison layout whenever more than
+one repo is visible. `/graph/full` also resolves duplicate relative filenames
+per node source root, preventing same-name files in different repos from
+showing the wrong root or excerpt. The active semantic cache for the tested
+two-repo map had 21,008 stored edges, 7,426 visible raw matches, and 966 raw
+cross-repo matches; remaining UX work is to let Map run/rerun semantic analysis
+for the current scope directly instead of routing Adam to Settings.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,

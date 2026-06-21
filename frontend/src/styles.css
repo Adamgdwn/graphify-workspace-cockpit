@@ -3262,6 +3262,11 @@ body {
   flex-shrink: 0;
 }
 
+.rec-scope-filter-bar {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
 .rec-filter-btn {
   font-size: 11px;
   font-weight: 500;
@@ -3375,6 +3380,33 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   white-space: nowrap;
+}
+
+.rec-scope-badge {
+  font-size: 10px;
+  font-weight: 600;
+  background: #0a1220;
+  border: 1px solid #1a2a48;
+  border-radius: 4px;
+  padding: 2px 7px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.rec-scope-current-map {
+  color: #4ade80;
+  border-color: #24583a;
+}
+
+.rec-scope-system {
+  color: #a8c8f0;
+  border-color: #2a4070;
+}
+
+.rec-scope-other-map {
+  color: #f5d280;
+  border-color: #5a4a1f;
 }
 
 .rec-status-badge {

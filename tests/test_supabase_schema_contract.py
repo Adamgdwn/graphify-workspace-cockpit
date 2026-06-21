@@ -44,6 +44,7 @@ def test_supabase_migration_adds_current_recommendation_and_action_columns() -> 
     assert "ADD COLUMN IF NOT EXISTS action_plan JSONB" in migration
     assert "ADD COLUMN IF NOT EXISTS overlap JSONB" in migration
     assert "ADD COLUMN IF NOT EXISTS overlap_dossier JSONB" in migration
+    assert "ADD COLUMN IF NOT EXISTS context JSONB" in migration
     assert "ALTER TABLE actions" in migration
 
 
@@ -54,7 +55,7 @@ def test_storage_status_reports_ready_when_supabase_columns_exist(monkeypatch) -
         "_supabase_client",
         _FakeSupabaseClient(
             {
-                "recommendations": {"action_plan", "overlap", "overlap_dossier"},
+                "recommendations": {"action_plan", "overlap", "overlap_dossier", "context"},
                 "actions": {"action_plan"},
             }
         ),
@@ -89,7 +90,7 @@ def test_storage_status_warns_when_supabase_columns_are_missing(monkeypatch) -> 
     assert status["schema_checked"] is True
     assert status["required_migration"] == main.SUPABASE_SCHEMA_MIGRATION
     assert status["missing_or_unverified_columns"] == {
-        "recommendations": ["action_plan", "overlap", "overlap_dossier"],
+        "recommendations": ["action_plan", "overlap", "overlap_dossier", "context"],
         "actions": ["action_plan"],
     }
     assert "hosted beta" in status["warning"]

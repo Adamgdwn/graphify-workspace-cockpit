@@ -200,7 +200,7 @@ if STORAGE_BACKEND == "supabase":
 
 SUPABASE_SCHEMA_MIGRATION = "db/migrations/002_recommendation_action_plans.sql"
 SUPABASE_SCHEMA_REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
-    "recommendations": ("action_plan", "overlap", "overlap_dossier"),
+    "recommendations": ("action_plan", "overlap", "overlap_dossier", "context"),
     "actions": ("action_plan",),
 }
 _supabase_schema_status_cache: dict | None = None
@@ -840,6 +840,13 @@ def _map_decision_overlay_context() -> dict:
         actions = _load_all_actions()
     except Exception:
         actions = []
+    recommendations = _current_map_recommendations(recommendations)
+    current_rec_ids = {str(rec.get("id") or "") for rec in recommendations}
+    actions = [
+        action for action in actions
+        if not action.get("source_recommendation_id")
+        or str(action.get("source_recommendation_id") or "") in current_rec_ids
+    ]
     return build_decision_overlay_context(
         decisions=decisions,
         recommendations=recommendations,
@@ -1214,19 +1221,30 @@ def graph_full(
         parts = [p for p in path.split("/") if p]
         return any(marker in parts or marker in path for marker in _SECRET_PATH_MARKERS)
 
-    source_cache: dict[str, tuple[Path | None, Path | None, str]] = {}
-    excerpt_cache: dict[tuple[str, str], dict] = {}
+    source_cache: dict[tuple[str, str], tuple[Path | None, Path | None, str]] = {}
+    excerpt_cache: dict[tuple[str, str, str], dict] = {}
 
-    def _resolve_source(source_file: str) -> tuple[Path | None, Path | None, str]:
-        if source_file in source_cache:
-            return source_cache[source_file]
+    def _resolve_source(source_file: str, source_root: str = "") -> tuple[Path | None, Path | None, str]:
+        source_root_key = str(source_root or "").strip()
+        cache_key = (source_root_key, source_file)
+        if cache_key in source_cache:
+            return source_cache[cache_key]
         if not source_file:
             result = (None, None, "")
-            source_cache[source_file] = result
+            source_cache[cache_key] = result
             return result
 
         raw_path = Path(source_file).expanduser()
+        roots: list[Path] = []
+        if source_root_key:
+            try:
+                roots.append(Path(source_root_key).expanduser().resolve())
+            except Exception:
+                pass
         for root in _source_roots():
+            if root not in roots:
+                roots.append(root)
+        for root in roots:
             try:
                 root_resolved = root.resolve()
                 candidate = raw_path.resolve() if raw_path.is_absolute() else (root_resolved / raw_path).resolve()
@@ -1238,11 +1256,11 @@ def graph_full(
                 continue
             if candidate.exists() and candidate.is_file():
                 result = (candidate, root_resolved, relative)
-                source_cache[source_file] = result
+                source_cache[cache_key] = result
                 return result
 
         result = (None, None, "")
-        source_cache[source_file] = result
+        source_cache[cache_key] = result
         return result
 
     def _line_from_location(source_location: str) -> int | None:
@@ -1254,8 +1272,8 @@ def graph_full(
         except ValueError:
             return None
 
-    def _read_node_excerpt(source_file: str, source_location: str, radius: int = 4) -> dict:
-        cache_key = (source_file, source_location)
+    def _read_node_excerpt(source_file: str, source_location: str, source_root: str = "", radius: int = 4) -> dict:
+        cache_key = (str(source_root or "").strip(), source_file, source_location)
         if cache_key in excerpt_cache:
             return excerpt_cache[cache_key]
 
@@ -1265,7 +1283,7 @@ def graph_full(
         elif _path_is_secret_like(source_file):
             result = {"start_line": None, "lines": [], "unavailable_reason": "Source excerpt hidden for secret-like path."}
         else:
-            source_path, _, _ = _resolve_source(source_file)
+            source_path, _, _ = _resolve_source(source_file, source_root)
             if source_path is None:
                 result = {"start_line": None, "lines": [], "unavailable_reason": "Source file is outside the active roots or unavailable."}
             else:
@@ -1375,8 +1393,14 @@ def graph_full(
             continue
         source_file = n.get("source_file", "")
         source_location = n.get("source_location", "")
-        _, source_root, relative_path = _resolve_source(source_file)
-        excerpt = _read_node_excerpt(source_file, source_location)
+        node_source_root = str(n.get("source_root") or "").strip()
+        _, source_root, relative_path = _resolve_source(source_file, node_source_root)
+        excerpt = _read_node_excerpt(source_file, source_location, node_source_root)
+        source_root_text = str(source_root) if source_root else node_source_root
+        source_root_name = str(n.get("source_root_name") or "").strip()
+        if not source_root_name and source_root_text:
+            source_root_name = Path(source_root_text).name
+        relative_source_path = relative_path or "/".join(_node_relative_source_parts(n)) or source_file
         node_payload = {
             "id": n["id"],
             "label": n.get("label", n["id"]),
@@ -1384,11 +1408,11 @@ def graph_full(
             "cluster": _node_cluster_id(n),
             "source_file": source_file,
             "source_location": source_location,
-            "source_root": str(source_root) if source_root else "",
-            "source_root_name": source_root.name if source_root else "",
+            "source_root": source_root_text,
+            "source_root_name": source_root_name,
             "repo": _node_workspace_label(n),
             "container": _container(n),
-            "relative_path": relative_path or source_file,
+            "relative_path": relative_source_path,
             "origin": n.get("_origin", ""),
             "metadata": n.get("metadata") or {},
             "symbol": n.get("label", n["id"]),
@@ -1702,6 +1726,7 @@ def get_recommendation_decision_packet(rec_id: str) -> dict:
     rec = _load_recommendation(rec_id)
     if rec is None:
         raise HTTPException(status_code=404, detail=f"Recommendation {rec_id} not found.")
+    rec = _annotate_recommendation_scope(rec)
 
     actions = [
         action for action in _load_all_actions()
@@ -1808,7 +1833,7 @@ def _build_scope_context(summary: dict) -> dict:
     raw_estimate = visible_nodes + hidden_count + scoped_excluded_count
     estimated_hidden_tokens = max(0, (hidden_count + scoped_excluded_count) * 80)
 
-    return {
+    context = {
         "scope_name": str(profile.get("profile_name")) if profile else "Active Graph",
         "root": str(profile.get("root")) if profile else "",
         "included_context": included,
@@ -1826,6 +1851,79 @@ def _build_scope_context(summary: dict) -> dict:
             "basis": "Hidden low-signal and scoped-excluded graph nodes are kept out of default insight prompts.",
         },
     }
+    return _attach_map_context(context, summary=summary)
+
+
+def _active_map_identity(graph: dict | None = None, summary: dict | None = None) -> dict:
+    graph = graph or _load_graph()
+    graph_path = _graph_path()
+    summary_node_count = None
+    if isinstance(summary, dict) and summary.get("total_nodes") is not None:
+        try:
+            summary_node_count = int(summary.get("total_nodes") or 0)
+        except Exception:
+            summary_node_count = None
+    return {
+        "kind": "map",
+        "graph_fingerprint": _graph_fingerprint(graph),
+        "graph_path": graph_path,
+        "graph_name": Path(graph_path).name,
+        "graph_node_count": len(graph.get("nodes", [])),
+        "summary_node_count": summary_node_count,
+    }
+
+
+def _attach_map_context(context: dict, summary: dict | None = None, graph: dict | None = None) -> dict:
+    scoped = dict(context)
+    try:
+        scoped["map"] = _active_map_identity(graph=graph, summary=summary)
+    except Exception:
+        scoped["map"] = {"kind": "system", "graph_fingerprint": None}
+    return scoped
+
+
+def _recommendation_scope(rec: dict, current_map: dict | None = None) -> dict:
+    context = rec.get("context") if isinstance(rec.get("context"), dict) else {}
+    map_context = context.get("map") if isinstance(context.get("map"), dict) else {}
+    stored_fingerprint = str(map_context.get("graph_fingerprint") or "")
+    if not stored_fingerprint:
+        return {
+            "kind": "system",
+            "label": "System recommendation",
+            "matches_current_map": False,
+            "graph_name": None,
+        }
+
+    current_map = current_map or {}
+    current_fingerprint = str(current_map.get("graph_fingerprint") or "")
+    graph_name = str(map_context.get("graph_name") or "Saved map")
+    matches = bool(current_fingerprint and stored_fingerprint == current_fingerprint)
+    return {
+        "kind": "current_map" if matches else "other_map",
+        "label": "Current map" if matches else f"Other map: {graph_name}",
+        "matches_current_map": matches,
+        "graph_name": graph_name,
+        "graph_node_count": map_context.get("graph_node_count"),
+    }
+
+
+def _annotate_recommendation_scope(rec: dict, current_map: dict | None = None) -> dict:
+    return {
+        **rec,
+        "scope": _recommendation_scope(rec, current_map=current_map),
+    }
+
+
+def _current_map_recommendations(recommendations: list[dict]) -> list[dict]:
+    try:
+        current_map = _active_map_identity()
+    except Exception:
+        return []
+    return [
+        rec
+        for rec in recommendations
+        if _recommendation_scope(rec, current_map=current_map).get("kind") == "current_map"
+    ]
 
 
 def _build_graph_context(summary: dict) -> str:
@@ -1921,7 +2019,14 @@ def _call_ollama(prompt: str, model: str, timeout: int = 120) -> str:
 
 @app.get("/recommendations")
 def list_recommendations(request: Request):
-    recs = _load_recommendations()
+    try:
+        current_map = _active_map_identity()
+    except Exception:
+        current_map = None
+    recs = [
+        _annotate_recommendation_scope(rec, current_map=current_map)
+        for rec in _load_recommendations()
+    ]
     tag = _etag(recs)
     if request.headers.get("if-none-match") == tag:
         return Response(status_code=304)
@@ -1979,7 +2084,7 @@ def generate_recommendation(req: GenerateRecommendationRequest, request: Request
     if isinstance(parsed.get("action_plan"), dict):
         rec["action_plan"] = parsed["action_plan"]
     _save_recommendation(rec)
-    return rec
+    return _annotate_recommendation_scope(rec)
 
 
 @app.patch("/recommendations/{rec_id}")
@@ -1992,7 +2097,7 @@ def patch_recommendation(rec_id: str, req: PatchRecommendationRequest) -> dict:
         rec["status"] = req.status
     rec["updated_at"] = now
     _save_recommendation(rec)
-    return rec
+    return _annotate_recommendation_scope(rec)
 
 
 # ── Missions (Steady Work Mode — AG-003) ──────────────────────────────────
@@ -4116,7 +4221,7 @@ def create_overlap_recommendation(req: CreateOverlapRecommendationRequest, reque
         "context": scope_context,
     }
     _save_recommendation(rec)
-    return rec
+    return _annotate_recommendation_scope(rec)
 
 
 # ---------------------------------------------------------------------------

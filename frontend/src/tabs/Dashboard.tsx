@@ -14,6 +14,10 @@ interface Recommendation {
   id: string;
   title: string;
   status: RecStatus;
+  scope?: {
+    kind: "current_map" | "other_map" | "system";
+    label: string;
+  };
 }
 
 interface QueuedAction {
@@ -142,6 +146,10 @@ function needsFreshnessAttention(status: JobStatus, lastRun?: string | null) {
   if (status === "running" || status === "error") return true;
   const hours = hoursSince(lastRun);
   return hours === null || hours > FRESH_HOURS;
+}
+
+function recommendationScopeKind(rec: Recommendation): "current_map" | "other_map" | "system" {
+  return rec.scope?.kind ?? "system";
 }
 
 function AttentionCard({
@@ -319,8 +327,11 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
     [actions],
   );
 
-  const pendingRecommendations = recommendations.filter((rec) => rec.status === "pending");
-  const acceptedNotQueued = recommendations.filter((rec) => rec.status === "accepted" && !queuedRecommendationIds.has(rec.id));
+  const currentMapRecommendations = recommendations.filter((rec) => recommendationScopeKind(rec) === "current_map");
+  const systemPendingRecommendations = recommendations.filter((rec) => recommendationScopeKind(rec) === "system" && rec.status === "pending");
+  const otherMapPendingRecommendations = recommendations.filter((rec) => recommendationScopeKind(rec) === "other_map" && rec.status === "pending");
+  const pendingRecommendations = currentMapRecommendations.filter((rec) => rec.status === "pending");
+  const acceptedNotQueued = currentMapRecommendations.filter((rec) => rec.status === "accepted" && !queuedRecommendationIds.has(rec.id));
   const dryRunReadyActions = actions.filter((action) => action.status === "dry-run-ready");
   const untriagedOverlaps = overlapReport.groups.filter((group) => {
     const record = overlapStatuses[overlapKey(group)];
@@ -383,8 +394,15 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
       <div className="dash-grid">
         <AttentionCard
           count={pendingRecommendations.length}
-          label="Pending Recommendations"
-          detail={pendingRecommendations[0]?.title ?? "No recommendation reviews waiting"}
+          label="Current Map Recommendations"
+          detail={
+            pendingRecommendations[0]?.title
+            ?? (
+              systemPendingRecommendations.length || otherMapPendingRecommendations.length
+                ? `${systemPendingRecommendations.length + otherMapPendingRecommendations.length} non-current recommendation${systemPendingRecommendations.length + otherMapPendingRecommendations.length === 1 ? "" : "s"} in Recommendations`
+                : "No current-map recommendation reviews waiting"
+            )
+          }
           action="Review"
           tone={pendingRecommendations.length ? "blue" : "slate"}
           onClick={() => onNavigate("recommendations")}

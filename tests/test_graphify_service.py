@@ -443,6 +443,65 @@ def test_graph_endpoints_preserve_scoped_signal_metadata(monkeypatch, tmp_path: 
     assert full["signal_counts"]["important"] == 1
 
 
+def test_graph_full_resolves_duplicate_relative_source_files_per_node_root(monkeypatch, tmp_path: Path) -> None:
+    app_a = tmp_path / "code" / "app-a"
+    app_b = tmp_path / "code" / "app-b"
+    app_a.mkdir(parents=True)
+    app_b.mkdir(parents=True)
+    (app_a / "shared.py").write_text("APP_A = True\n")
+    (app_b / "shared.py").write_text("APP_B = True\n")
+    graph = tmp_path / "scoped-graph.json"
+    graph.write_text(json.dumps({
+        "nodes": [
+            {
+                "id": "a-shared",
+                "label": "shared.py",
+                "source_file": "shared.py",
+                "source_location": "L1",
+                "source_root": str(app_a),
+                "source_root_name": "app-a",
+                "repo_project_name": "app-a",
+                "signal_tier": "important",
+                "importance_tier": "important",
+            },
+            {
+                "id": "b-shared",
+                "label": "shared.py",
+                "source_file": "shared.py",
+                "source_location": "L1",
+                "source_root": str(app_b),
+                "source_root_name": "app-b",
+                "repo_project_name": "app-b",
+                "signal_tier": "important",
+                "importance_tier": "important",
+            },
+        ],
+        "links": [],
+    }))
+    settings = tmp_path / "settings.json"
+    settings.write_text(json.dumps({"graph_path": str(graph)}))
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(graph))
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", tmp_path / "missing-scope.json")
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", tmp_path / "missing-scan-dirs.json")
+    monkeypatch.setattr(main, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    monkeypatch.setattr(main, "API_KEY", "")
+    client = TestClient(main.app)
+
+    response = client.get("/graph/full")
+
+    assert response.status_code == 200
+    nodes = {node["id"]: node for node in response.json()["nodes"]}
+    assert nodes["a-shared"]["source_root"] == str(app_a)
+    assert nodes["b-shared"]["source_root"] == str(app_b)
+    assert nodes["a-shared"]["relative_path"] == "shared.py"
+    assert nodes["b-shared"]["relative_path"] == "shared.py"
+    assert nodes["a-shared"]["source_excerpt"]["lines"] == ["APP_A = True"]
+    assert nodes["b-shared"]["source_excerpt"]["lines"] == ["APP_B = True"]
+
+
 def test_graph_full_workspace_knowledge_lens_prioritizes_decision_files(monkeypatch, tmp_path: Path) -> None:
     graph = tmp_path / "knowledge-graph.json"
     graph.write_text(json.dumps({
@@ -532,6 +591,12 @@ def test_graph_map_decision_overlay_marks_summary_and_full_nodes(monkeypatch, tm
             {"source": "a-route", "target": "b-readme", "relation": "references"},
         ],
     }))
+    graph_payload = json.loads(graph.read_text())
+    map_context = {
+        "graph_fingerprint": main._graph_fingerprint(graph_payload),
+        "graph_name": graph.name,
+        "graph_node_count": len(graph_payload["nodes"]),
+    }
     settings = tmp_path / "settings.json"
     settings.write_text(json.dumps({"graph_path": str(graph)}))
     decisions = state_dir / "decisions.json"
@@ -557,6 +622,7 @@ def test_graph_map_decision_overlay_marks_summary_and_full_nodes(monkeypatch, tm
         "proposed_action": "Document the app-a route boundary before merging adjacent work.",
         "created_at": "2026-06-18T12:05:00+00:00",
         "updated_at": "2026-06-18T12:05:00+00:00",
+        "context": {"map": map_context},
     }))
     (action_dir / "action-app-a.json").write_text(json.dumps({
         "id": "action-app-a",
@@ -1059,6 +1125,16 @@ def test_graph_context_describes_scope_exclusions_and_token_savings(monkeypatch,
     assert "archive" in context
     assert packet["major_exclusions"]["hidden_low_signal_nodes"] == 1
     assert packet["token_savings"]["estimated_hidden_tokens_per_query"] >= 80
+    assert packet["map"]["graph_name"] == graph.name
+    assert packet["map"]["graph_node_count"] == 2
+    assert packet["map"]["graph_fingerprint"]
+
+    current_rec = {"id": "rec-current", "context": {"map": packet["map"]}}
+    old_rec = {"id": "rec-old", "context": {"map": {"graph_fingerprint": "older", "graph_name": "old.json"}}}
+    system_rec = {"id": "rec-system", "context": {"scope_name": "Legacy"}}
+    assert main._recommendation_scope(current_rec, current_map=packet["map"])["kind"] == "current_map"
+    assert main._recommendation_scope(old_rec, current_map=packet["map"])["kind"] == "other_map"
+    assert main._recommendation_scope(system_rec, current_map=packet["map"])["kind"] == "system"
 
 
 def test_overlap_report_ignores_low_signal_nodes(monkeypatch, tmp_path: Path) -> None:
