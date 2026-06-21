@@ -280,6 +280,11 @@ def _load_chat_config() -> dict:
 _REBUILD_STATUS: dict = {"status": "idle", "last_run": None}
 
 # Semantic similarity pass state
+SEMANTIC_EDGE_POLICY_VERSION = 2
+SEMANTIC_DEFAULT_THRESHOLD = 0.86
+SEMANTIC_DEFAULT_MAX_NEIGHBORS_PER_NODE = 12
+SEMANTIC_DEFAULT_MAX_STORED_EDGES = 50_000
+
 _SEMANTIC_STATUS: dict = {
     "status": "idle",   # idle | running | complete | error
     "progress": 0,
@@ -288,6 +293,10 @@ _SEMANTIC_STATUS: dict = {
     "error": None,
     "edge_count": 0,
     "model": None,
+    "threshold": None,
+    "scope_node_count": 0,
+    "max_neighbors_per_node": SEMANTIC_DEFAULT_MAX_NEIGHBORS_PER_NODE,
+    "max_edges": SEMANTIC_DEFAULT_MAX_STORED_EDGES,
 }
 
 
@@ -1191,7 +1200,7 @@ def graph_summary(project: str | None = None, min_weight: int = 2) -> dict:
 def graph_full(
     include_low_signal: bool = False,
     knowledge_only: bool = False,
-    max_nodes: int = 10000,
+    max_nodes: int = 15000,
     force: bool = False,
 ) -> dict:
     """Return all raw nodes and links for full-graph rendering in the Map."""
@@ -3198,22 +3207,225 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
     return dot / mag if mag else 0.0
 
 
+def _semantic_scope_fingerprint(node_ids: list[str]) -> str:
+    payload = json.dumps(sorted(node_ids), separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _semantic_edge_policy_stale(payload: dict) -> bool:
+    edges = payload.get("edges")
+    return (
+        isinstance(edges, list)
+        and len(edges) > 0
+        and payload.get("edge_policy_version") != SEMANTIC_EDGE_POLICY_VERSION
+    )
+
+
+def _semantic_nodes_for_pass(
+    graph: dict,
+    *,
+    include_low_signal: bool = False,
+    knowledge_only: bool = False,
+    node_ids: list[str] | None = None,
+) -> list[dict]:
+    signal_graph = apply_signal_tiers_to_graph(graph)
+    requested_ids = {str(node_id) for node_id in node_ids or [] if str(node_id).strip()}
+    has_requested_scope = node_ids is not None
+    effective_knowledge_only = bool(knowledge_only) and not include_low_signal
+    nodes: list[dict] = []
+
+    for node in signal_graph.get("nodes", []):
+        if not isinstance(node, dict):
+            continue
+        node_id = str(node.get("id") or "")
+        if not node_id:
+            continue
+        if has_requested_scope and node_id not in requested_ids:
+            continue
+        if not is_visible_signal_node(node, include_low_signal=include_low_signal):
+            continue
+        if effective_knowledge_only and not is_visible_knowledge_node(node):
+            continue
+        nodes.append(node)
+
+    return nodes
+
+
+def _bounded_semantic_threshold(value: float) -> float:
+    try:
+        threshold = float(value)
+    except (TypeError, ValueError):
+        threshold = SEMANTIC_DEFAULT_THRESHOLD
+    return max(0.5, min(0.99, threshold))
+
+
+def _bounded_semantic_neighbor_count(value: int) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        count = SEMANTIC_DEFAULT_MAX_NEIGHBORS_PER_NODE
+    return max(1, min(50, count))
+
+
+def _bounded_semantic_edge_limit(value: int) -> int:
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        count = SEMANTIC_DEFAULT_MAX_STORED_EDGES
+    return max(100, min(200_000, count))
+
+
+def _semantic_edges_from_rankings(
+    rank_by_pair: dict[tuple[int, int], dict[int, int]],
+    sim_by_pair: dict[tuple[int, int], float],
+    node_ids: list[str],
+    *,
+    mutual_top_neighbors: bool,
+    max_edges: int,
+) -> list[dict]:
+    candidates: list[tuple[float, int, str, str, int | None, int | None]] = []
+    for (left, right), ranks in rank_by_pair.items():
+        source_rank = ranks.get(0)
+        target_rank = ranks.get(1)
+        if mutual_top_neighbors and (source_rank is None or target_rank is None):
+            continue
+        rank_score = max(
+            source_rank if source_rank is not None else max_edges,
+            target_rank if target_rank is not None else max_edges,
+        )
+        candidates.append((
+            sim_by_pair.get((left, right), 0.0),
+            rank_score,
+            node_ids[left],
+            node_ids[right],
+            source_rank,
+            target_rank,
+        ))
+
+    candidates.sort(key=lambda item: (-item[0], item[1], item[2], item[3]))
+    semantic_edges: list[dict] = []
+    for similarity, _rank_score, source, target, source_rank, target_rank in candidates[:max_edges]:
+        semantic_edges.append({
+            "source": source,
+            "target": target,
+            "similarity": round(float(similarity), 4),
+            "relation": "semantic_similar",
+            "rank_source": source_rank,
+            "rank_target": target_rank,
+        })
+    return semantic_edges
+
+
+def _semantic_edges_from_embeddings(
+    embeddings: list[tuple[str, list[float]]],
+    *,
+    threshold: float,
+    max_neighbors_per_node: int,
+    mutual_top_neighbors: bool,
+    max_edges: int,
+) -> list[dict]:
+    m = len(embeddings)
+    if m < 2:
+        return []
+
+    node_ids = [node_id for node_id, _ in embeddings]
+    top_k = min(max_neighbors_per_node, m - 1)
+    try:
+        import numpy as np  # type: ignore
+
+        mat = np.array([v for _, v in embeddings], dtype=np.float32)
+        norms = np.linalg.norm(mat, axis=1, keepdims=True)
+        mat /= np.maximum(norms, 1e-9)
+        sim_mat = mat @ mat.T
+        np.fill_diagonal(sim_mat, -np.inf)
+
+        rank_by_pair: dict[tuple[int, int], dict[int, int]] = {}
+        sim_by_pair: dict[tuple[int, int], float] = {}
+        for node_index in range(m):
+            scores = sim_mat[node_index]
+            if top_k < m - 1:
+                candidate_indices = np.argpartition(scores, -top_k)[-top_k:]
+            else:
+                candidate_indices = np.arange(m)
+            candidate_indices = [
+                int(other_index)
+                for other_index in candidate_indices.tolist()
+                if float(scores[int(other_index)]) >= threshold
+            ]
+            candidate_indices.sort(key=lambda other_index: float(scores[other_index]), reverse=True)
+            for rank, other_index in enumerate(candidate_indices[:top_k], start=1):
+                left, right = sorted((node_index, other_index))
+                if left == right:
+                    continue
+                side = 0 if node_index == left else 1
+                key = (left, right)
+                rank_by_pair.setdefault(key, {})[side] = rank
+                sim_by_pair[key] = max(sim_by_pair.get(key, 0.0), float(sim_mat[left, right]))
+
+        return _semantic_edges_from_rankings(
+            rank_by_pair,
+            sim_by_pair,
+            node_ids,
+            mutual_top_neighbors=mutual_top_neighbors,
+            max_edges=max_edges,
+        )
+    except ImportError:
+        import heapq
+
+        top_by_node: list[list[tuple[float, int]]] = [[] for _ in range(m)]
+        for left in range(m):
+            for right in range(left + 1, m):
+                similarity = _cosine_sim(embeddings[left][1], embeddings[right][1])
+                if similarity < threshold:
+                    continue
+                for source, target in ((left, right), (right, left)):
+                    item = (similarity, target)
+                    bucket = top_by_node[source]
+                    if len(bucket) < top_k:
+                        heapq.heappush(bucket, item)
+                    elif item[0] > bucket[0][0]:
+                        heapq.heapreplace(bucket, item)
+
+        rank_by_pair: dict[tuple[int, int], dict[int, int]] = {}
+        sim_by_pair: dict[tuple[int, int], float] = {}
+        for source, bucket in enumerate(top_by_node):
+            for rank, (similarity, target) in enumerate(sorted(bucket, reverse=True), start=1):
+                left, right = sorted((source, target))
+                side = 0 if source == left else 1
+                key = (left, right)
+                rank_by_pair.setdefault(key, {})[side] = rank
+                sim_by_pair[key] = max(sim_by_pair.get(key, 0.0), similarity)
+
+        return _semantic_edges_from_rankings(
+            rank_by_pair,
+            sim_by_pair,
+            node_ids,
+            mutual_top_neighbors=mutual_top_neighbors,
+            max_edges=max_edges,
+        )
+
+
 def _save_semantic_edges(
     semantic_edges: list[dict],
     model: str,
     threshold: float,
     created_at: str,
     graph: dict | None = None,
+    metadata: dict | None = None,
 ) -> None:
     graph = graph or _load_graph()
-    write_json_atomic(SEMANTIC_EDGES_FILE, {
+    payload = {
         "edges": semantic_edges,
         "model": model,
         "threshold": threshold,
         "created_at": created_at,
         "graph_fingerprint": _graph_fingerprint(graph),
         "graph_node_count": len(graph.get("nodes", [])),
-    })
+        "edge_policy_version": SEMANTIC_EDGE_POLICY_VERSION,
+    }
+    if metadata:
+        payload.update(metadata)
+    write_json_atomic(SEMANTIC_EDGES_FILE, payload)
 
 
 def _semantic_edges_response(data: dict | None = None) -> dict:
@@ -3224,11 +3436,21 @@ def _semantic_edges_response(data: dict | None = None) -> dict:
         "created_at": None,
         "graph_fingerprint": None,
         "graph_node_count": 0,
+        "edge_policy_version": SEMANTIC_EDGE_POLICY_VERSION,
     })
-    edges = payload.get("edges")
-    if not isinstance(edges, list):
+    raw_edges = payload.get("edges")
+    if not isinstance(raw_edges, list):
         edges = []
         payload["edges"] = edges
+    elif _semantic_edge_policy_stale(payload):
+        payload["legacy_edge_count"] = len(raw_edges)
+        payload["edge_policy_stale"] = True
+        payload["created_at"] = None
+        edges = []
+        payload["edges"] = edges
+    else:
+        edges = raw_edges
+        payload["edge_policy_stale"] = False
 
     current_fingerprint: str | None = None
     current_node_count = 0
@@ -3250,29 +3472,56 @@ def _semantic_edges_response(data: dict | None = None) -> dict:
     stored_fingerprint = payload.get("graph_fingerprint")
     edge_count = len(edges)
     graph_matches = bool(
-        (edge_count == 0 and not stored_fingerprint)
-        or (stored_fingerprint and current_fingerprint and stored_fingerprint == current_fingerprint)
+        not payload.get("edge_policy_stale")
+        and (
+            (edge_count == 0 and not stored_fingerprint)
+            or (stored_fingerprint and current_fingerprint and stored_fingerprint == current_fingerprint)
+        )
     )
     payload["edge_count"] = edge_count
     payload["current_graph_fingerprint"] = current_fingerprint
     payload["current_graph_node_count"] = current_node_count
     payload["current_graph_edge_match_count"] = current_edge_match_count
     payload["graph_matches"] = graph_matches
-    payload["graph_stale"] = bool(edge_count > 0 and not graph_matches)
+    payload["graph_stale"] = bool(payload.get("edge_policy_stale") or (edge_count > 0 and not graph_matches))
     return payload
 
 
-def _run_semantic_pass(model: str, threshold: float) -> None:
+def _run_semantic_pass(
+    model: str,
+    threshold: float,
+    *,
+    include_low_signal: bool = False,
+    knowledge_only: bool = False,
+    node_ids: list[str] | None = None,
+    max_neighbors_per_node: int = SEMANTIC_DEFAULT_MAX_NEIGHBORS_PER_NODE,
+    mutual_top_neighbors: bool = True,
+    max_edges: int = SEMANTIC_DEFAULT_MAX_STORED_EDGES,
+) -> None:
     import urllib.request as _ureq
     global _SEMANTIC_STATUS
+    threshold = _bounded_semantic_threshold(threshold)
+    max_neighbors_per_node = _bounded_semantic_neighbor_count(max_neighbors_per_node)
+    max_edges = _bounded_semantic_edge_limit(max_edges)
     _SEMANTIC_STATUS.update({
         "status": "running", "progress": 0, "total": 0,
         "error": None, "edge_count": 0, "model": model,
+        "threshold": threshold,
+        "scope_node_count": 0,
+        "max_neighbors_per_node": max_neighbors_per_node,
+        "max_edges": max_edges,
     })
     try:
         g = _load_graph()
-        nodes = g.get("nodes", [])
+        nodes = _semantic_nodes_for_pass(
+            g,
+            include_low_signal=include_low_signal,
+            knowledge_only=knowledge_only,
+            node_ids=node_ids,
+        )
+        scoped_node_ids = [str(node.get("id") or "") for node in nodes]
         _SEMANTIC_STATUS["total"] = len(nodes)
+        _SEMANTIC_STATUS["scope_node_count"] = len(nodes)
 
         _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
         embed_url = f"{_ollama_base}/api/embeddings"
@@ -3280,7 +3529,7 @@ def _run_semantic_pass(model: str, threshold: float) -> None:
         embeddings: list[tuple[str, list[float]]] = []
 
         for i, node in enumerate(nodes):
-            nid = node["id"]
+            nid = str(node["id"])
             label = node.get("label", nid)
             ftype = node.get("file_type", "code")
             window = _read_source_window(node.get("source_file", ""))
@@ -3298,37 +3547,33 @@ def _run_semantic_pass(model: str, threshold: float) -> None:
                 pass
             _SEMANTIC_STATUS["progress"] = i + 1
 
-        semantic_edges: list[dict] = []
-        m = len(embeddings)
-
-        try:
-            import numpy as np  # type: ignore
-            mat = np.array([v for _, v in embeddings], dtype=np.float32)
-            norms = np.linalg.norm(mat, axis=1, keepdims=True)
-            mat /= np.maximum(norms, 1e-9)
-            sim_mat = mat @ mat.T
-            rows, cols = np.where(np.triu(sim_mat > threshold, k=1))
-            for r, c in zip(rows.tolist(), cols.tolist()):
-                semantic_edges.append({
-                    "source": embeddings[r][0],
-                    "target": embeddings[c][0],
-                    "similarity": round(float(sim_mat[r, c]), 4),
-                    "relation": "semantic_similar",
-                })
-        except ImportError:
-            for ai in range(m):
-                for bi in range(ai + 1, m):
-                    s = _cosine_sim(embeddings[ai][1], embeddings[bi][1])
-                    if s > threshold:
-                        semantic_edges.append({
-                            "source": embeddings[ai][0],
-                            "target": embeddings[bi][0],
-                            "similarity": round(s, 4),
-                            "relation": "semantic_similar",
-                        })
+        semantic_edges = _semantic_edges_from_embeddings(
+            embeddings,
+            threshold=threshold,
+            max_neighbors_per_node=max_neighbors_per_node,
+            mutual_top_neighbors=mutual_top_neighbors,
+            max_edges=max_edges,
+        )
 
         ts = datetime.now(tz=timezone.utc).isoformat()
-        _save_semantic_edges(semantic_edges, model, threshold, ts, g)
+        _save_semantic_edges(
+            semantic_edges,
+            model,
+            threshold,
+            ts,
+            g,
+            metadata={
+                "scope_node_count": len(nodes),
+                "embedded_node_count": len(embeddings),
+                "scope_fingerprint": _semantic_scope_fingerprint(scoped_node_ids),
+                "include_low_signal": include_low_signal,
+                "knowledge_only": bool(knowledge_only) and not include_low_signal,
+                "requested_node_count": len(node_ids) if node_ids is not None else None,
+                "max_neighbors_per_node": max_neighbors_per_node,
+                "mutual_top_neighbors": mutual_top_neighbors,
+                "max_edges": max_edges,
+            },
+        )
 
         _SEMANTIC_STATUS.update({
             "status": "complete",
@@ -3344,7 +3589,13 @@ def _run_semantic_pass(model: str, threshold: float) -> None:
 
 class SemanticPassBody(BaseModel):
     model: str = "nomic-embed-text"
-    threshold: float = 0.78
+    threshold: float = SEMANTIC_DEFAULT_THRESHOLD
+    include_low_signal: bool = False
+    knowledge_only: bool = False
+    node_ids: list[str] | None = None
+    max_neighbors_per_node: int = SEMANTIC_DEFAULT_MAX_NEIGHBORS_PER_NODE
+    mutual_top_neighbors: bool = True
+    max_edges: int = SEMANTIC_DEFAULT_MAX_STORED_EDGES
 
 
 @app.post("/graph/semantic-pass", status_code=202)
@@ -3353,8 +3604,30 @@ def trigger_semantic_pass(body: SemanticPassBody) -> dict:
     if _SEMANTIC_STATUS.get("status") == "running":
         raise HTTPException(status_code=409, detail="Semantic pass already in progress.")
     import threading as _sem_t
-    _sem_t.Thread(target=_run_semantic_pass, args=(body.model, body.threshold), daemon=True).start()
-    return {"status": "running", "model": body.model, "threshold": body.threshold}
+    threshold = _bounded_semantic_threshold(body.threshold)
+    max_neighbors_per_node = _bounded_semantic_neighbor_count(body.max_neighbors_per_node)
+    max_edges = _bounded_semantic_edge_limit(body.max_edges)
+    _sem_t.Thread(
+        target=_run_semantic_pass,
+        args=(body.model, threshold),
+        kwargs={
+            "include_low_signal": body.include_low_signal,
+            "knowledge_only": body.knowledge_only,
+            "node_ids": body.node_ids,
+            "max_neighbors_per_node": max_neighbors_per_node,
+            "mutual_top_neighbors": body.mutual_top_neighbors,
+            "max_edges": max_edges,
+        },
+        daemon=True,
+    ).start()
+    return {
+        "status": "running",
+        "model": body.model,
+        "threshold": threshold,
+        "max_neighbors_per_node": max_neighbors_per_node,
+        "mutual_top_neighbors": body.mutual_top_neighbors,
+        "max_edges": max_edges,
+    }
 
 
 @app.get("/graph/semantic-pass/status")
@@ -3393,6 +3666,16 @@ def get_overlap_summary(project: str | None = None) -> dict:
             "created_at": None,
             "level": "top" if project is None else "project",
             "project": project,
+        }
+    if _semantic_edge_policy_stale(sem_data):
+        return {
+            "groups": [],
+            "total_cross_edges": 0,
+            "created_at": None,
+            "level": "top" if project is None else "project",
+            "project": project,
+            "edge_policy_stale": True,
+            "legacy_edge_count": len(sem_data.get("edges", [])) if isinstance(sem_data.get("edges"), list) else 0,
         }
 
     edges = sem_data.get("edges", [])
@@ -3547,6 +3830,14 @@ def get_overlap_report() -> dict:
         sem_data = json.loads(SEMANTIC_EDGES_FILE.read_text())
     except Exception:
         return {"groups": [], "total_cross_edges": 0, "created_at": None}
+    if _semantic_edge_policy_stale(sem_data):
+        return {
+            "groups": [],
+            "total_cross_edges": 0,
+            "created_at": None,
+            "edge_policy_stale": True,
+            "legacy_edge_count": len(sem_data.get("edges", [])) if isinstance(sem_data.get("edges"), list) else 0,
+        }
 
     edges = sem_data.get("edges", [])
     if not edges:

@@ -11,6 +11,7 @@ import type { ActiveCockpitContext } from "../domain/cockpitContext";
 import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
 import type { WorkspaceScopeProfile } from "../components/WorkspaceScopePicker";
 import { WorkingStatus } from "../components/WorkingStatus";
+import { useToast } from "../components/Toast";
 
 // ── Extension registration (once per page lifetime) ───────────────────────
 
@@ -116,8 +117,29 @@ interface SemanticEdgeMeta {
   created_at: string | null;
   graph_matches?: boolean;
   graph_stale?: boolean;
+  edge_policy_stale?: boolean;
+  legacy_edge_count?: number;
+  scope_node_count?: number;
+  embedded_node_count?: number;
+  max_neighbors_per_node?: number;
+  mutual_top_neighbors?: boolean;
+  max_edges?: number;
   current_graph_edge_match_count?: number;
   current_graph_node_count?: number;
+}
+
+interface SemanticPassStatus {
+  status: "idle" | "running" | "complete" | "error" | string;
+  progress: number;
+  total: number;
+  last_run: string | null;
+  error: string | null;
+  edge_count: number;
+  model: string | null;
+  threshold?: number | null;
+  scope_node_count?: number;
+  max_neighbors_per_node?: number;
+  max_edges?: number;
 }
 
 interface DecisionOverlay {
@@ -219,7 +241,11 @@ interface FullGraph {
 
 type Filter = "all" | "code" | "document";
 type ViewMode = "summary" | "full";
-const FULL_GRAPH_NODE_LIMIT = 10000;
+const FULL_GRAPH_NODE_LIMIT = 15000;
+const DEFAULT_SEMANTIC_MODEL = "nomic-embed-text:latest";
+const DEFAULT_SEMANTIC_THRESHOLD = 0.86;
+const DEFAULT_SEMANTIC_NEIGHBOR_LIMIT = 12;
+const DEFAULT_SEMANTIC_STORED_EDGE_LIMIT = 50000;
 type MapMode = "explore" | "trace" | "overlap" | "review";
 type ScopeGateState = "checking" | "ready" | "setup";
 
@@ -2351,6 +2377,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const appliedContextKeyRef = useRef<string | null>(null);
   const scopeProfileRef = useRef<WorkspaceScopeProfile | null>(null);
   const renderCycleRef = useRef(0);
+  const semanticPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { addToast } = useToast();
 
   // Refs for cy event handlers — avoids stale closures over React state
   const pathModeRef = useRef(false);
@@ -2397,6 +2425,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [showSemantic, setShowSemantic] = useState(false);
   const [semanticEdges, setSemanticEdges] = useState<SemanticEdge[]>([]);
   const [semanticMeta, setSemanticMeta] = useState<SemanticEdgeMeta | null>(null);
+  const [semanticStatus, setSemanticStatus] = useState<SemanticPassStatus | null>(null);
+  const [runningSemantic, setRunningSemantic] = useState(false);
   const [summaryOverlap, setSummaryOverlap] = useState<OverlapSummaryResponse | null>(null);
   // overlap analysis panel
   const [showOverlap, setShowOverlap] = useState(false);
@@ -2592,7 +2622,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const usingSummaryOverlap = viewMode !== "full";
   const overlapGroups = usingSummaryOverlap ? summaryOverlapGroupsData : fullOverlapGroups;
   const storedSemanticEdgeCount = semanticMeta?.edge_count ?? semanticEdges.length;
+  const legacySemanticEdgeCount = semanticMeta?.legacy_edge_count ?? 0;
   const semanticCacheStale = Boolean(semanticMeta?.graph_stale);
+  const semanticPolicyStale = Boolean(semanticMeta?.edge_policy_stale);
   const semanticAnalysisMissing = Boolean(
     fullGraph
       && semanticMeta
@@ -2901,36 +2933,111 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       .catch(() => {});
   }, []);
 
-  // Load semantic edges on mount
-  useEffect(() => {
-    apiFetch(`/graph/semantic-edges`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!d) return;
-        setSemanticEdges(d.edges ?? []);
-        setSemanticMeta({
-          edge_count: d.edge_count ?? (d.edges ?? []).length,
-          created_at: d.created_at ?? null,
-          graph_matches: d.graph_matches,
-          graph_stale: d.graph_stale,
-          current_graph_edge_match_count: d.current_graph_edge_match_count,
-          current_graph_node_count: d.current_graph_node_count,
+  const loadSemanticEdges = useCallback(async () => {
+    const response = await apiFetch(`/graph/semantic-edges`);
+    if (!response.ok) throw new Error(await apiErrorMessage(response));
+    const data = await response.json();
+    setSemanticEdges(data.edges ?? []);
+    setSemanticMeta({
+      edge_count: data.edge_count ?? (data.edges ?? []).length,
+      created_at: data.created_at ?? null,
+      graph_matches: data.graph_matches,
+      graph_stale: data.graph_stale,
+      edge_policy_stale: data.edge_policy_stale,
+      legacy_edge_count: data.legacy_edge_count,
+      scope_node_count: data.scope_node_count,
+      embedded_node_count: data.embedded_node_count,
+      max_neighbors_per_node: data.max_neighbors_per_node,
+      mutual_top_neighbors: data.mutual_top_neighbors,
+      max_edges: data.max_edges,
+      current_graph_edge_match_count: data.current_graph_edge_match_count,
+      current_graph_node_count: data.current_graph_node_count,
+    });
+    return data;
+  }, []);
+
+  const loadSummaryOverlap = useCallback(async (currentSummary: GraphSummary | null = summary) => {
+    if (!currentSummary) return;
+    const qs = currentSummary.project ? `?project=${encodeURIComponent(currentSummary.project)}` : "";
+    const response = await apiFetch(`/graph/overlap-summary${qs}`);
+    if (!response.ok) throw new Error(await apiErrorMessage(response));
+    const data = await response.json() as OverlapSummaryResponse;
+    setSummaryOverlap(data);
+  }, [summary]);
+
+  const stopSemanticPolling = useCallback(() => {
+    if (!semanticPollRef.current) return;
+    clearInterval(semanticPollRef.current);
+    semanticPollRef.current = null;
+  }, []);
+
+  const handleSemanticComplete = useCallback(async (status: SemanticPassStatus) => {
+    stopSemanticPolling();
+    setRunningSemantic(false);
+    await loadSemanticEdges();
+    await loadSummaryOverlap();
+    setFullGraph(null);
+    setShowSemantic(true);
+    setFocusNotice({
+      tone: "info",
+      text: `Semantic Analysis complete. Found ${status.edge_count.toLocaleString()} actionable candidate edges for this map; the Evidence layer is refreshed.`,
+    });
+    addToast(`Semantic analysis complete - ${status.edge_count.toLocaleString()} candidate edges found`, "success");
+  }, [addToast, loadSemanticEdges, loadSummaryOverlap, stopSemanticPolling]);
+
+  const handleSemanticError = useCallback((status: SemanticPassStatus) => {
+    stopSemanticPolling();
+    setRunningSemantic(false);
+    const message = status.error || "Semantic analysis failed";
+    setFocusNotice({ tone: "warn", text: message });
+    addToast(`Semantic analysis failed: ${message}`, "error");
+  }, [addToast, stopSemanticPolling]);
+
+  const pollSemanticStatus = useCallback(() => {
+    stopSemanticPolling();
+    semanticPollRef.current = setInterval(async () => {
+      try {
+        const response = await apiFetch(`/graph/semantic-pass/status`);
+        if (!response.ok) throw new Error(await apiErrorMessage(response));
+        const status = await response.json() as SemanticPassStatus;
+        setSemanticStatus(status);
+        if (status.status === "complete") {
+          await handleSemanticComplete(status);
+        } else if (status.status === "error") {
+          handleSemanticError(status);
+        }
+      } catch (error) {
+        stopSemanticPolling();
+        setRunningSemantic(false);
+        setFocusNotice({
+          tone: "warn",
+          text: error instanceof Error ? error.message : "Lost semantic analysis status.",
         });
+      }
+    }, 3000);
+  }, [handleSemanticComplete, handleSemanticError, stopSemanticPolling]);
+
+  // Load semantic edges and any in-flight semantic status on mount.
+  useEffect(() => {
+    void loadSemanticEdges().catch(() => {});
+    apiFetch(`/graph/semantic-pass/status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((status: SemanticPassStatus | null) => {
+        if (!status) return;
+        setSemanticStatus(status);
+        if (status.status === "running") {
+          setRunningSemantic(true);
+          pollSemanticStatus();
+        }
       })
       .catch(() => {});
-  }, []);
+    return () => stopSemanticPolling();
+  }, [loadSemanticEdges, pollSemanticStatus, stopSemanticPolling]);
 
   // Load broad-safe overlap groups aligned to the current summary surface.
   useEffect(() => {
-    if (!summary) return;
-    const qs = summary.project ? `?project=${encodeURIComponent(summary.project)}` : "";
-    apiFetch(`/graph/overlap-summary${qs}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d: OverlapSummaryResponse | null) => {
-        if (d) setSummaryOverlap(d);
-      })
-      .catch(() => {});
-  }, [summary?.project]);
+    void loadSummaryOverlap().catch(() => {});
+  }, [loadSummaryOverlap]);
 
   // Load durable overlap review status on mount
   useEffect(() => {
@@ -3160,6 +3267,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       const params = new URLSearchParams();
       if (showLowSignal) params.set("include_low_signal", "true");
       if (effectiveKnowledgeOnly) params.set("knowledge_only", "true");
+      params.set("max_nodes", String(FULL_GRAPH_NODE_LIMIT));
       const qs = params.toString() ? `?${params.toString()}` : "";
       const res = await apiFetch(`/graph/full${qs}`);
       if (!res.ok) throw new Error(await apiErrorMessage(res));
@@ -3953,7 +4061,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const importanceCounts = fullGraph?.importance_counts ?? summary?.importance_counts ?? {};
   const knowledgeAnchorCount = (importanceCounts.anchor ?? 0) + (importanceCounts.interface ?? 0) + (importanceCounts.important ?? 0);
   const knowledgeHiddenCount = fullGraph?.knowledge_hidden_node_count ?? 0;
-  const summaryExceedsEvidenceCap = (summary?.total_nodes ?? 0) > FULL_GRAPH_NODE_LIMIT;
+  const summaryVisibleNodeCount = summary?.total_nodes ?? 0;
+  const summaryExceedsEvidenceCap = summaryVisibleNodeCount > FULL_GRAPH_NODE_LIMIT;
   const broadEvidenceDisabled = !fullGraph && summaryExceedsEvidenceCap;
   const usingFastFullLayout = useMemo(
     () => Boolean(fullGraph && viewMode === "full" && shouldUseFastFullLayout(fullGraph, filter, selectedClusters)),
@@ -3998,10 +4107,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       : ` (${semanticDisplayText})`
     : "";
   const semanticStaleCaveat = semanticCacheStale
-    ? `${storedSemanticEdgeCount.toLocaleString()} stored semantic edges were built for a different graph. Run Semantic Analysis in Settings for the current repo/scope.`
+    ? semanticPolicyStale
+      ? `${legacySemanticEdgeCount.toLocaleString()} old broad semantic edges were withheld. Click Semantic to rebuild actionable candidates for this map.`
+      : `${storedSemanticEdgeCount.toLocaleString()} stored semantic edges were built for a different graph. Click Semantic to rerun analysis for the current map.`
     : "";
   const semanticScopeCaveat = semanticCacheMostlyOutOfScope
-    ? `${outOfScopeSemanticEdgeCount.toLocaleString()} stored semantic edges are outside this Evidence scope; run Semantic Analysis in Settings for current cross-folder links.`
+    ? `${outOfScopeSemanticEdgeCount.toLocaleString()} stored semantic edges are outside this Evidence scope; click Semantic to rerun analysis for the current map.`
     : "";
   const semanticActionabilityCaveat = semanticCacheStale
     ? ""
@@ -4015,11 +4126,17 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const semanticBackboneCaveat = semanticReadabilityHiddenCount > 0
     ? `${semanticReadabilityHiddenText} actionable edges are held back by the readability backbone.`
     : "";
+  const semanticPassRunning = runningSemantic || semanticStatus?.status === "running";
+  const semanticProgressText = semanticStatus?.total
+    ? ` ${semanticStatus.progress.toLocaleString()}/${semanticStatus.total.toLocaleString()}`
+    : "";
   const semanticOverlayNotice = [
-    semanticDisplayCount
+    semanticPassRunning
+      ? `Semantic Analysis is running${semanticProgressText ? ` (${semanticProgressText.trim()} nodes)` : ""}. The Evidence layer will refresh when it completes.`
+      : semanticDisplayCount
       ? `Showing ${semanticDisplayText} actionable semantic edges in this Evidence view.`
       : semanticAnalysisMissing
-      ? "Semantic Analysis has not run for this map yet. Run Semantic Analysis in Settings after choosing this exact map/scope."
+      ? "Semantic Analysis has not run for this map yet. Click Semantic to analyze this exact map/scope."
       : semanticCacheStale
       ? "Semantic cache is stale for this Evidence view."
       : semanticRawVisibleCount
@@ -4030,7 +4147,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     semanticBackboneCaveat,
     semanticCacheStale ? "" : semanticScopeCaveat,
   ].filter(Boolean).join(" ");
-  const semanticOverlayNoticeTone: "info" | "warn" = semanticDisplayCount ? "info" : "warn";
+  const semanticOverlayNoticeTone: "info" | "warn" = semanticPassRunning || semanticDisplayCount ? "info" : "warn";
   const semanticScopeText = semanticDisplayCount
     ? `${semanticDisplayText} actionable ${overlapScopeLabel} semantic edges from ${semanticCandidateText} boundary candidates and ${semanticVisibleText} raw in-scope matches`
     : semanticAnalysisMissing
@@ -4042,10 +4159,102 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       ? `0 actionable ${overlapScopeLabel} semantic edges from ${semanticCandidateText} boundary candidates and ${semanticVisibleText} raw in-scope matches`
       : `0 ${overlapScopeLabel} semantic candidates from ${semanticVisibleText} raw in-scope matches`
     : "0 visible semantic edges";
+  const semanticRunRecommended = Boolean(
+    !semanticMeta
+      || semanticAnalysisMissing
+      || semanticCacheStale
+      || semanticCacheMostlyOutOfScope
+      || (!storedSemanticEdgeCount && semanticMeta)
+      || (fullGraph && semanticRawVisibleCount === 0 && !semanticMeta?.created_at),
+  );
+  const semanticButtonLabel = semanticPassRunning
+    ? `Analysing...${semanticProgressText}`
+    : semanticRunRecommended
+    ? storedSemanticEdgeCount || semanticCacheStale || semanticCacheMostlyOutOfScope
+      ? "Rerun Semantic"
+      : "Run Semantic"
+    : `Semantic${semanticButtonCountText}`;
+
+  async function handleRunSemanticAnalysisFromMap() {
+    if (semanticPassRunning) {
+      setFocusNotice({
+        tone: "info",
+        text: `Semantic Analysis is running${semanticProgressText ? ` (${semanticProgressText.trim()} nodes)` : ""}. The map will refresh when it completes.`,
+      });
+      return;
+    }
+
+    setRunningSemantic(true);
+    setShowSemantic(true);
+    setSelectedSemanticLink(null);
+    setFocusNotice({
+      tone: "info",
+      text: "Semantic Analysis started for the active map. It will keep only strong actionable candidates and refresh the Evidence layer when complete.",
+    });
+    if (viewMode !== "full" && !broadEvidenceDisabled) {
+      setViewMode("full");
+      setPathMode(false);
+      setPathNoRoute(false);
+    }
+
+    try {
+      const scopedNodeIds = fullGraph ? [...visibleFullNodeIds] : [];
+      const response = await apiFetch(`/graph/semantic-pass`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: DEFAULT_SEMANTIC_MODEL,
+          threshold: DEFAULT_SEMANTIC_THRESHOLD,
+          include_low_signal: showLowSignal,
+          knowledge_only: knowledgeOnly && !showLowSignal,
+          node_ids: fullGraph ? scopedNodeIds : undefined,
+          max_neighbors_per_node: DEFAULT_SEMANTIC_NEIGHBOR_LIMIT,
+          mutual_top_neighbors: true,
+          max_edges: DEFAULT_SEMANTIC_STORED_EDGE_LIMIT,
+        }),
+      });
+      if (!response.ok) {
+        const message = await apiErrorMessage(response);
+        if (response.status !== 409) throw new Error(message);
+        setFocusNotice({
+          tone: "info",
+          text: "Semantic Analysis is already running. Watching it from the Map.",
+        });
+      } else {
+        addToast("Semantic analysis started", "info");
+      }
+      setSemanticStatus({
+        status: "running",
+        progress: semanticStatus?.progress ?? 0,
+        total: semanticStatus?.total ?? 0,
+        last_run: semanticStatus?.last_run ?? null,
+        error: null,
+        edge_count: semanticStatus?.edge_count ?? 0,
+        model: DEFAULT_SEMANTIC_MODEL,
+        threshold: DEFAULT_SEMANTIC_THRESHOLD,
+        scope_node_count: scopedNodeIds.length,
+        max_neighbors_per_node: DEFAULT_SEMANTIC_NEIGHBOR_LIMIT,
+        max_edges: DEFAULT_SEMANTIC_STORED_EDGE_LIMIT,
+      });
+      pollSemanticStatus();
+    } catch (error) {
+      setRunningSemantic(false);
+      const message = error instanceof Error ? error.message : "Failed to start semantic analysis";
+      setFocusNotice({ tone: "warn", text: message });
+      addToast(`Failed to start semantic analysis: ${message}`, "error");
+    }
+  }
 
   useEffect(() => {
     if (viewMode !== "full" || !showSemantic || !fullGraph) return;
-    if (semanticOverlayNotice && (semanticAnalysisMissing || semanticCacheStale || semanticCacheMostlyOutOfScope || semanticActionabilityCaveat || semanticBackboneCaveat)) {
+    if (semanticOverlayNotice && (
+      semanticPassRunning
+      || semanticAnalysisMissing
+      || semanticCacheStale
+      || semanticCacheMostlyOutOfScope
+      || semanticActionabilityCaveat
+      || semanticBackboneCaveat
+    )) {
       setFocusNotice({
         tone: semanticOverlayNoticeTone,
         text: semanticOverlayNotice,
@@ -4053,7 +4262,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     } else if (!semanticDisplayCount && storedSemanticEdgeCount) {
       setFocusNotice({
         tone: "warn",
-        text: "Stored semantic edges do not match this Evidence scope. Run Semantic Analysis in Settings to rebuild them.",
+        text: "Stored semantic edges do not match this Evidence scope. Click Semantic to rebuild them for this map.",
       });
     }
   }, [
@@ -4066,6 +4275,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     semanticDisplayCount,
     semanticOverlayNotice,
     semanticOverlayNoticeTone,
+    semanticPassRunning,
     showSemantic,
     storedSemanticEdgeCount,
     viewMode,
@@ -4312,7 +4522,18 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       <button
         className="map-path-btn"
         onClick={() => {
+          if (semanticPassRunning || semanticRunRecommended) {
+            void handleRunSemanticAnalysisFromMap();
+            return;
+          }
           if (viewMode !== "full") {
+            if (broadEvidenceDisabled) {
+              setFocusNotice({
+                tone: "warn",
+                text: `Evidence view is capped at ${FULL_GRAPH_NODE_LIMIT.toLocaleString()} visible nodes. Semantic Analysis can run from smaller scopes or drilldowns.`,
+              });
+              return;
+            }
             setViewMode("full");
             setPathMode(false);
             setPathNoRoute(false);
@@ -4325,7 +4546,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             } else if (fullGraph && !semanticDisplayCount && storedSemanticEdgeCount) {
               setFocusNotice({
                 tone: "warn",
-                text: "Stored semantic edges do not match this Evidence scope. Run Semantic Analysis in Settings to rebuild them.",
+                text: "Stored semantic edges do not match this Evidence scope. Click Semantic to rebuild them for this map.",
               });
             }
             return;
@@ -4341,7 +4562,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               } else if (!semanticDisplayCount && storedSemanticEdgeCount) {
                 setFocusNotice({
                   tone: "warn",
-                  text: "Stored semantic edges do not match this Evidence scope. Run Semantic Analysis in Settings to rebuild them.",
+                  text: "Stored semantic edges do not match this Evidence scope. Click Semantic to rebuild them for this map.",
                 });
               }
             }
@@ -4349,22 +4570,34 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           });
         }}
         title={
-          viewMode !== "full"
+          semanticPassRunning
+            ? `Semantic Analysis is running from the Map${semanticProgressText ? ` (${semanticProgressText.trim()} nodes)` : ""}.`
+            : semanticRunRecommended
+            ? semanticCacheStale
+              ? `${semanticScopeText}. Click to rerun Semantic Analysis for the current map.`
+              : semanticAnalysisMissing
+              ? "Semantic Analysis has not run for this map yet. Click to run it here."
+              : semanticCacheMostlyOutOfScope
+              ? `${semanticScopeText}. Click to rebuild semantic edges for the active map.`
+              : "No usable semantic edges are available for this map. Click to run Semantic Analysis."
+            : viewMode !== "full"
             ? "Switch to Evidence and show actionable semantic edges for this scope"
             : semanticDisplayCount
             ? `${showSemantic ? "Hide" : "Show"} ${semanticScopeText} (${semanticActionableText} actionable before backbone, ${semanticMeta?.edge_count ?? 0} stored total). Display uses actionability first, then mutual top-${SEMANTIC_BACKBONE_NEIGHBOR_LIMIT} neighbors so dense pockets stay readable; Trace routes through this backbone.${semanticActionabilityCaveat ? ` ${semanticActionabilityCaveat}` : ""}${semanticBackboneCaveat ? ` ${semanticBackboneCaveat}` : ""}${semanticCacheStale ? "" : semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
             : semanticCacheStale
             ? `${showSemantic ? "Hide" : "Show"} semantic overlay. ${semanticScopeText}. ${semanticStaleCaveat}`
             : semanticAnalysisMissing
-            ? `${showSemantic ? "Hide" : "Show"} semantic overlay. Semantic Analysis has not run for this map yet. Run it in Settings after choosing this exact map/scope.`
+            ? `${showSemantic ? "Hide" : "Show"} semantic overlay. Semantic Analysis has not run for this map yet. Click Semantic to run it here.`
             : semanticRawVisibleCount
             ? `${showSemantic ? "Hide" : "Show"} semantic overlay. ${semanticScopeText}. The bright layer is filtered for duplicate, drift, gap, cross-app, or shared-pattern signal and hides generic scaffolding by default.${semanticScopeCaveat ? ` ${semanticScopeCaveat}` : ""}`
             : semanticMeta?.edge_count
             ? `Semantic overlay has ${semanticMeta.edge_count} stored edges, but none match the current full-graph scope and source filters.`
-            : "No semantic edges yet - run Semantic Analysis in Settings"
+            : "No semantic edges yet - click to run Semantic Analysis"
         }
         style={
-          viewMode !== "full"
+          semanticPassRunning
+            ? { borderColor: "#f5a623", color: "#f5a623", background: "rgba(245,166,35,0.08)" }
+            : viewMode !== "full"
             ? { opacity: 0.3, cursor: "default" }
             : showSemantic
             ? { borderColor: "#22c55e", color: "#22c55e", background: "rgba(34,197,94,0.07)" }
@@ -4372,7 +4605,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         }
         type="button"
       >
-        Semantic{semanticButtonCountText}
+        {semanticButtonLabel}
       </button>
     </>
   );
@@ -4395,13 +4628,13 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         usingSummaryOverlap
           ? `${showOverlap ? "Close" : "Open"} summary overlap analysis - ${overlapGroups.length} group pairs detected`
           : !showSemantic
-          ? "Enable Semantic overlay to run overlap analysis"
+          ? "Click Semantic to show existing edges or run analysis for this map"
           : !overlapSemanticEdges.length
           ? semanticAnalysisMissing
-            ? "Semantic Analysis has not run for this map yet. Run it in Settings after choosing this exact map/scope."
+            ? "Semantic Analysis has not run for this map yet. Click Semantic to run it here."
             : storedSemanticEdgeCount
             ? `Semantic overlay is on, but no actionable ${overlapScopeLabel} overlap edges match the current scope or source filters.`
-            : "No semantic edges yet - run Semantic Analysis in Settings"
+            : "No semantic edges yet - click Semantic to run analysis"
           : `${showOverlap ? "Close" : "Open"} overlap analysis - ${overlapGroups.length} ${overlapScopeLabel} pairs detected`
       }
       style={
@@ -4462,9 +4695,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               </span>
             ))}
             {summary && !loading && (
-              <span className="map-meta-pill">
+              <span className={`map-meta-pill${summaryExceedsEvidenceCap ? " map-meta-pill-warn" : ""}`}>
                 {summary.nodes.length}&thinsp;groups&thinsp;·&thinsp;
-                {summary.total_nodes.toLocaleString()}&thinsp;visible
+                {summaryVisibleNodeCount.toLocaleString()}&thinsp;/&thinsp;{FULL_GRAPH_NODE_LIMIT.toLocaleString()}&thinsp;Evidence cap
                 {hiddenLowSignalCount ? <>&thinsp;·&thinsp;{hiddenLowSignalCount.toLocaleString()}&thinsp;hidden</> : null}
                 {fullGraph?.knowledge_only && knowledgeHiddenCount ? <>&thinsp;·&thinsp;{knowledgeHiddenCount.toLocaleString()}&thinsp;held by lens</> : null}
                 {excludedFromScopeCount ? <>&thinsp;·&thinsp;{excludedFromScopeCount.toLocaleString()}&thinsp;excluded</> : null}
@@ -4530,6 +4763,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
             </div>
           )}
 
+          {!focusNotice && summaryExceedsEvidenceCap && viewMode !== "full" && (
+            <div className="map-focus-notice map-focus-notice-warn">
+              This generated selection has {summaryVisibleNodeCount.toLocaleString()} visible nodes. Evidence opens up to {FULL_GRAPH_NODE_LIMIT.toLocaleString()}; narrow Workspace Scope or drill into a smaller group first.
+            </div>
+          )}
+
           {mapWorkPending && (
             <div className="map-overlay">
               <WorkingStatus
@@ -4585,7 +4824,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               <div className="map-overlap-empty">
                 {storedSemanticEdgeCount
                   ? `Semantic overlay is on, but no actionable ${overlapScopeLabel} overlap edges are visible in the current scope and source filters.`
-                  : "No semantic edges are available yet. Run Semantic Analysis in Settings, then return to Overlap."}
+                  : "No semantic edges are available yet. Click Semantic to run analysis from the Map."}
               </div>
             ) : overlapGroups.length === 0 ? (
               <div className="map-overlap-empty">

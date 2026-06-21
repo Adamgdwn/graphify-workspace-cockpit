@@ -36,6 +36,8 @@ def test_inspect_workspace_scope_reports_default_exclusions_without_file_content
     _touch(root / "src" / "app.py", "print('hello')")
     _touch(root / ".env", "SUPER_SECRET_VALUE=do-not-return")
     _touch(root / "credentials" / "api-key.txt", "do-not-return-either")
+    for index in range(20):
+        _touch(root / "node_modules" / "pkg" / f"ignored-{index}.js", "ignored")
 
     summary = inspect_workspace_scope(root, max_depth=3)
 
@@ -50,6 +52,9 @@ def test_inspect_workspace_scope_reports_default_exclusions_without_file_content
     assert flat["package-lock.json"]["state"] == "excluded"
     assert flat[".env"]["state"] == "excluded"
     assert flat["credentials"]["state"] == "excluded"
+    assert summary["root"]["estimated_file_count"] == 2
+    assert flat["node_modules"]["estimated_file_count"] == 0
+    assert flat["node_modules"]["estimated_excluded_count"] == 1
     assert "Secret-like path detected" in flat[".env"]["reasons"][0]
     assert "SUPER_SECRET_VALUE" not in str(summary)
     assert "do-not-return-either" not in str(summary)
@@ -223,6 +228,21 @@ def test_workspace_scope_scan_roots_uses_only_selected_includes(tmp_path: Path) 
     assert roots == [agents.resolve(), app.resolve()]
 
 
+def test_workspace_scope_scan_roots_keeps_explicit_includes_under_excluded_parent(tmp_path: Path) -> None:
+    root = tmp_path / "code"
+    agents = root / "agents"
+    app = agents / "demo-app"
+    app.mkdir(parents=True)
+
+    roots = workspace_scope_scan_roots({
+        "root": str(root),
+        "included_paths": [str(app)],
+        "excluded_paths": [str(root), str(agents)],
+    })
+
+    assert roots == [app.resolve()]
+
+
 def test_signal_tiering_demotes_low_signal_and_keeps_source_of_truth(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -285,7 +305,12 @@ def test_scope_filter_adds_signal_metadata_and_counts(tmp_path: Path) -> None:
         ],
         "links": [{"source": "readme", "target": "generated", "relation": "mentions"}],
     }
-    profile = {"root": str(root), "profile_name": "Scoped", "included_paths": [str(app)]}
+    profile = {
+        "root": str(root),
+        "profile_name": "Scoped",
+        "included_paths": [str(app)],
+        "excluded_paths": [str(root)],
+    }
 
     filtered, stats = filter_workspace_scope_graph(graph, profile, app)
 

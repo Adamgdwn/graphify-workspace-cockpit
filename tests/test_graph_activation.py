@@ -84,7 +84,7 @@ def test_activate_clears_stale_semantic_edges(monkeypatch, tmp_path: Path) -> No
     assert not main.SEMANTIC_EDGES_FILE.exists()
 
 
-def test_semantic_edges_response_marks_unfingerprinted_cache_stale(monkeypatch, tmp_path: Path) -> None:
+def test_semantic_edges_response_withholds_legacy_cache(monkeypatch, tmp_path: Path) -> None:
     _patch_graph_state(monkeypatch, tmp_path)
     main.SEMANTIC_EDGES_FILE.parent.mkdir(parents=True, exist_ok=True)
     main.SEMANTIC_EDGES_FILE.write_text(json.dumps({
@@ -97,7 +97,10 @@ def test_semantic_edges_response_marks_unfingerprinted_cache_stale(monkeypatch, 
 
     assert response.status_code == 200
     body = response.json()
-    assert body["edge_count"] == 1
+    assert body["edge_count"] == 0
+    assert body["legacy_edge_count"] == 1
+    assert body["edges"] == []
+    assert body["edge_policy_stale"] is True
     assert body["current_graph_edge_match_count"] == 0
     assert body["graph_matches"] is False
     assert body["graph_stale"] is True

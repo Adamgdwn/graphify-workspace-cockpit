@@ -319,6 +319,21 @@ def _path_is_within(path: Path, parent: Path) -> bool:
     return True
 
 
+def _remove_excluded_include_ancestors(
+    excluded_paths: list[str],
+    included_paths: list[str],
+) -> list[str]:
+    """Let explicit included folders win over excluded parent selections."""
+    included = [Path(path).expanduser().resolve() for path in included_paths]
+    cleaned: list[str] = []
+    for raw_excluded in excluded_paths:
+        excluded = Path(raw_excluded).expanduser().resolve()
+        if any(include != excluded and _path_is_within(include, excluded) for include in included):
+            continue
+        cleaned.append(str(excluded))
+    return cleaned
+
+
 def _path_matches_default_exclusion(
     path: Path,
     root: Path,
@@ -366,21 +381,25 @@ def _detect_project_type(path: Path) -> str | None:
 
 
 def _count_files(path: Path, root: Path, *, excluded: bool, budget: CountBudget) -> tuple[int, int]:
+    """Return considered source-file count and default-ignored path count."""
     if budget.files_remaining <= 0 or budget.dirs_remaining <= 0:
         budget.truncated = True
         return 0, 0
 
     kind = _entry_kind(path)
+    reasons = _basic_exclusion_reasons(path, root)
     if kind == "file":
         budget.files_remaining -= 1
-        if excluded or _basic_exclusion_reasons(path, root):
+        if excluded or reasons:
             return 0, 1
         return 1, 0
     if kind != "directory":
         return 0, 0
 
     budget.dirs_remaining -= 1
-    own_excluded = excluded or bool(_basic_exclusion_reasons(path, root))
+    if excluded or reasons:
+        return 0, 1
+
     included_count = 0
     excluded_count = 0
     try:
@@ -393,7 +412,7 @@ def _count_files(path: Path, root: Path, *, excluded: bool, budget: CountBudget)
                 child_included, child_excluded = _count_files(
                     child,
                     root,
-                    excluded=own_excluded,
+                    excluded=False,
                     budget=budget,
                 )
                 included_count += child_included
@@ -464,7 +483,7 @@ def _build_node(
 
     if reasons:
         state: ScopeState = "excluded"
-    elif excluded_count or any(child["state"] != "included" for child in children):
+    elif any(child["state"] != "included" for child in children):
         state = "partial"
     else:
         state = "included"
@@ -472,7 +491,7 @@ def _build_node(
     warnings: list[str] = []
     if count_budget.truncated or children_truncated:
         warnings.append("Inspection was truncated to keep the summary bounded.")
-    if included_count + excluded_count > 1_000:
+    if included_count > 1_000:
         warnings.append("Large folder; review scope before rebuilding.")
 
     return {
@@ -485,7 +504,7 @@ def _build_node(
         "is_repo": project_type == "git-repo",
         "reasons": reasons,
         "warnings": warnings,
-        "estimated_file_count": included_count + excluded_count,
+        "estimated_file_count": included_count,
         "estimated_included_count": included_count,
         "estimated_excluded_count": excluded_count,
         "children": children,
@@ -570,6 +589,7 @@ def normalize_workspace_scope_profile(payload: dict) -> dict:
         _normalize_scope_path(path, root_path=root_path, field_name="excluded_paths")
         for path in excluded_paths
     })
+    normalized_excluded = _remove_excluded_include_ancestors(normalized_excluded, normalized_included)
 
     exclude_patterns = payload.get("exclude_patterns", DEFAULT_EXCLUDE_PATTERNS)
     if not isinstance(exclude_patterns, list) or not all(isinstance(item, str) for item in exclude_patterns):
@@ -646,7 +666,12 @@ def workspace_scope_scan_roots(profile: Mapping) -> list[Path]:
             continue
         if not _path_is_within(path, root):
             continue
-        if any(path == excluded or _path_is_within(path, excluded) for excluded in excluded_paths):
+        effective_excluded = [
+            excluded
+            for excluded in excluded_paths
+            if not (path != excluded and _path_is_within(path, excluded))
+        ]
+        if any(path == excluded or _path_is_within(path, excluded) for excluded in effective_excluded):
             continue
         if _path_matches_default_exclusion(path, root, exclude_patterns):
             continue
@@ -952,6 +977,11 @@ def filter_workspace_scope_graph(graph: Mapping, profile: Mapping, scan_root: Pa
     excluded_paths = [
         Path(str(path)).expanduser().resolve()
         for path in profile.get("excluded_paths", [])
+    ]
+    excluded_paths = [
+        excluded
+        for excluded in excluded_paths
+        if not (scan_root != excluded and _path_is_within(scan_root, excluded))
     ]
     exclude_patterns = [
         str(pattern)

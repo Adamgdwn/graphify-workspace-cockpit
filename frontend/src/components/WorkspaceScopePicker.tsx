@@ -82,6 +82,8 @@ const DEFAULT_ROOT_OPTIONS = [
   "/media",
 ];
 
+const EVIDENCE_NODE_LIMIT = 15000;
+
 const pendingScopeInspections = new Map<string, Promise<WorkspaceScopeInspect>>();
 
 function scopePathLabel(node: WorkspaceScopeNode): string {
@@ -146,6 +148,13 @@ function topLevelSelectedPaths(paths: Iterable<string>): string[] {
     topLevel.push(path);
   }
   return topLevel;
+}
+
+function excludedPathsForSave(excludedPaths: Iterable<string>, includedPaths: Iterable<string>): string[] {
+  const included = normalizedPathList(includedPaths);
+  return normalizedPathList(excludedPaths).filter(
+    (path) => !included.some((includedPath) => includedPath !== path && isDescendantPath(includedPath, path)),
+  );
 }
 
 function selectedScopeTotals(tree: WorkspaceScopeNode, selectedPaths: Iterable<string>) {
@@ -240,6 +249,11 @@ export function WorkspaceScopePicker({
   const selectedTotals = useMemo(
     () => scope ? selectedScopeTotals(scope.tree, included) : { estimatedFiles: 0, ignoredByDefault: 0, missingSelected: 0 },
     [included, scope],
+  );
+  const selectionEstimateExceedsEvidenceLimit = selectedTotals.estimatedFiles > EVIDENCE_NODE_LIMIT;
+  const selectionEstimateApproachesEvidenceLimit = (
+    selectedTotals.estimatedFiles > Math.floor(EVIDENCE_NODE_LIMIT * 0.8)
+    && !selectionEstimateExceedsEvidenceLimit
   );
   const draftRoot = scope?.root.path ?? rootInput.trim();
   const hasUnsavedScopeChanges = Boolean(
@@ -405,6 +419,7 @@ export function WorkspaceScopePicker({
     setError(null);
     setMessage(null);
     try {
+      const excludedForSave = excludedPathsForSave(excluded, included);
       const response = await apiFetch(`/workspace-scope`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -412,7 +427,7 @@ export function WorkspaceScopePicker({
           root,
           profile_name: profileName.trim() || "Workspace Scope",
           included_paths: Array.from(included),
-          excluded_paths: Array.from(excluded),
+          excluded_paths: excludedForSave,
           exclude_patterns: scope?.exclude_patterns,
           signal: profile?.signal ?? {
             hide_low_signal: true,
@@ -668,7 +683,7 @@ export function WorkspaceScopePicker({
           <div className="scope-count-grid">
             <div>
               <span className="scope-count-value">{selectedTotals.estimatedFiles.toLocaleString()}</span>
-              <span className="scope-count-label">estimated files</span>
+              <span className="scope-count-label">estimated source files</span>
             </div>
             <div>
               <span className="scope-count-value">{includedCount.toLocaleString()}</span>
@@ -676,12 +691,17 @@ export function WorkspaceScopePicker({
             </div>
             <div>
               <span className="scope-count-value">{selectedTotals.ignoredByDefault.toLocaleString()}</span>
-              <span className="scope-count-label">ignored by defaults</span>
+              <span className="scope-count-label">default-ignored paths</span>
             </div>
           </div>
           {selectedTotals.missingSelected > 0 && (
             <p className="settings-dim scope-count-note">
               {selectedTotals.missingSelected.toLocaleString()} selected path{selectedTotals.missingSelected === 1 ? "" : "s"} are outside the inspected summary depth, so their file estimates are not included here.
+            </p>
+          )}
+          {(selectionEstimateExceedsEvidenceLimit || selectionEstimateApproachesEvidenceLimit) && (
+            <p className={`${selectionEstimateExceedsEvidenceLimit ? "settings-err" : "settings-warn-box"} scope-count-note`}>
+              This selection has about {selectedTotals.estimatedFiles.toLocaleString()} source files before graph generation. Evidence view is capped at {EVIDENCE_NODE_LIMIT.toLocaleString()} visible nodes; choose fewer folders before generating if you need the full file-level map at once.
             </p>
           )}
           <div className="scope-toolbar">

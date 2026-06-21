@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-20T23:00:14-06:00
-Status: night closeout - video captured; relationship-map polish pushed; next work is targeted UX tuning
+Last Updated: 2026-06-21T16:22:15-06:00
+Status: actionable semantic candidate pruning implemented; owner verification next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -110,6 +110,41 @@ not clear a decision-grade "so what?" gate. The next useful product follow-up is
 to let Map run or rerun Semantic Analysis for the current scope directly, so the
 operator does not have to leave the map and infer cache state from Settings.
 
+Polish note 2026-06-21T15:08:06-06:00: the Map-local Semantic button now starts
+or reruns Semantic Analysis when the active map has no usable semantic cache, a
+stale cache, or mostly out-of-scope stored edges. It polls the existing backend
+semantic pass, shows progress in the Map toolbar, refreshes semantic edges and
+summary overlap after completion, and only behaves as a show/hide overlay once
+current usable semantic edges exist.
+
+Polish note 2026-06-21T15:20:08-06:00: Workspace Scope profile estimates no
+longer let default-ignored bulk consume the bounded file-count budget. The
+backend now treats default-ignored directories such as `.git`, `node_modules`,
+and generated output folders as ignored paths without descending into their
+contents, and the Profile cards label the values as estimated source files and
+default-ignored paths. A direct check against this repo now reports 138 source
+files and 18 default-ignored paths instead of the old 10,000-file cap behavior.
+
+Polish note 2026-06-21T15:32:50-06:00: Evidence/full graph rendering now caps
+at 15,000 visible nodes. The Scope tab warns before generation when the current
+selection's source-file estimate approaches or exceeds that cap, and the Map
+toolbar shows the exact generated visible-node count against the 15,000 cap
+after generation. The saved-scope rebuild path also now lets explicit child
+folder includes win over excluded parent paths, fixing the top-right
+"Saved workspace scope has no included directories to scan" toast for valid
+child-folder selections.
+
+Polish note 2026-06-21T16:22:15-06:00: semantic generation now treats
+actionability as the product boundary. The Map-run semantic pass sends the
+current visible Evidence node ids, low-signal state, and knowledge lens state
+to the backend; the backend scopes to visible signal nodes by default, raises
+the default threshold to 0.86, keeps only mutual top-12 semantic neighbors, and
+caps stored candidate edges at 50,000. Old broad semantic caches without the
+current edge-policy version are withheld from `/graph/semantic-edges` and
+reported as stale metadata; the live million-edge cache now returns 0 served
+edges with `legacy_edge_count=1,082,041` so the Map prompts for a fresh
+actionable rerun instead of loading the flood.
+
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
 the video intent recenter, the multi-repo Evidence grid fix, and inert repo
@@ -194,12 +229,11 @@ loading full Evidence mode, make gap triage actionable, separate file
 importance from raw file inclusion, and surface existing decisions plus
 follow-up work directly in the map.
 
-The remaining practical blocker is owner review on real broad workspaces and
-one obvious UX gap: semantic analysis should be runnable from the current Map
-scope. The decision overlay, importance classifier, semantic overlap triage, and
-multi-repo layout should continue to be tuned so the cockpit keeps the clean
-Graphify map intent while still preserving the richer decision tools now built
-around it.
+The remaining practical blocker is owner review on real broad workspaces after
+the Map-local Semantic Analysis UX change. The decision overlay, importance
+classifier, semantic overlap triage, and multi-repo layout should continue to be
+tuned so the cockpit keeps the clean Graphify map intent while still preserving
+the richer decision tools now built around it.
 
 ## Video Intent Recenter
 
@@ -246,6 +280,46 @@ map. Next UI tuning should therefore prefer:
 
 ## Next Implementation Slices
 
+### Map-Local Semantic Analysis UX
+
+Status: task complete 2026-06-21T15:08:06-06:00.
+
+Owner-reported issue: enabling semantic connections from Settings was
+cumbersome, especially after changing workspace folders. The Map already knows
+when semantic analysis is missing, stale, or out of scope, so the Semantic
+button should run the semantic pass directly instead of sending Adam to
+Settings.
+
+Delivered behavior:
+
+- `Map` reuses the existing `POST /graph/semantic-pass`,
+  `/graph/semantic-pass/status`, `/graph/semantic-edges`, and
+  `/graph/overlap-summary` backend contract.
+- The Semantic button reads `Run Semantic` or `Rerun Semantic` when the active
+  map has no usable cache, a stale cache, or mostly out-of-scope stored edges.
+- When a run starts from the Map, the toolbar shows semantic progress, the Map
+  keeps Adam on the current surface, and toasts/focus notices report start,
+  failure, and completion.
+- On completion, the Map refreshes stored semantic edges, refreshes summary
+  overlap, clears the full graph cache so Evidence reloads, and turns the
+  semantic overlay on.
+- Once current usable semantic edges exist, the same button remains a normal
+  show/hide layer toggle.
+- Map and Overlap copy now points back to the Semantic control instead of
+  instructing Adam to go to Settings.
+
+Validation:
+
+- `bash scripts/governance-preflight.sh`: passed with 0 warnings
+- `source "$HOME/.nvm/nvm.sh" && npm --prefix frontend run typecheck`: passed
+- `source "$HOME/.nvm/nvm.sh" && npm --prefix frontend run build`: passed
+
+Follow-up watch point:
+
+- Owner should verify the live workflow against a freshly switched workspace
+  scope. If progress feels too quiet, add a compact inline semantic status panel
+  near the toolbar without changing the backend contract.
+
 ### Owner Review Tuning - June 20 Semantic And Recording Polish
 
 Status: task complete 2026-06-20T23:00:14-06:00.
@@ -285,9 +359,9 @@ Validation:
 
 Follow-up watch point:
 
-- Add a Map-local Semantic Analysis run/rerun action for the current scope. This
-  is the next smallest UX improvement because the map already knows when the
-  semantic cache is missing, stale, or out of scope.
+- Owner verification should confirm the stricter semantic actionability filter
+  still feels honest and useful after the Map-local rerun control refreshes a
+  newly selected scope.
 
 ### Owner Review Tuning - Multi-Repo Evidence Layout
 
@@ -417,7 +491,7 @@ Validation:
 
 Status: completed 2026-06-17T17:33:47-06:00.
 
-Goal: make overlap useful on broad maps without requiring a 10,000-node full
+Goal: make overlap useful on broad maps without requiring a 15,000-node full
 graph payload.
 
 Delivered behavior:
@@ -649,7 +723,8 @@ For the next coding session:
 3. Read `START_HERE.md` only as the top-level router.
 4. Read `docs/session-handoff-2026-06-20.md`.
 5. Read this file: `docs/relationship-map-plan.md`.
-6. Start with Map-local Semantic Analysis UX tuning unless Adam redirects.
+6. Start with owner verification of the Map-local Semantic Analysis workflow
+   and Workspace Scope profile estimate cards unless Adam redirects.
 
 Avoid loading the long historical plans unless investigating a regression:
 

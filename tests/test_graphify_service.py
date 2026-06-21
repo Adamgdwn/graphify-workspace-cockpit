@@ -390,6 +390,74 @@ def test_graph_full_hides_low_signal_nodes_by_default(monkeypatch, tmp_path: Pat
     assert expanded_body["include_low_signal"] is True
 
 
+def test_semantic_pass_nodes_follow_visible_signal_scope() -> None:
+    graph = {
+        "nodes": [
+            {
+                "id": "important",
+                "label": "README",
+                "source_file": "README.md",
+                "file_type": "document",
+                "importance_tier": "important",
+                "signal_tier": "important",
+            },
+            {
+                "id": "hidden",
+                "label": "generated",
+                "source_file": "next-env.d.ts",
+                "file_type": "code",
+                "importance_tier": "hidden",
+                "signal_tier": "hidden",
+            },
+            {
+                "id": "excluded",
+                "label": "vendor",
+                "source_file": "vendor/bundle.js",
+                "file_type": "code",
+                "importance_tier": "excluded",
+                "signal_tier": "excluded",
+            },
+        ],
+        "links": [],
+    }
+
+    default_nodes = main._semantic_nodes_for_pass(graph)
+    expanded_nodes = main._semantic_nodes_for_pass(graph, include_low_signal=True)
+    explicit_nodes = main._semantic_nodes_for_pass(
+        graph,
+        include_low_signal=True,
+        node_ids=["hidden"],
+    )
+
+    assert [node["id"] for node in default_nodes] == ["important"]
+    assert [node["id"] for node in expanded_nodes] == ["important", "hidden"]
+    assert [node["id"] for node in explicit_nodes] == ["hidden"]
+
+
+def test_semantic_edges_from_embeddings_keeps_mutual_top_neighbors() -> None:
+    embeddings = [
+        ("alpha", [1.0, 0.0]),
+        ("alpha-copy", [0.99, 0.01]),
+        ("beta", [0.0, 1.0]),
+        ("beta-copy", [0.01, 0.99]),
+    ]
+
+    edges = main._semantic_edges_from_embeddings(
+        embeddings,
+        threshold=0.86,
+        max_neighbors_per_node=1,
+        mutual_top_neighbors=True,
+        max_edges=10,
+    )
+
+    pairs = {frozenset((edge["source"], edge["target"])) for edge in edges}
+    assert pairs == {
+        frozenset(("alpha", "alpha-copy")),
+        frozenset(("beta", "beta-copy")),
+    }
+    assert all(edge["similarity"] >= 0.86 for edge in edges)
+
+
 def test_graph_endpoints_preserve_scoped_signal_metadata(monkeypatch, tmp_path: Path) -> None:
     app = tmp_path / "code" / "app"
     graph = tmp_path / "scoped-graph.json"
@@ -1175,6 +1243,7 @@ def test_overlap_report_ignores_low_signal_nodes(monkeypatch, tmp_path: Path) ->
     }))
     semantic_file = tmp_path / "semantic-edges.json"
     semantic_file.write_text(json.dumps({
+        "edge_policy_version": main.SEMANTIC_EDGE_POLICY_VERSION,
         "created_at": "2026-06-17T11:09:43-06:00",
         "edges": [
             {"source": "a-readme", "target": "b-readme", "similarity": 0.91},
@@ -1226,6 +1295,7 @@ def test_overlap_report_groups_single_repo_edges_by_module(monkeypatch, tmp_path
     }))
     semantic_file = tmp_path / "semantic-edges.json"
     semantic_file.write_text(json.dumps({
+        "edge_policy_version": main.SEMANTIC_EDGE_POLICY_VERSION,
         "created_at": "2026-06-17T11:33:00-06:00",
         "edges": [{"source": "backend-main", "target": "docs-plan", "similarity": 0.88}],
     }))
@@ -1288,6 +1358,7 @@ def test_overlap_summary_uses_visible_summary_groups(monkeypatch, tmp_path: Path
     }))
     semantic_file = tmp_path / "semantic-edges.json"
     semantic_file.write_text(json.dumps({
+        "edge_policy_version": main.SEMANTIC_EDGE_POLICY_VERSION,
         "created_at": "2026-06-17T17:44:00-06:00",
         "edges": [
             {"source": "app-readme", "target": "agent-readme", "similarity": 0.92},

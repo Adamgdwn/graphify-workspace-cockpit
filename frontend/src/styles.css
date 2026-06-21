@@ -991,6 +991,12 @@ body {
   white-space: nowrap;
 }
 
+.map-meta-pill-warn {
+  border-color: rgba(248, 113, 113, 0.38);
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.08);
+}
+
 .map-toolbar-right {
   display: flex;
   align-items: center;
@@ -4454,6 +4460,16 @@ body {
   padding: 6px 10px;
   background: rgba(248, 113, 113, 0.07);
   border: 1px solid rgba(248, 113, 113, 0.2);
+  border-radius: 5px;
+}
+
+.settings-warn-box {
+  margin: 0;
+  font-size: 12px;
+  color: #fbbf24;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.24);
   border-radius: 5px;
 }
 

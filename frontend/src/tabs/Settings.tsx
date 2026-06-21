@@ -15,6 +15,10 @@ interface SettingsProps {
   onNavigateScope: () => void;
 }
 
+const DEFAULT_SEMANTIC_THRESHOLD = 0.86;
+const DEFAULT_SEMANTIC_NEIGHBOR_LIMIT = 12;
+const DEFAULT_SEMANTIC_STORED_EDGE_LIMIT = 50000;
+
 interface AppSettings {
   version: string;
   graph_path: string;
@@ -408,7 +412,13 @@ export function Settings({ onNavigateScope }: SettingsProps) {
       const r = await apiFetch(`/graph/semantic-pass`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: semanticModel, threshold: 0.78 }),
+        body: JSON.stringify({
+          model: semanticModel,
+          threshold: DEFAULT_SEMANTIC_THRESHOLD,
+          max_neighbors_per_node: DEFAULT_SEMANTIC_NEIGHBOR_LIMIT,
+          mutual_top_neighbors: true,
+          max_edges: DEFAULT_SEMANTIC_STORED_EDGE_LIMIT,
+        }),
       });
       if (!r.ok) {
         throw new Error(await apiErrorMessage(r));
@@ -424,7 +434,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             clearInterval(semanticPollRef.current!);
             semanticPollRef.current = null;
             setRunningSemantic(false);
-            addToast(`Semantic analysis complete — ${sd.edge_count} similarity edges found`, "success");
+            addToast(`Semantic analysis complete — ${sd.edge_count} candidate edges found`, "success");
           } else if (sd.status === "error") {
             clearInterval(semanticPollRef.current!);
             semanticPollRef.current = null;
@@ -821,9 +831,8 @@ export function Settings({ onNavigateScope }: SettingsProps) {
       <section className="settings-section">
         <div className="settings-section-title">Semantic Analysis</div>
         <p className="settings-dim" style={{ marginBottom: 10 }}>
-          Runs an overnight embedding pass on every node using your local LLM, then draws purple dashed edges
-          between nodes with similar meaning — across files and across repos. Reveals overlaps (same
-          capability built twice) and gaps. Results appear in the Map via the <strong>Semantic</strong> toggle.
+          Builds strong mutual top-neighbor semantic candidates using your local embedding model. The Map
+          keeps the visible layer filtered for actionable overlaps, drift, duplicate, and bridge signals.
         </p>
 
         {!ollama?.connected && (
@@ -879,7 +888,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             )}
             {semanticStatus.status === "complete" && (
               <p className="settings-dim" style={{ color: "#4ade80" }}>
-                Complete — {semanticStatus.edge_count} semantic edges found
+                Complete — {semanticStatus.edge_count} semantic candidate edges found
                 {semanticStatus.last_run ? ` (${new Date(semanticStatus.last_run).toLocaleString()})` : ""}.
                 Toggle <strong>Semantic</strong> on the Map to view them.
               </p>

@@ -45,7 +45,12 @@ checks.
 - Current relationship-map state: Slices 1-5 are complete; the latest active
   work is owner review and targeted UX tuning after the June 20 video shoot,
   semantic actionability tightening, map-specific recommendations, scoped count
-  fixes, and two-repo label/source metadata polish.
+  fixes, two-repo label/source metadata polish, and Map-local Semantic Analysis
+  run/rerun UX. Same-session polish fixed Workspace Scope Profile estimates so
+  default-ignored bulk no longer consumes the bounded file-count budget, raised
+  the Evidence cap to 15,000 visible nodes, and fixed excluded-parent scope
+  selections cancelling explicitly included child folders. Next useful step is
+  owner verification against a freshly switched workspace scope.
 
 ## Validation Defaults
 

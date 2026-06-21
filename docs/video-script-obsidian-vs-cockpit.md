@@ -163,7 +163,7 @@ Broad testing had the full-evidence view trying to draw over twenty-two thousand
 nodes at once and dragging the browser to a crawl before I could even narrow the
 scope.
 
-So there's a hard cap: the full file-level Evidence view tops out at **10,000
+So there's a hard cap: the full file-level Evidence view tops out at **15,000
 visible nodes**. Past that, the backend refuses the request, and the map keeps you
 in the overview-and-drill-down path instead — pick a region, then go deep.
 
@@ -283,8 +283,8 @@ workspace root away from this.
   every time the graph is rebuilt. The script deliberately uses round phrasing
   ("around forty thousand nodes," "over twenty-two thousand") so it stays true
   between refreshes. The one exact figure that's a *design constant*, not a live
-  count, is the 10,000-node Evidence cap — that's safe to state precisely.
-- **The node cap is real and demonstrable.** `FULL_GRAPH_NODE_LIMIT = 10000` in
+  count, is the 15,000-node Evidence cap — that's safe to state precisely.
+- **The node cap is real and demonstrable.** `FULL_GRAPH_NODE_LIMIT = 15000` in
   `frontend/src/tabs/Map.tsx`; the backend returns `413 GRAPH_FULL_TOO_LARGE` on
   oversized `/graph/full` requests with the message "Full evidence graph is too
   large for default browser rendering. Use the overview/drilldown map or narrow
