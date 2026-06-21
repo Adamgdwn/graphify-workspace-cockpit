@@ -8,7 +8,7 @@ generated output or old pathway history.
 1. `git status --short`
 2. `AGENTS.md`
 3. `START_HERE.md` for material work or active-plan continuation
-4. `docs/session-handoff-2026-06-18.md` for the latest shutdown note
+4. `docs/session-handoff-2026-06-20.md` for the latest shutdown note
 5. `docs/relationship-map-plan.md` for the current slice
 6. Only the files named by the selected chunk
 
@@ -43,8 +43,9 @@ checks.
 - Generated repo graph: local-only `graphify-out/`, rebuilt with
   `graphify update . --no-cluster` when needed.
 - Current relationship-map state: Slices 1-5 are complete; the latest active
-  work is owner review and clear-map tuning after the multi-repo Evidence
-  comparison-layout and repo-label fixes.
+  work is owner review and targeted UX tuning after the June 20 video shoot,
+  semantic actionability tightening, map-specific recommendations, scoped count
+  fixes, and two-repo label/source metadata polish.
 
 ## Validation Defaults
 

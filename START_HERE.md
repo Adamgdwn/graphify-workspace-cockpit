@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-19T18:05:00-06:00
-Status: owner sign-off — relationship-map is video-ready; remaining work is polish/tuning, not a rebuild
+Last Updated: 2026-06-20T23:00:14-06:00
+Status: night closeout - video captured; relationship-map polish pushed; next work is targeted UX tuning
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,7 +12,7 @@ historical build log by default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/session-handoff-2026-06-18.md` for the latest shutdown note.
+3. Read `docs/session-handoff-2026-06-20.md` for the latest shutdown note.
 4. Read `docs/relationship-map-plan.md`.
 5. Start with owner review or post-review tuning unless Adam redirects.
 6. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
@@ -21,6 +21,19 @@ historical build log by default.
    history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
+
+Night closeout 2026-06-20: Adam shot the video and likes the project direction.
+The day focused on relationship-map polish, not a rebuild. Pushed commits on
+`main` include physical connection brightness/render cleanup, semantic cache
+freshness and save fixes, scoped map labels/source metadata, map-specific
+recommendation context, workspace scope count summaries, and stricter semantic
+actionability. The latest commit is `aa69140 Tighten semantic actionability
+filter`. The key product learning is that semantic links must be decision-grade:
+raw matches can exist, but bright Evidence links should earn a "so what" reason
+and should not light up shared scaffolding, copied governance docs, generic
+symbols, extractor vocabulary, or density-only similarity. Next useful work is
+small UX polish, especially letting Map run or rerun Semantic Analysis for the
+current scope directly instead of sending Adam to Settings.
 
 Owner sign-off 2026-06-19: Adam reviewed the multi-repo Evidence comparison map
 and called it "freaking terrific … video ready." The relationship-map path is

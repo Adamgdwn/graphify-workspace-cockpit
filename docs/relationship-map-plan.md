@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-20T22:30:05-06:00
-Status: owner sign-off — video-ready; next active work is polish/tuning, not a rebuild
+Last Updated: 2026-06-20T23:00:14-06:00
+Status: night closeout - video captured; relationship-map polish pushed; next work is targeted UX tuning
 Owner: Adam Goodwin
 
 ## Purpose
@@ -101,6 +101,15 @@ current Governed Agent Lab / chuwi-optimizer scope, the simulated promotion set
 falls from hundreds of cross-repo candidates to 5 code-concept links (`loop`
 and `memory`), which is a better default for decision-grade overlap review.
 
+Night closeout 2026-06-20T23:00:14-06:00: Adam shot the video and called out the
+core project thesis: turn data into information, then information into
+knowledge. The relationship-map polish run is boxed up and pushed through
+`aa69140 Tighten semantic actionability filter`. Today's practical lesson is
+that a scope with zero bright semantic links can be correct when raw matches do
+not clear a decision-grade "so what?" gate. The next useful product follow-up is
+to let Map run or rerun Semantic Analysis for the current scope directly, so the
+operator does not have to leave the map and infer cache state from Settings.
+
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
 the video intent recenter, the multi-repo Evidence grid fix, and inert repo
@@ -185,10 +194,12 @@ loading full Evidence mode, make gap triage actionable, separate file
 importance from raw file inclusion, and surface existing decisions plus
 follow-up work directly in the map.
 
-The remaining practical blocker is owner review on real broad workspaces:
-the decision overlay, importance classifier, semantic overlap triage, and
-multi-repo layout should be tuned so the cockpit keeps the clean Graphify map
-intent while still preserving the richer decision tools now built around it.
+The remaining practical blocker is owner review on real broad workspaces and
+one obvious UX gap: semantic analysis should be runnable from the current Map
+scope. The decision overlay, importance classifier, semantic overlap triage, and
+multi-repo layout should continue to be tuned so the cockpit keeps the clean
+Graphify map intent while still preserving the richer decision tools now built
+around it.
 
 ## Video Intent Recenter
 
@@ -234,6 +245,49 @@ map. Next UI tuning should therefore prefer:
   without replacing the simple map Adam originally wanted
 
 ## Next Implementation Slices
+
+### Owner Review Tuning - June 20 Semantic And Recording Polish
+
+Status: task complete 2026-06-20T23:00:14-06:00.
+
+Goal: make the video/demo map easier to read and make semantic links more
+truthful, actionable, and map-specific after Adam's live testing and recording
+session.
+
+Delivered behavior:
+
+- Physical/structural map edges are brighter, and selected-node connections
+  highlight more clearly for zoomed-out recording shots.
+- Interrupted Evidence renders clean themselves up instead of leaving the map
+  stuck behind "Rendering map".
+- Semantic cache identity is explicit. Map can tell Adam when Semantic Analysis
+  has not run for the active graph/scope instead of implying all current edges
+  were filtered out.
+- Semantic edge saving uses the correct helper path again.
+- Recommendation context is map-specific, enabling Current Map, Other Map, and
+  System recommendation separation.
+- Workspace Scope estimated-file and default-ignore summary cards now follow
+  the checked folder selection instead of stale inspected-root totals.
+- Multi-repo Evidence uses the comparison layout whenever more than one repo is
+  visible, and `/graph/full` resolves duplicate relative filenames per source
+  root.
+- Semantic actionability now demotes generic shared scaffolding and only
+  promotes bright Evidence links with a practical "so what?" reason.
+
+Validation:
+
+- `source "$HOME/.nvm/nvm.sh" && npm --prefix frontend run typecheck`: passed
+- `source "$HOME/.nvm/nvm.sh" && npm --prefix frontend run build`: passed
+- `git diff --check`: passed
+- Live two-repo semantic scorer simulation after tightening: 7,426 raw visible
+  semantic matches, 966 boundary candidates, 5 promoted actionable links
+  centered on `loop` and `memory`.
+
+Follow-up watch point:
+
+- Add a Map-local Semantic Analysis run/rerun action for the current scope. This
+  is the next smallest UX improvement because the map already knows when the
+  semantic cache is missing, stale, or out of scope.
 
 ### Owner Review Tuning - Multi-Repo Evidence Layout
 
@@ -593,9 +647,9 @@ For the next coding session:
 1. `git status --short`
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md` only as the top-level router.
-4. Read `docs/session-handoff-2026-06-18.md`.
+4. Read `docs/session-handoff-2026-06-20.md`.
 5. Read this file: `docs/relationship-map-plan.md`.
-6. Start with owner review or post-review tuning unless Adam redirects.
+6. Start with Map-local Semantic Analysis UX tuning unless Adam redirects.
 
 Avoid loading the long historical plans unless investigating a regression:
 

@@ -1,6 +1,6 @@
 # Video Script: From One Folder to a Cross-Repo Decision Map
 
-Last Updated: 2026-06-19T18:36:47-06:00
+Last Updated: 2026-06-20T23:00:14-06:00
 
 Reference video this responds to:
 https://www.youtube.com/watch?v=mWLDn49_8HA
@@ -37,7 +37,8 @@ tell — if the demo proves it, don't re-explain it.
 
 ### Hook (0:00–0:30)
 
-[screen: the multi-repo map already open, semantic links lit between repos]
+[screen: the multi-repo map already open; semantic links lit only if the chosen
+scope has actionable overlap]
 
 There's a popular setup going around: Graphify, plus Obsidian, plus Claude Code,
 as a way to give your AI a cross-repo brain. It works. But it's three moving
@@ -132,19 +133,21 @@ decisions from took real work, and it went in stages:
 - **Layout** — lay the repos side by side, each with a big label that stays
   readable no matter how far I zoom. Now you can actually compare them.
 
-[screen: the finished multi-repo comparison — semantic links across regions]
+[screen: the finished multi-repo comparison; show semantic links if the selected
+scope earns them, otherwise show the semantic count/status copy]
 
-The headline signal is right here: the **semantic links that cross between
-repos** — the same concept showing up in two different projects. That's the thing
-you can't see when each repo lives in its own graph, and it's the reason to build
-one unified graph at all.
+The headline signal is right here when it exists: the **semantic links that cross
+between repos** - the same concept showing up in two different projects. That's
+the thing you can't see when each repo lives in its own graph, and it's the
+reason to build one unified graph at all.
 
 And the semantic layer had to evolve. The first version could say "these two
 things are similar," but that is not enough. The bright green links now have to
 answer a more practical question: *so what?* Is this duplicate work, a drift risk,
 a missing bridge, a shared pattern, or a cross-app capability? Raw similarity can
 still be stored, but the map only spends attention on links that might change a
-decision.
+decision. If the scope shows zero bright links, that may be the correct answer:
+there may be raw matches, but no decision-grade overlap.
 
 ---
 
@@ -262,7 +265,8 @@ between Graphify and your agent.
 
 ### Close (7:40–8:00)
 
-[screen: the multi-repo map, semantic links lit]
+[screen: the multi-repo map; semantic overlay status visible, with links lit if
+the selected scope has actionable overlap]
 
 One graph across every repo. A cap that keeps you scoped. Features that turn the
 graph into decisions instead of dumping it on you. And the original promise — query
@@ -304,6 +308,12 @@ workspace root away from this.
   drift, shared pattern, intentional reference, or cross-app similarity. If the
   button shows something like `Semantic (0/14)`, read it as 0 actionable links out
   of 14 raw in-scope matches, not as a failure.
+- **Do not force a semantic-link demo from a bad scope.** After the June 20 video
+  shoot, the honest recording lesson is that many scopes should show zero
+  actionable semantic overlap. For a visible semantic demo, use a current
+  multi-repo scope that actually earns links; the Governed Agent Lab /
+  chuwi-optimizer tuning scope promoted only a handful of `loop` and `memory`
+  links after scaffolding and generic-symbol matches were demoted.
 - **Out-of-scope semantic-cache warnings are narratable.** If the map says stored
   semantic edges are outside the Evidence scope, that means the semantic cache was
   built against a broader or different graph. Say "the stored cache is broader
