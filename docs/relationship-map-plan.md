@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-21T16:22:15-06:00
-Status: actionable semantic candidate pruning implemented; owner verification next
+Last Updated: 2026-06-21T16:44:10-06:00
+Status: semantic overlap review narrowed to an actionable queue; owner verification next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -144,6 +144,17 @@ current edge-policy version are withheld from `/graph/semantic-edges` and
 reported as stale metadata; the live million-edge cache now returns 0 served
 edges with `legacy_edge_count=1,082,041` so the Map prompts for a fresh
 actionable rerun instead of loading the flood.
+
+Polish note 2026-06-21T16:44:10-06:00: semantic overlap review now has a
+second, stricter product boundary. The Map still stores candidate semantic
+edges, but the default visible overlay is capped to a small readability
+backbone, highlighted overlap pairs get their own bounded edge view, and the
+Overlap panel opens on a top-action queue instead of every filtered pair.
+`Triage Queue` now runs only that visible queue unless Adam explicitly switches
+to `Show All`. `/graph/overlap-summary` adds actionability score, insight kind,
+and decision signals so the in-cockpit assistant receives a ranked semantic
+action queue and should answer with merge/bridge/compare/dismiss options rather
+than generic similarity narration.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,

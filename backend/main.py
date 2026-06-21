@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import uuid
@@ -1935,6 +1936,56 @@ def _current_map_recommendations(recommendations: list[dict]) -> list[dict]:
     ]
 
 
+def _build_overlap_action_context() -> str:
+    try:
+        report = get_overlap_summary()
+    except Exception:
+        return ""
+
+    groups = report.get("groups") if isinstance(report, dict) else []
+    if not isinstance(groups, list) or not groups:
+        return ""
+
+    lines = ["Semantic overlap action queue (ranked; use as candidate decisions, not proof):"]
+    for group in groups[:8]:
+        if not isinstance(group, dict):
+            continue
+        cluster_a = str(group.get("cluster_a") or "left")
+        cluster_b = str(group.get("cluster_b") or "right")
+        kind = str(group.get("insight_kind") or "needs_review")
+        score = _bounded_score(group.get("actionability_score"), 0.0)
+        edge_count = int(group.get("edge_count") or 0)
+        same_name = int(group.get("same_name_count") or 0)
+        max_similarity = _bounded_score(group.get("max_similarity"), 0.0)
+        action = {
+            "waste_duplicate": "check for a canonical home and merge/delete duplicated wording or behavior",
+            "gap_missing_bridge": "add an explicit owner, reference, or integration note",
+            "cross_app_similarity": "compare for shared capability, standard, or reusable interface",
+            "shared_pattern": "name the shared pattern if it should guide future work",
+            "drift_risk": "pick the canonical source or document why both remain separate",
+        }.get(kind, "review or dismiss if the evidence is generic")
+        signals: list[str] = []
+        if same_name:
+            signals.append(f"{same_name} same-name pair{'s' if same_name != 1 else ''}")
+        if max_similarity:
+            signals.append(f"{round(max_similarity * 100)}% max similarity")
+        signals.append(f"{edge_count} candidate link{'s' if edge_count != 1 else ''}")
+        lines.append(
+            f"  - {cluster_a} <-> {cluster_b}: {round(score * 100)}% actionable, "
+            f"{kind}; suggested action: {action}; signals: {', '.join(signals)}."
+        )
+        top_pairs = group.get("top_pairs") if isinstance(group.get("top_pairs"), list) else []
+        for pair in top_pairs[:2]:
+            if not isinstance(pair, dict):
+                continue
+            label_a = pair.get("label_a") or pair.get("source") or "left item"
+            label_b = pair.get("label_b") or pair.get("target") or "right item"
+            similarity = _bounded_score(pair.get("similarity"), 0.0)
+            suffix = ", same filename" if pair.get("same_name") else ""
+            lines.append(f"      evidence: {label_a} <-> {label_b} ({round(similarity * 100)}%{suffix})")
+    return "\n".join(lines)
+
+
 def _build_graph_context(summary: dict) -> str:
     nodes = summary.get("nodes", [])
     edges = summary.get("edges", [])
@@ -1978,6 +2029,10 @@ def _build_graph_context(summary: dict) -> str:
         lines.append(f"Top connections ({min(len(edges), 10)} of {len(edges)}):")
         for e in edges[:10]:
             lines.append(f"  - {e['source']} <-> {e['target']} ({e.get('weight', 0)} links)")
+    overlap_context = _build_overlap_action_context()
+    if overlap_context:
+        lines.append("")
+        lines.append(overlap_context)
     return "\n".join(lines)
 
 
@@ -3646,6 +3701,37 @@ def get_semantic_edges() -> dict:
         return _semantic_edges_response()
 
 
+def _summary_overlap_actionability(edge_count: int, avg_similarity: float, max_similarity: float, same_name_count: int) -> float:
+    density_score = min(0.16, math.log1p(max(0, edge_count)) / math.log1p(40) * 0.16)
+    same_name_score = 0.22 if same_name_count > 0 else 0.0
+    similarity_score = max(0.0, (max_similarity - 0.78) / 0.18) * 0.28
+    avg_score = max(0.0, (avg_similarity - 0.78) / 0.18) * 0.12
+    score = 0.28 + density_score + same_name_score + min(0.28, similarity_score) + min(0.12, avg_score)
+    return round(min(0.98, max(0.0, score)), 4)
+
+
+def _summary_overlap_insight(edge_count: int, avg_similarity: float, max_similarity: float, same_name_count: int) -> tuple[str, list[str]]:
+    signals: list[str] = []
+    if same_name_count > 0:
+        signals.append(f"{same_name_count} same-name pair{'s' if same_name_count != 1 else ''}")
+    if max_similarity >= 0.9:
+        signals.append("very high similarity" if max_similarity >= 0.94 else "high similarity")
+    if edge_count >= 8:
+        signals.append(f"{edge_count} related links")
+
+    if same_name_count > 0 and max_similarity >= 0.84:
+        return "waste_duplicate", signals or ["same-name overlap"]
+    if edge_count >= 18 and avg_similarity >= 0.86:
+        return "cross_app_similarity", signals or ["dense cross-area similarity"]
+    if edge_count >= 8:
+        return "gap_missing_bridge", signals or ["related areas lack one clear bridge"]
+    if max_similarity >= 0.94:
+        return "drift_risk", signals or ["near-duplicate content"]
+    if edge_count >= 4:
+        return "shared_pattern", signals or ["repeated semantic pattern"]
+    return "low_value", signals or ["single weak candidate"]
+
+
 @app.get("/graph/overlap-summary")
 def get_overlap_summary(project: str | None = None) -> dict:
     """Compute semantic overlap groups aligned to the visible summary map."""
@@ -3778,14 +3864,7 @@ def get_overlap_summary(project: str | None = None) -> dict:
         )
 
     result: list[dict] = []
-    for group in sorted(
-        groups.values(),
-        key=lambda item: (
-            -int(item["same_name_count"] > 0),
-            -int(item["edge_count"]),
-            -float(item["max_similarity"]),
-        ),
-    ):
+    for group in groups.values():
         pairs = sorted(
             group["pairs"],
             key=lambda pair: (
@@ -3798,6 +3877,18 @@ def get_overlap_summary(project: str | None = None) -> dict:
             if group["edge_count"]
             else 0.0
         )
+        actionability_score = _summary_overlap_actionability(
+            int(group["edge_count"]),
+            float(avg_similarity),
+            float(group["max_similarity"]),
+            int(group["same_name_count"]),
+        )
+        insight_kind, decision_signals = _summary_overlap_insight(
+            int(group["edge_count"]),
+            float(avg_similarity),
+            float(group["max_similarity"]),
+            int(group["same_name_count"]),
+        )
         result.append(
             {
                 "cluster_a": group["cluster_a"],
@@ -3809,8 +3900,19 @@ def get_overlap_summary(project: str | None = None) -> dict:
                 "max_similarity": round(group["max_similarity"], 4),
                 "same_name_count": group["same_name_count"],
                 "top_pairs": pairs,
+                "actionability_score": actionability_score,
+                "insight_kind": insight_kind,
+                "decision_signals": decision_signals,
             }
         )
+    result.sort(
+        key=lambda item: (
+            -float(item.get("actionability_score") or 0),
+            -int(item.get("same_name_count") or 0),
+            -int(item.get("edge_count") or 0),
+            -float(item.get("max_similarity") or 0),
+        )
+    )
 
     return {
         "groups": result,
@@ -3916,6 +4018,8 @@ class TriageOverlapRequest(BaseModel):
     edge_count: int
     avg_similarity: float
     top_pairs: list[dict]
+    actionability_score: Optional[float] = None
+    decision_signals: Optional[list[str]] = None
     model: Optional[str] = None
 
 
@@ -4361,10 +4465,22 @@ def triage_overlap(req: TriageOverlapRequest) -> dict:
         f"\nNote: {len(same_name_pairs)} pairs share the same filename — strong duplicate signal."
         if same_name_pairs else ""
     )
+    decision_signals = [
+        _truncate_text(signal, 120)
+        for signal in (req.decision_signals or [])
+        if str(signal or "").strip()
+    ][:5]
+    signal_note = (
+        "\nSignal ranking: "
+        f"{round(_bounded_score(req.actionability_score, req.avg_similarity) * 100)}% actionable; "
+        f"{'; '.join(decision_signals)}."
+        if decision_signals or req.actionability_score is not None
+        else ""
+    )
     prompt = (
         f"You are analysing code-repository overlap. Two repository clusters have "
         f"{req.edge_count} semantically similar content connections "
-        f"(avg {round(req.avg_similarity * 100)}% cosine similarity).{same_name_note}\n\n"
+        f"(avg {round(req.avg_similarity * 100)}% cosine similarity).{same_name_note}{signal_note}\n\n"
         f"Cluster A: {req.cluster_a}\n"
         f"Cluster B: {req.cluster_b}\n\n"
         f"Top overlapping content pairs:\n{pairs_text}\n\n"

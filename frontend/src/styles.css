@@ -2650,20 +2650,39 @@ body {
   color: #64748b;
 }
 
+.map-overlap-btn-secondary {
+  flex: 0 0 auto;
+  border-color: #243454;
+  color: #7f93c0;
+  background: rgba(107, 140, 255, 0.05);
+}
+
+.map-overlap-btn-secondary:hover:not(:disabled) {
+  border-color: #3a5790;
+  color: #a9bcf0;
+  background: rgba(107, 140, 255, 0.1);
+}
+
 /* Triage bar */
 .map-overlap-triage-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   padding: 6px 14px 7px;
   border-bottom: 1px solid #141828;
   gap: 8px;
 }
 
 .map-overlap-hint-inline {
+  flex: 1;
+  min-width: 0;
   font-size: 0.68rem;
   color: #3a4060;
   line-height: 1.35;
+}
+
+.map-overlap-triage-bar .map-overlap-btn {
+  flex: 0 0 auto;
 }
 
 .map-overlap-btn-triage {

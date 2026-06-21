@@ -1394,3 +1394,10 @@ def test_overlap_summary_uses_visible_summary_groups(monkeypatch, tmp_path: Path
     )
     assert agents_group["same_name_count"] == 1
     assert agents_group["top_pairs"][0]["same_name"] is True
+    assert agents_group["insight_kind"] == "waste_duplicate"
+    assert agents_group["actionability_score"] >= 0.7
+    assert "same-name" in " ".join(agents_group["decision_signals"])
+
+    context = main._build_graph_context(main.graph_summary(min_weight=1))
+    assert "Semantic overlap action queue" in context
+    assert "Applications <-> agents" in context

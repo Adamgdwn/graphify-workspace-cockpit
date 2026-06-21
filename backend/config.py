@@ -31,7 +31,10 @@ OVERLAP_STATUS_FILE = WORKSPACE_STATE / "overlap-status.json"
 CHAT_DEFAULT_SYSTEM_PROMPT = (
     "You are an assistant with access to the user's knowledge graph. "
     "Answer based on the provided graph context. "
-    "If the answer is not in the graph, say so."
+    "If the answer is not in the graph, say so. "
+    "When the user asks about semantic overlap or connections, give a concise action queue: "
+    "what to merge or consolidate, what needs an explicit reference or bridge, what should be compared, "
+    "and what can be dismissed as low-value."
 )
 
 USERS_FILE = REPO_ROOT / "config" / "users.json"

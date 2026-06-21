@@ -433,6 +433,9 @@ interface OverlapSummaryResponse {
     avg_similarity: number;
     max_similarity?: number;
     same_name_count?: number;
+    actionability_score?: number;
+    insight_kind?: SemanticInsightKind;
+    decision_signals?: string[];
     top_pairs?: Array<{
       source?: string;
       target?: string;
@@ -575,6 +578,21 @@ function triageInsight(triage: TriageResult | undefined, group: OverlapGroup): S
   };
 }
 
+function overlapGroupActionability(group: OverlapGroup, triage?: TriageResult): number {
+  const insight = triageInsight(triage, group);
+  return Math.max(group.actionabilityScore ?? 0, insight.score);
+}
+
+function isOverlapActionQueueCandidate(group: OverlapGroup, triage?: TriageResult): boolean {
+  const score = overlapGroupActionability(group, triage);
+  return (
+    score >= OVERLAP_ACTIONABILITY_MIN_SCORE
+    || group.sameNameCount > 0
+    || triage?.verdict === "duplicate"
+    || triage?.verdict === "reference"
+  );
+}
+
 function semanticInsightImpact(kind: SemanticInsightKind, signals: string[] = []): string {
   if (kind === "waste_duplicate") {
     return "This link looks actionable because the endpoints may be duplicate work or duplicate knowledge that deserves one canonical home.";
@@ -635,6 +653,9 @@ function overlapSummaryGroups(response: OverlapSummaryResponse | null): OverlapG
       similarity: Number(pair.similarity ?? 0),
       sameName: Boolean(pair.same_name),
     }));
+    const insightKind = group.insight_kind && SEMANTIC_INSIGHT_LABELS[group.insight_kind]
+      ? group.insight_kind
+      : undefined;
     return {
       clusterA: group.cluster_a,
       clusterB: group.cluster_b,
@@ -644,6 +665,11 @@ function overlapSummaryGroups(response: OverlapSummaryResponse | null): OverlapG
       sameNameCount: group.same_name_count ?? topPairs.filter((pair) => pair.sameName).length,
       topPairs,
       source: "summary" as const,
+      actionabilityScore: Number(group.actionability_score ?? 0) || undefined,
+      decisionSignals: uniqueSignals([
+        ...(group.decision_signals ?? []),
+        ...(insightKind ? [SEMANTIC_INSIGHT_LABELS[insightKind]] : []),
+      ]),
     };
   });
 }
@@ -1153,10 +1179,14 @@ const FULL_FAST_LAYOUT_NODE_THRESHOLD = 900;
 const FULL_FAST_LAYOUT_MULTI_REPO_THRESHOLD = 2;
 const FULL_FAST_LAYOUT_EDGE_THRESHOLD = 1600;
 
-const SEMANTIC_EDGE_DISPLAY_LIMIT = 2000;
-const SEMANTIC_BACKBONE_NEIGHBOR_LIMIT = 4;
-const SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT = 6;
+const SEMANTIC_EDGE_DISPLAY_LIMIT = 80;
+const SEMANTIC_SELECTED_PAIR_EDGE_LIMIT = 140;
+const SEMANTIC_BACKBONE_NEIGHBOR_LIMIT = 2;
+const SEMANTIC_BACKBONE_NODE_DEGREE_LIMIT = 3;
 const SEMANTIC_ACTIONABLE_EDGE_MIN_SCORE = 0.58;
+const OVERLAP_DEFAULT_MIN_SIMILARITY = 0.85;
+const OVERLAP_ACTION_QUEUE_LIMIT = 12;
+const OVERLAP_ACTIONABILITY_MIN_SCORE = 0.72;
 const FULL_CONTAINER_LABEL_LIMIT = 36;
 
 const SEMANTIC_SCAFFOLD_FILENAMES = new Set([
@@ -1377,7 +1407,7 @@ function semanticEdgeKey(source: string, target: string) {
   return source < target ? `${source}\u0000${target}` : `${target}\u0000${source}`;
 }
 
-function buildSemanticBackbone<T extends SemanticEdge>(edges: T[]): T[] {
+function buildSemanticBackbone<T extends SemanticEdge>(edges: T[], limit = SEMANTIC_EDGE_DISPLAY_LIMIT): T[] {
   const uniqueByPair = new globalThis.Map<string, T>();
   for (const edge of edges) {
     const key = semanticEdgeKey(edge.source, edge.target);
@@ -1425,10 +1455,10 @@ function buildSemanticBackbone<T extends SemanticEdge>(edges: T[]): T[] {
     selected.push(edge);
     degreeByNode.set(edge.source, (degreeByNode.get(edge.source) ?? 0) + 1);
     degreeByNode.set(edge.target, (degreeByNode.get(edge.target) ?? 0) + 1);
-    if (selected.length >= SEMANTIC_EDGE_DISPLAY_LIMIT) break;
+    if (selected.length >= limit) break;
   }
 
-  return selected.length ? selected : sortedEdges.slice(0, SEMANTIC_EDGE_DISPLAY_LIMIT);
+  return selected.length ? selected : sortedEdges.slice(0, limit);
 }
 
 function fullNodeRepo(node: FullNode): string {
@@ -2434,8 +2464,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const [creatingTask, setCreatingTask] = useState<string | null>(null);
   const [taskCreated, setTaskCreated] = useState<string | null>(null);
   // overlap filters
-  const [minSimilarity, setMinSimilarity] = useState(0.70);
+  const [minSimilarity, setMinSimilarity] = useState(OVERLAP_DEFAULT_MIN_SIMILARITY);
   const [sameNameOnly, setSameNameOnly] = useState(false);
+  const [showAllOverlapPairs, setShowAllOverlapPairs] = useState(false);
   const [overlapStatusFilter, setOverlapStatusFilter] = useState<OverlapStatusFilter>("active");
   const [overlapStatuses, setOverlapStatuses] = useState<Record<string, OverlapStatusRecord>>({});
   // LLM triage
@@ -2537,10 +2568,20 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       visibleRepoCount,
     ],
   );
-  const semanticEdgesForDisplay = useMemo(
-    () => buildSemanticBackbone(actionableSemanticEdges),
-    [actionableSemanticEdges],
-  );
+  const semanticEdgesForDisplay = useMemo(() => {
+    let displayCandidates = actionableSemanticEdges;
+    let displayLimit = SEMANTIC_EDGE_DISPLAY_LIMIT;
+    if (highlightedPair) {
+      const pairKey = boundaryKey(highlightedPair[0], highlightedPair[1]);
+      displayCandidates = actionableSemanticEdges.filter((edge) => {
+        const sourceGroup = overlapNodeGroupMap[edge.source];
+        const targetGroup = overlapNodeGroupMap[edge.target];
+        return Boolean(sourceGroup && targetGroup && boundaryKey(sourceGroup, targetGroup) === pairKey);
+      });
+      displayLimit = SEMANTIC_SELECTED_PAIR_EDGE_LIMIT;
+    }
+    return buildSemanticBackbone(displayCandidates, displayLimit);
+  }, [actionableSemanticEdges, highlightedPair, overlapNodeGroupMap]);
   const overlapSemanticEdges = useMemo(
     () => actionableSemanticEdges,
     [actionableSemanticEdges],
@@ -2678,6 +2719,15 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     }),
     [overlapGroups, minSimilarity, sameNameOnly, overlapStatusFilter, overlapStatuses, triageResults],
   );
+  const actionQueueGroups = useMemo(() => {
+    const queue = filteredGroups.filter((group) => {
+      const key = overlapKey(group);
+      return isOverlapActionQueueCandidate(group, triageResults[key]);
+    });
+    return (queue.length ? queue : filteredGroups).slice(0, OVERLAP_ACTION_QUEUE_LIMIT);
+  }, [filteredGroups, triageResults]);
+  const displayedOverlapGroups = showAllOverlapPairs ? filteredGroups : actionQueueGroups;
+  const hiddenFilteredGroupCount = Math.max(0, filteredGroups.length - displayedOverlapGroups.length);
 
   // Keep refs current
   useEffect(() => { pathModeRef.current = pathMode; }, [pathMode]);
@@ -3787,6 +3837,8 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
           cluster_b: group.clusterB,
           edge_count: group.edgeCount,
           avg_similarity: group.avgSimilarity,
+          actionability_score: group.actionabilityScore,
+          decision_signals: group.decisionSignals ?? [],
           top_pairs: group.topPairs.map((p) => ({
             source: p.source,
             target: p.target,
@@ -3854,7 +3906,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   }
 
   async function triageAll() {
-    for (const group of filteredGroups) {
+    for (const group of displayedOverlapGroups) {
       const key = overlapKey(group);
       if (!triageResults[key] && !triaging[key]) {
         await triageOverlapGroup(group);
@@ -4610,6 +4662,12 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     </>
   );
 
+  const overlapButtonCountText = overlapGroups.length
+    ? !showAllOverlapPairs && actionQueueGroups.length < overlapGroups.length
+      ? ` (${actionQueueGroups.length}/${overlapGroups.length})`
+      : ` (${overlapGroups.length})`
+    : "";
+
   const overlapControl = (
     <button
       className="map-path-btn"
@@ -4646,7 +4704,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       }
       type="button"
     >
-      Overlap{overlapGroups.length ? ` (${overlapGroups.length})` : ""}
+      Overlap{overlapButtonCountText}
     </button>
   );
 
@@ -4842,11 +4900,17 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                     </>
                   )}
                   <span>
-                    {filteredGroups.length}
+                    {displayedOverlapGroups.length}
                     {filteredGroups.length !== overlapGroups.length ? `/${overlapGroups.length}` : ""} pairs
                   </span>
                   <span className="map-overlap-dot">·</span>
-                  <span>{overlapConnectionCount} connections</span>
+                  <span>{overlapConnectionCount} candidate links</span>
+                  {!showAllOverlapPairs && hiddenFilteredGroupCount > 0 && (
+                    <>
+                      <span className="map-overlap-dot">·</span>
+                      <span>{hiddenFilteredGroupCount} lower-priority hidden</span>
+                    </>
+                  )}
                   {overlapStatusCounts.dismissed > 0 && (
                     <>
                       <span className="map-overlap-dot">·</span>
@@ -4865,7 +4929,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 {/* Similarity filter chips */}
                 <div className="map-overlap-filters">
                   <span className="map-overlap-filter-label">≥</span>
-                  {[0.70, 0.80, 0.85, 0.90].map((v) => (
+                  {[0.80, 0.85, 0.90, 0.94].map((v) => (
                     <button
                       key={v}
                       className={`map-overlap-filter-chip${minSimilarity === v ? " map-overlap-filter-chip-on" : ""}`}
@@ -4902,20 +4966,33 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
                 </div>
                 {/* Triage bar */}
                 <div className="map-overlap-triage-bar">
-                  <span className="map-overlap-hint-inline">LLM: waste / gap / cross-app / drift</span>
+                  <span className="map-overlap-hint-inline">
+                    {showAllOverlapPairs
+                      ? "Showing every filtered pair"
+                      : `Top ${displayedOverlapGroups.length} action candidates`}
+                  </span>
+                  {hiddenFilteredGroupCount > 0 && (
+                    <button
+                      className="map-overlap-btn map-overlap-btn-secondary"
+                      onClick={() => setShowAllOverlapPairs((show) => !show)}
+                      type="button"
+                    >
+                      {showAllOverlapPairs ? "Top Actions" : "Show All"}
+                    </button>
+                  )}
                   <button
                     className="map-overlap-btn map-overlap-btn-triage"
                     onClick={triageAll}
                     disabled={Object.keys(triaging).length > 0}
                   >
-                    {Object.keys(triaging).length > 0 ? "Triaging…" : "Triage All"}
+                    {Object.keys(triaging).length > 0 ? "Triaging…" : showAllOverlapPairs ? "Triage Shown" : "Triage Queue"}
                   </button>
                 </div>
                 <div className="map-overlap-list">
-                  {filteredGroups.length === 0 && (
+                  {displayedOverlapGroups.length === 0 && (
                     <div className="map-overlap-empty">No overlap pairs match the current filters.</div>
                   )}
-                  {filteredGroups.map((g) => {
+                  {displayedOverlapGroups.map((g) => {
                     const taskKey = overlapKey(g);
                     const triageKey = overlapKey(g);
                     const isActive = highlightedPair?.[0] === g.clusterA && highlightedPair?.[1] === g.clusterB;
