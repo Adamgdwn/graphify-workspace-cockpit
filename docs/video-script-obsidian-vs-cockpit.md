@@ -1,6 +1,11 @@
 # Video Script: From One Folder to a Cross-Repo Decision Map
 
-Last Updated: 2026-06-20T23:00:14-06:00
+Last Updated: 2026-06-21T19:34:50-06:00
+
+Recording state 2026-06-21: second video ready. The latest Map pass lets the
+operator run Semantic Analysis directly from the map, keeps visible semantic
+links action-first, and turns a clicked semantic link into a decision brief with
+options plus an AI "Explain next steps" handoff.
 
 Reference video this responds to:
 https://www.youtube.com/watch?v=mWLDn49_8HA
@@ -148,6 +153,17 @@ a missing bridge, a shared pattern, or a cross-app capability? Raw similarity ca
 still be stored, but the map only spends attention on links that might change a
 decision. If the scope shows zero bright links, that may be the correct answer:
 there may be raw matches, but no decision-grade overlap.
+
+[screen: click one semantic link, open the right-side inspector, then click
+"Explain next steps with AI"]
+
+And this is the important product turn: the link does not just say "similar."
+It shows the two endpoints, why the link got promoted, what signals were used,
+and a few possible actions. If the summary is still too thin, I can ask the AI
+to explain the next step from that exact link. It gets the endpoints, repos,
+paths, scores, and signals, and it has to reason through the real choices:
+merge or canonicalize, add a bridge, compare the two implementations, keep them
+separate, or dismiss the link as noise.
 
 ---
 

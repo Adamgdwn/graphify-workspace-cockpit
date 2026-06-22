@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-21T15:32:50-06:00
-Status: map-local semantic analysis, scope estimate, and 15k Evidence cap fixes implemented; owner verification next
+Last Updated: 2026-06-21T19:34:50-06:00
+Status: second video ready after semantic decision-link polish; boxed for night
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,7 +12,7 @@ historical build log by default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/session-handoff-2026-06-20.md` for the latest shutdown note.
+3. Read `docs/session-handoff-2026-06-21.md` for the latest shutdown note.
 4. Read `docs/relationship-map-plan.md`.
 5. Start with owner review or post-review tuning unless Adam redirects.
 6. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
@@ -33,18 +33,19 @@ raw matches can exist, but bright Evidence links should earn a "so what" reason
 and should not light up shared scaffolding, copied governance docs, generic
 symbols, extractor vocabulary, or density-only similarity.
 
-Follow-up 2026-06-21: Map-local Semantic Analysis UX is implemented. The Map
-Semantic button now starts or reruns analysis when the active map has no usable
-cache, stale cache, or mostly out-of-scope stored edges; it polls status, shows
-progress, refreshes semantic edges and summary overlap on completion, and then
-acts as a show/hide overlay once current usable edges exist. Next useful work is
-owner verification against a freshly switched workspace scope. Same-session
-polish fixed the Workspace Scope Profile estimate cards: default-ignored bulk
-no longer consumes the bounded file-count budget, and the cards now distinguish
-estimated source files from default-ignored paths. Follow-on polish raised the
-Evidence/full graph cap to 15,000 visible nodes, shows pre-generation and
-post-generation cap warnings, and fixes the saved-scope rebuild error where
-excluded parent paths could cancel explicitly included child folders.
+Follow-up 2026-06-21: Adam called the semantic-map polish "second video ready."
+Map-local Semantic Analysis now starts/reruns directly from Map, polls status,
+refreshes semantic edges and summary overlap on completion, and then acts as a
+show/hide overlay once current usable semantic edges exist. Same-session polish
+fixed Workspace Scope Profile estimates, raised the Evidence/full graph cap to
+15,000 visible nodes with warnings, fixed explicit child-folder includes under
+excluded parents, narrowed semantic overlap to an actionable queue, and made
+clicked semantic links into scrollable decision briefs with signal-aware options.
+The latest pass also added `Explain next steps with AI`, which hands the exact
+selected semantic link, endpoints, repos, paths, scores, signals, and options to
+the floating assistant so it can reason through merge/canonicalize,
+bridge/reference, compare, keep separate, or dismiss. Next useful work is owner
+review/recording or tiny copy tuning only if Adam spots it.
 
 Owner sign-off 2026-06-19: Adam reviewed the multi-repo Evidence comparison map
 and called it "freaking terrific … video ready." The relationship-map path is

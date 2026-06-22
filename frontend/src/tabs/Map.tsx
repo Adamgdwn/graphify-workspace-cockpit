@@ -9,6 +9,7 @@ import layoutUtilities from "cytoscape-layout-utilities";
 import { DECISION_CLASSIFICATIONS, type DecisionClassification } from "../domain/decision";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 import type { ActiveCockpitContextHandler } from "../domain/cockpitContext";
+import { COPILOT_PROMPT_EVENT } from "../domain/copilotEvents";
 import type { WorkspaceScopeProfile } from "../components/WorkspaceScopePicker";
 import { WorkingStatus } from "../components/WorkingStatus";
 import { useToast } from "../components/Toast";
@@ -326,6 +327,12 @@ function presentValue(value: unknown): string {
   return text || UNKNOWN_VALUE;
 }
 
+function optionalText(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const text = String(value).trim();
+  return text || undefined;
+}
+
 function prettyMetadataKey(key: string): string {
   return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -595,7 +602,7 @@ function isOverlapActionQueueCandidate(group: OverlapGroup, triage?: TriageResul
 
 function semanticInsightImpact(kind: SemanticInsightKind, signals: string[] = []): string {
   if (kind === "waste_duplicate") {
-    return "This link looks actionable because the endpoints may be duplicate work or duplicate knowledge that deserves one canonical home.";
+    return "This link is a duplicate-work candidate because the endpoints share enough concrete signals to decide whether one should be canonical, whether they need a bridge, or whether they are intentionally separate.";
   }
   if (kind === "drift_risk") {
     return "This link is strong enough that the two sides may drift unless one source of truth or an explicit relationship is named.";
@@ -623,7 +630,7 @@ function semanticLinkOptions(kind: SemanticInsightKind, signals: string[] = []):
   const options: string[] = [];
 
   if (normalizedSignals.some((signal) => signal.includes("same filename"))) {
-    options.push("Pick the canonical file if the same-named endpoints cover the same job.");
+    options.push("Check whether the same-named endpoints serve the same owner, audience, and job.");
   }
   if (normalizedSignals.some((signal) => signal.includes("missing physical bridge"))) {
     options.push("Add an explicit README, ADR, or code reference if people need to move between these endpoints.");
@@ -634,8 +641,8 @@ function semanticLinkOptions(kind: SemanticInsightKind, signals: string[] = []):
 
   if (kind === "waste_duplicate") {
     options.push(
-      "Merge shared guidance, workflow notes, or implementation details into one home.",
-      "Keep both only if the owners, audiences, or runtime responsibilities are clearly different.",
+      "Canonicalize only if one endpoint can become source of truth without losing repo-specific context.",
+      "Keep both if the owners, audiences, or runtime responsibilities are meaningfully different.",
     );
   } else if (kind === "gap_missing_bridge") {
     options.push(
@@ -670,6 +677,41 @@ function semanticLinkOptions(kind: SemanticInsightKind, signals: string[] = []):
   }
 
   return [...new Set(options)].slice(0, 4);
+}
+
+function semanticLinkContext(link: SelectedSemanticLink, options: string[]): ActiveCockpitContext {
+  const why = semanticInsightImpact(link.edge.insightKind, link.edge.decisionSignals);
+  return {
+    kind: "semantic-link",
+    source: "map",
+    sourceGroup: link.sourceGroup,
+    targetGroup: link.targetGroup,
+    sourceNodeId: link.edge.source,
+    targetNodeId: link.edge.target,
+    labelA: link.sourceNode?.label ?? link.edge.source,
+    labelB: link.targetNode?.label ?? link.edge.target,
+    fileA: optionalText(nodePath(link.sourceNode ?? undefined)),
+    fileB: optionalText(nodePath(link.targetNode ?? undefined)),
+    sourceRepo: link.sourceNode ? optionalText(fullNodeRepo(link.sourceNode)) : undefined,
+    targetRepo: link.targetNode ? optionalText(fullNodeRepo(link.targetNode)) : undefined,
+    similarity: link.edge.similarity,
+    actionabilityScore: link.edge.actionabilityScore,
+    insightKind: link.edge.insightKind,
+    insightLabel: SEMANTIC_INSIGHT_LABELS[link.edge.insightKind],
+    why,
+    options,
+    decisionSignals: link.edge.decisionSignals,
+  };
+}
+
+function semanticLinkAiPrompt(context: ActiveCockpitContext): string {
+  if (context.kind !== "semantic-link") return "";
+  return [
+    "Explain this semantic Evidence link as a decision aid.",
+    "Do not assume the right answer is one canonical home just because the similarity is high. Decide what evidence would make merge/canonicalize, bridge/reference, compare, keep separate, or dismiss the right next move.",
+    `The UI's current why-it-matters summary: ${context.why ?? "unknown"}`,
+    "Please answer with: what relationship might exist, why it may or may not be actionable, what I should inspect next, and the most reasonable next step.",
+  ].join("\n\n");
 }
 
 function relationList(relations?: string[]): string {
@@ -2884,6 +2926,16 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   }
 
   function evidenceCandidates(context: ActiveCockpitContext): string[] {
+    if (context.kind === "semantic-link") {
+      return [
+        context.sourceNodeId,
+        context.targetNodeId,
+        context.labelA ?? "",
+        context.labelB ?? "",
+        context.fileA ?? "",
+        context.fileB ?? "",
+      ].map((value) => value.trim()).filter(Boolean);
+    }
     if (context.kind !== "node") return [];
     const raw = [context.nodeId, context.label ?? ""].filter(Boolean);
     return [...new Set(raw.flatMap((value) => {
@@ -2896,6 +2948,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     if (context.kind === "node") return context.label || context.nodeId;
     if (context.kind === "cluster") return context.label || context.clusterId;
     if (context.kind === "overlap-pair") return `${context.clusterA} ↔ ${context.clusterB}`;
+    if (context.kind === "semantic-link") {
+      return `${context.labelA || context.sourceNodeId} ↔ ${context.labelB || context.targetNodeId}`;
+    }
     if (context.kind === "recommendation") return context.label || context.recommendationId;
     return context.label || context.targetId;
   }
@@ -2989,22 +3044,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         edgeElement.connectedNodes().addClass("selected");
       });
     }
-    setSelectedSemanticLink({ edge, sourceNode, targetNode, sourceGroup, targetGroup });
+    const selectedLink = { edge, sourceNode, targetNode, sourceGroup, targetGroup };
+    const options = semanticLinkOptions(edge.insightKind, edge.decisionSignals);
+    setSelectedSemanticLink(selectedLink);
     setSelectedFull(null);
     setSelected(null);
     setShowOverlap(false);
     setHighlightedPair(null);
-    onActiveContextChange?.({
-      kind: "overlap-pair",
-      source: "map",
-      clusterA: sourceGroup,
-      clusterB: targetGroup,
-      sourceNodeId: edge.source,
-      targetNodeId: edge.target,
-      labelA: sourceNode?.label ?? edge.source,
-      labelB: targetNode?.label ?? edge.target,
-      similarity: edge.similarity,
-    });
+    onActiveContextChange?.(semanticLinkContext(selectedLink, options));
   }
 
   // Fetch decisions (non-critical — silently ignored if backend down)
@@ -4283,6 +4330,25 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const selectedSemanticOptions = selectedSemanticLink
     ? semanticLinkOptions(selectedSemanticLink.edge.insightKind, selectedSemanticLink.edge.decisionSignals)
     : [];
+  const selectedSemanticContext = selectedSemanticLink
+    ? semanticLinkContext(selectedSemanticLink, selectedSemanticOptions)
+    : null;
+
+  function explainSelectedSemanticLink() {
+    if (!selectedSemanticContext) return;
+    const prompt = semanticLinkAiPrompt(selectedSemanticContext);
+    window.dispatchEvent(new CustomEvent(COPILOT_PROMPT_EVENT, {
+      detail: {
+        prompt,
+        autoSend: true,
+        context: selectedSemanticContext,
+      },
+    }));
+    setFocusNotice({
+      tone: "info",
+      text: "AI Assistant is explaining this semantic link with the selected endpoints, signals, and options.",
+    });
+  }
 
   async function handleRunSemanticAnalysisFromMap() {
     if (semanticPassRunning) {
@@ -5395,6 +5461,14 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               </div>
 
               <div className="map-panel-actions">
+                <button
+                  className="map-action-btn map-action-primary"
+                  onClick={explainSelectedSemanticLink}
+                  title="Ask the AI Assistant to explain why this link matters and what to do next"
+                  type="button"
+                >
+                  Explain next steps with AI
+                </button>
                 <button
                   className="map-action-btn"
                   onClick={() => startPathFrom(selectedSemanticLink.edge.source)}

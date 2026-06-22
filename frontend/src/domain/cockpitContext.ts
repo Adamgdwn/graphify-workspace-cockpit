@@ -28,6 +28,27 @@ export type ActiveCockpitContext =
       similarity?: number;
     }
   | {
+      kind: "semantic-link";
+      source: "map";
+      sourceGroup: string;
+      targetGroup: string;
+      sourceNodeId: string;
+      targetNodeId: string;
+      labelA?: string;
+      labelB?: string;
+      fileA?: string;
+      fileB?: string;
+      sourceRepo?: string;
+      targetRepo?: string;
+      similarity?: number;
+      actionabilityScore?: number;
+      insightKind?: string;
+      insightLabel?: string;
+      why?: string;
+      options?: string[];
+      decisionSignals?: string[];
+    }
+  | {
       kind: "recommendation";
       source: "recommendations";
       recommendationId: string;

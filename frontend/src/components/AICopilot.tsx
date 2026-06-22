@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { apiErrorMessage, apiFetch } from "../api/client";
+import type { ActiveCockpitContext } from "../domain/cockpitContext";
+import { COPILOT_PROMPT_EVENT, type CopilotPromptEventDetail } from "../domain/copilotEvents";
 
 interface Vec2 { x: number; y: number; }
 interface Size { w: number; h: number; }
@@ -7,6 +9,7 @@ interface Msg { role: "user" | "assistant"; content: string; nodesUsed?: number;
 
 interface AICopilotProps {
   onNavigateSettings?: () => void;
+  activeContext?: ActiveCockpitContext | null;
 }
 
 const LS_POS  = "copilot_pos";
@@ -36,7 +39,52 @@ function clampedPos(p: Vec2, sz: Size): Vec2 {
   };
 }
 
-export function AICopilot({ onNavigateSettings }: AICopilotProps) {
+function percent(value: number | undefined): string {
+  return Number.isFinite(value) ? `${Math.round(Number(value) * 100)}%` : "unknown";
+}
+
+function contextSummary(context: ActiveCockpitContext | null | undefined): string {
+  if (!context) return "";
+  if (context.kind === "semantic-link") {
+    return [
+      "Active cockpit context: semantic Evidence link selected on the Map.",
+      `Insight: ${context.insightLabel ?? context.insightKind ?? "unknown"}`,
+      `Actionability: ${percent(context.actionabilityScore)}; similarity: ${percent(context.similarity)}`,
+      `Source: ${context.labelA ?? context.sourceNodeId} (${context.sourceGroup}${context.sourceRepo ? `, ${context.sourceRepo}` : ""})`,
+      context.fileA ? `Source path: ${context.fileA}` : "",
+      `Target: ${context.labelB ?? context.targetNodeId} (${context.targetGroup}${context.targetRepo ? `, ${context.targetRepo}` : ""})`,
+      context.fileB ? `Target path: ${context.fileB}` : "",
+      context.why ? `Why the UI flagged it: ${context.why}` : "",
+      context.decisionSignals?.length ? `Decision signals: ${context.decisionSignals.join("; ")}` : "",
+      context.options?.length ? `Current UI options: ${context.options.join(" | ")}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  if (context.kind === "overlap-pair") {
+    return [
+      "Active cockpit context: semantic overlap pair selected on the Map.",
+      `Clusters: ${context.clusterA} and ${context.clusterB}`,
+      `Top pair: ${context.labelA ?? context.sourceNodeId ?? "unknown"} to ${context.labelB ?? context.targetNodeId ?? "unknown"}`,
+      `Similarity: ${percent(context.similarity)}`,
+    ].join("\n");
+  }
+  if (context.kind === "node") {
+    return [
+      "Active cockpit context: map node.",
+      `Node: ${context.label ?? context.nodeId}`,
+      context.clusterId ? `Cluster: ${context.clusterId}` : "",
+      context.nodeType ? `Type: ${context.nodeType}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  if (context.kind === "cluster") {
+    return `Active cockpit context: cluster ${context.label ?? context.clusterId}.`;
+  }
+  if (context.kind === "recommendation") {
+    return `Active cockpit context: recommendation ${context.label ?? context.recommendationId}.`;
+  }
+  return `Active cockpit context: decision ${context.label ?? context.targetId}.`;
+}
+
+export function AICopilot({ onNavigateSettings, activeContext = null }: AICopilotProps) {
   const [expanded, setExpanded] = useState<boolean>(() => lsGet(LS_EXP, false));
   const [size,     setSize]     = useState<Size>(() => lsGet(LS_SIZE, DEF_SIZE));
   const [pos,      setPos]      = useState<Vec2>(() => {
@@ -99,33 +147,43 @@ export function AICopilot({ onNavigateSettings }: AICopilotProps) {
     };
   }, []);
 
-  function toggle() {
-    const next = !expanded;
-    if (next) {
-      setPos(p => {
-        const clamped = clampedPos(p, sizeSnap.current);
-        localStorage.setItem(LS_POS, JSON.stringify(clamped));
-        return clamped;
-      });
-      setTimeout(() => inputRef.current?.focus(), 30);
-    }
-    setExpanded(next);
-    localStorage.setItem(LS_EXP, JSON.stringify(next));
+  function openPanel() {
+    setPos(p => {
+      const clamped = clampedPos(p, sizeSnap.current);
+      localStorage.setItem(LS_POS, JSON.stringify(clamped));
+      return clamped;
+    });
+    setExpanded(true);
+    localStorage.setItem(LS_EXP, JSON.stringify(true));
+    setTimeout(() => inputRef.current?.focus(), 30);
   }
 
-  async function send() {
-    const text = input.trim();
+  function toggle() {
+    if (!expanded) {
+      openPanel();
+      return;
+    }
+    setExpanded(false);
+    localStorage.setItem(LS_EXP, JSON.stringify(false));
+  }
+
+  async function sendText(rawText: string, contextOverride: ActiveCockpitContext | null = activeContext) {
+    const text = rawText.trim();
     if (!text || streaming) return;
     setInput("");
     const history = msgs.slice(-20).map(m => ({ role: m.role, content: m.content }));
     setMsgs(prev => [...prev, { role: "user", content: text }, { role: "assistant", content: "" }]);
     setStreaming(true);
+    const activeContextSummary = contextSummary(contextOverride);
+    const message = activeContextSummary
+      ? `${text}\n\n${activeContextSummary}`
+      : text;
 
     try {
       const r = await apiFetch(`/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, history, include_graph_context: true }),
+        body: JSON.stringify({ message, history, include_graph_context: true }),
       });
       if (!r.ok || !r.body) throw new Error(await apiErrorMessage(r));
 
@@ -182,6 +240,29 @@ export function AICopilot({ onNavigateSettings }: AICopilotProps) {
       setStreaming(false);
     }
   }
+
+  function send() {
+    void sendText(input);
+  }
+
+  useEffect(() => {
+    function onPrompt(event: Event) {
+      const detail = (event as CustomEvent<CopilotPromptEventDetail>).detail;
+      const prompt = detail?.prompt?.trim() ?? "";
+      if (!prompt) return;
+      const context = detail.context === undefined ? activeContext : detail.context;
+      openPanel();
+      if (detail.autoSend === false || streaming) {
+        setInput(prompt);
+        setTimeout(() => inputRef.current?.focus(), 30);
+        return;
+      }
+      void sendText(prompt, context ?? null);
+    }
+
+    window.addEventListener(COPILOT_PROMPT_EVENT, onPrompt);
+    return () => window.removeEventListener(COPILOT_PROMPT_EVENT, onPrompt);
+  }, [activeContext, expanded, msgs, streaming]);
 
   function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); }
@@ -244,7 +325,7 @@ export function AICopilot({ onNavigateSettings }: AICopilotProps) {
       <div className="copilot-body" ref={bodyRef}>
         {msgs.length === 0 ? (
           <div className="copilot-empty">
-            Ask anything about your knowledge graph. Active cluster context is included automatically.
+            Ask anything about your knowledge graph. Active map context is included automatically.
           </div>
         ) : (
           msgs.map((m, i) => (
@@ -278,7 +359,7 @@ export function AICopilot({ onNavigateSettings }: AICopilotProps) {
         <button
           type="button"
           className={`copilot-send-btn${streaming ? " sending" : ""}`}
-          onClick={() => void send()}
+          onClick={send}
           disabled={streaming || !input.trim()}
           aria-label="Send"
         >

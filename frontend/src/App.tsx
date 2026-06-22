@@ -166,7 +166,7 @@ export default function App() {
           {active === "work-queue" && <ErrorBoundary tabName="Work Queue"><WorkQueue /></ErrorBoundary>}
           {active === "settings" && <ErrorBoundary tabName="Settings"><Settings onNavigateScope={() => setActive("scope")} /></ErrorBoundary>}
         </main>
-        <AICopilot onNavigateSettings={() => setActive("settings")} />
+        <AICopilot activeContext={activeContext} onNavigateSettings={() => setActive("settings")} />
       </div>
     </ToastProvider>
   );

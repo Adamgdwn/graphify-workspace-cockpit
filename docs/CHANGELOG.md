@@ -6,6 +6,23 @@ changed, or fixed in that chunk.
 
 ---
 
+## Relationship Map Second Video Readiness (2026-06-21)
+
+### Added
+- Map-local Semantic Analysis run/rerun flow with status polling and Evidence-layer refresh.
+- Semantic-link inspector options for canonicalize, bridge/reference, compare, keep separate, and dismiss decisions.
+- `Explain next steps with AI` for clicked semantic links, passing exact endpoints, repos, paths, scores, signals, and options to the floating assistant.
+- 15,000 visible-node Evidence cap with scope warnings.
+
+### Changed
+- Semantic overlap defaults now emphasize an actionable queue instead of dense raw similarity.
+- Workspace Scope profile estimates now report selected source files and default-ignored paths without broad 10,000-file cap confusion.
+- Duplicate/waste semantic copy now frames links as decision candidates rather than assuming one canonical home.
+
+### Fixed
+- Saved-scope rebuilds now allow explicitly included child folders under excluded parent paths.
+- Running semantic analysis no longer shows a stale red "not run" alert while work is in progress.
+
 ## Chunk Thirty — Decision Packet View (2026-06-15)
 
 ### Added

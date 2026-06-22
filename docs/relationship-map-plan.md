@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-21T18:34:52-06:00
-Status: semantic-link inspector options and scroll polish ready for owner verification
+Last Updated: 2026-06-21T19:34:50-06:00
+Status: second video ready; semantic decision-link polish boxed for night
 Owner: Adam Goodwin
 
 ## Purpose
@@ -161,6 +161,23 @@ more like decision briefs. The semantic-link inspector adds signal-aware
 options such as canonicalize, bridge, compare, document, dismiss, or choose a
 source of truth, and the drawer body scrolls independently so endpoint and
 provenance details no longer squeeze the "what can I do with this?" summary.
+
+Polish note 2026-06-21T19:11:03-06:00: semantic-link explanations now escalate
+cleanly into next-step reasoning. The inspector treats duplicate/waste as a
+candidate decision rather than assuming one canonical home, publishes a precise
+semantic-link active context with endpoints, repos, paths, scores, signals, and
+options, and adds `Explain next steps with AI` to open the assistant with a
+prompt that compares merge/canonicalize, bridge/reference, compare,
+keep-separate, and dismiss choices.
+
+Night closeout 2026-06-21T19:34:50-06:00: Adam reviewed the improved semantic
+knowledge layer with options and called it "second video ready." The relationship
+map is boxed for the night as a decision-grade semantic layer: Map can run the
+analysis, stale/broad caches are withheld, visible semantic links are actionable
+and readable, overlap defaults to a top action queue, clicked links explain their
+endpoints and options, and the AI assistant can reason from the exact selected
+semantic link. Next work should be owner review/recording or very small copy/UI
+tuning only if the next pass exposes it.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
@@ -738,10 +755,10 @@ For the next coding session:
 1. `git status --short`
 2. Read `AGENTS.md`.
 3. Read `START_HERE.md` only as the top-level router.
-4. Read `docs/session-handoff-2026-06-20.md`.
+4. Read `docs/session-handoff-2026-06-21.md`.
 5. Read this file: `docs/relationship-map-plan.md`.
-6. Start with owner verification of the Map-local Semantic Analysis workflow
-   and Workspace Scope profile estimate cards unless Adam redirects.
+6. Start with the second-video recording/review path, or tiny semantic-link copy
+   tuning only if Adam redirects.
 
 Avoid loading the long historical plans unless investigating a regression:
 
