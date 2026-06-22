@@ -618,6 +618,60 @@ function semanticInsightImpact(kind: SemanticInsightKind, signals: string[] = []
   return "This semantic link needs human judgment before it should drive a change.";
 }
 
+function semanticLinkOptions(kind: SemanticInsightKind, signals: string[] = []): string[] {
+  const normalizedSignals = signals.map((signal) => signal.toLowerCase());
+  const options: string[] = [];
+
+  if (normalizedSignals.some((signal) => signal.includes("same filename"))) {
+    options.push("Pick the canonical file if the same-named endpoints cover the same job.");
+  }
+  if (normalizedSignals.some((signal) => signal.includes("missing physical bridge"))) {
+    options.push("Add an explicit README, ADR, or code reference if people need to move between these endpoints.");
+  }
+  if (normalizedSignals.some((signal) => signal.includes("very high similarity"))) {
+    options.push("Inspect both endpoints before letting two highly similar versions live independently.");
+  }
+
+  if (kind === "waste_duplicate") {
+    options.push(
+      "Merge shared guidance, workflow notes, or implementation details into one home.",
+      "Keep both only if the owners, audiences, or runtime responsibilities are clearly different.",
+    );
+  } else if (kind === "gap_missing_bridge") {
+    options.push(
+      "Create a bridge note that explains why these areas are related.",
+      "Assign ownership for the handoff if the relationship affects delivery.",
+    );
+  } else if (kind === "cross_app_similarity") {
+    options.push(
+      "Compare the two implementations for reusable capability or competing assumptions.",
+      "Document why the apps intentionally solve this separately if both should remain.",
+    );
+  } else if (kind === "shared_pattern") {
+    options.push(
+      "Name the reusable pattern so future work can find the strongest example.",
+      "Promote one endpoint as the reference if the pattern is important.",
+    );
+  } else if (kind === "drift_risk") {
+    options.push(
+      "Choose a source of truth before the two versions drift further.",
+      "Add a sync note, test, or owner so future changes stay aligned.",
+    );
+  } else if (kind === "intentional_reference") {
+    options.push(
+      "Confirm whether the existing relationship is enough for navigation.",
+      "Dismiss from cleanup if this is useful context rather than duplicate work.",
+    );
+  } else {
+    options.push(
+      "Open both endpoints and classify this as duplicate, bridge, pattern, or noise.",
+      "Trace from source to see whether a physical path already explains the relationship.",
+    );
+  }
+
+  return [...new Set(options)].slice(0, 4);
+}
+
 function relationList(relations?: string[]): string {
   const cleaned = (relations ?? []).map((relation) => relation.trim()).filter(Boolean);
   return cleaned.length ? cleaned.slice(0, 3).join(", ") : "physical links";
@@ -4226,6 +4280,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
       ? "Rerun Semantic"
       : "Run Semantic"
     : `Semantic${semanticButtonCountText}`;
+  const selectedSemanticOptions = selectedSemanticLink
+    ? semanticLinkOptions(selectedSemanticLink.edge.insightKind, selectedSemanticLink.edge.decisionSignals)
+    : [];
 
   async function handleRunSemanticAnalysisFromMap() {
     if (semanticPassRunning) {
@@ -5254,83 +5311,97 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
               <span className="map-panel-name">Semantic Link</span>
               <button className="map-panel-close" onClick={() => clearSemanticLinkSelection()} aria-label="Close">✕</button>
             </div>
-            <div className="map-panel-section">
-              <span className={`map-type-badge map-semantic-kind-${semanticInsightClass(selectedSemanticLink.edge.insightKind)}`}>
-                {SEMANTIC_INSIGHT_LABELS[selectedSemanticLink.edge.insightKind]}
-              </span>
-            </div>
-
-            <div className="map-semantic-score-grid">
-              <div className="map-stat">
-                <span className="map-stat-label">Actionable</span>
-                <span className="map-stat-value">{boundedPercent(selectedSemanticLink.edge.actionabilityScore, 0)}%</span>
+            <div className="map-semantic-panel-body">
+              <div className="map-panel-section">
+                <span className={`map-type-badge map-semantic-kind-${semanticInsightClass(selectedSemanticLink.edge.insightKind)}`}>
+                  {SEMANTIC_INSIGHT_LABELS[selectedSemanticLink.edge.insightKind]}
+                </span>
               </div>
-              <div className="map-stat">
-                <span className="map-stat-label">Similarity</span>
-                <span className="map-stat-value">{boundedPercent(selectedSemanticLink.edge.similarity, 0)}%</span>
+
+              <div className="map-semantic-score-grid">
+                <div className="map-stat">
+                  <span className="map-stat-label">Actionable</span>
+                  <span className="map-stat-value">{boundedPercent(selectedSemanticLink.edge.actionabilityScore, 0)}%</span>
+                </div>
+                <div className="map-stat">
+                  <span className="map-stat-label">Similarity</span>
+                  <span className="map-stat-value">{boundedPercent(selectedSemanticLink.edge.similarity, 0)}%</span>
+                </div>
               </div>
-            </div>
 
-            <div className="map-inspector-block">
-              <div className="map-inspector-title">Why this matters</div>
-              <p className="map-inspector-purpose">
-                {semanticInsightImpact(selectedSemanticLink.edge.insightKind, selectedSemanticLink.edge.decisionSignals)}
-              </p>
-            </div>
-
-            {selectedSemanticLink.edge.decisionSignals.length > 0 && (
               <div className="map-inspector-block">
-                <div className="map-inspector-title">Decision signals</div>
-                <div className="map-semantic-signal-list">
-                  {selectedSemanticLink.edge.decisionSignals.map((signal) => (
-                    <span key={signal}>{signal}</span>
+                <div className="map-inspector-title">Why this matters</div>
+                <p className="map-inspector-purpose">
+                  {semanticInsightImpact(selectedSemanticLink.edge.insightKind, selectedSemanticLink.edge.decisionSignals)}
+                </p>
+              </div>
+
+              <div className="map-inspector-block">
+                <div className="map-inspector-title">Options</div>
+                <div className="map-semantic-option-list">
+                  {selectedSemanticOptions.map((option, index) => (
+                    <div className="map-semantic-option" key={option}>
+                      <span>{index + 1}</span>
+                      <p>{option}</p>
+                    </div>
                   ))}
                 </div>
               </div>
-            )}
 
-            <div className="map-inspector-block">
-              <div className="map-inspector-title">Endpoints</div>
-              <div className="map-semantic-endpoints">
-                <section className="map-semantic-endpoint">
-                  <span className="map-semantic-endpoint-kicker">{selectedSemanticLink.sourceGroup}</span>
-                  <strong>{selectedSemanticLink.sourceNode?.label ?? selectedSemanticLink.edge.source}</strong>
-                  <small>{presentValue(selectedSemanticLink.sourceNode?.relative_path || selectedSemanticLink.sourceNode?.source_file)}</small>
-                </section>
-                <section className="map-semantic-endpoint">
-                  <span className="map-semantic-endpoint-kicker">{selectedSemanticLink.targetGroup}</span>
-                  <strong>{selectedSemanticLink.targetNode?.label ?? selectedSemanticLink.edge.target}</strong>
-                  <small>{presentValue(selectedSemanticLink.targetNode?.relative_path || selectedSemanticLink.targetNode?.source_file)}</small>
-                </section>
-              </div>
-            </div>
+              {selectedSemanticLink.edge.decisionSignals.length > 0 && (
+                <div className="map-inspector-block">
+                  <div className="map-inspector-title">Decision signals</div>
+                  <div className="map-semantic-signal-list">
+                    {selectedSemanticLink.edge.decisionSignals.map((signal) => (
+                      <span key={signal}>{signal}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-            <div className="map-provenance-grid">
-              <div className="map-provenance-row">
-                <span>Source repo</span>
-                <strong>{presentValue(selectedSemanticLink.sourceNode?.repo || selectedSemanticLink.sourceNode?.source_root_name)}</strong>
+              <div className="map-inspector-block">
+                <div className="map-inspector-title">Endpoints</div>
+                <div className="map-semantic-endpoints">
+                  <section className="map-semantic-endpoint">
+                    <span className="map-semantic-endpoint-kicker">{selectedSemanticLink.sourceGroup}</span>
+                    <strong>{selectedSemanticLink.sourceNode?.label ?? selectedSemanticLink.edge.source}</strong>
+                    <small>{presentValue(selectedSemanticLink.sourceNode?.relative_path || selectedSemanticLink.sourceNode?.source_file)}</small>
+                  </section>
+                  <section className="map-semantic-endpoint">
+                    <span className="map-semantic-endpoint-kicker">{selectedSemanticLink.targetGroup}</span>
+                    <strong>{selectedSemanticLink.targetNode?.label ?? selectedSemanticLink.edge.target}</strong>
+                    <small>{presentValue(selectedSemanticLink.targetNode?.relative_path || selectedSemanticLink.targetNode?.source_file)}</small>
+                  </section>
+                </div>
               </div>
-              <div className="map-provenance-row">
-                <span>Target repo</span>
-                <strong>{presentValue(selectedSemanticLink.targetNode?.repo || selectedSemanticLink.targetNode?.source_root_name)}</strong>
-              </div>
-              <div className="map-provenance-row map-provenance-wide">
-                <span>Source node</span>
-                <strong>{selectedSemanticLink.edge.source}</strong>
-              </div>
-              <div className="map-provenance-row map-provenance-wide">
-                <span>Target node</span>
-                <strong>{selectedSemanticLink.edge.target}</strong>
-              </div>
-            </div>
 
-            <div className="map-panel-actions">
-              <button
-                className="map-action-btn"
-                onClick={() => startPathFrom(selectedSemanticLink.edge.source)}
-              >
-                Trace from source
-              </button>
+              <div className="map-provenance-grid">
+                <div className="map-provenance-row">
+                  <span>Source repo</span>
+                  <strong>{presentValue(selectedSemanticLink.sourceNode?.repo || selectedSemanticLink.sourceNode?.source_root_name)}</strong>
+                </div>
+                <div className="map-provenance-row">
+                  <span>Target repo</span>
+                  <strong>{presentValue(selectedSemanticLink.targetNode?.repo || selectedSemanticLink.targetNode?.source_root_name)}</strong>
+                </div>
+                <div className="map-provenance-row map-provenance-wide">
+                  <span>Source node</span>
+                  <strong>{selectedSemanticLink.edge.source}</strong>
+                </div>
+                <div className="map-provenance-row map-provenance-wide">
+                  <span>Target node</span>
+                  <strong>{selectedSemanticLink.edge.target}</strong>
+                </div>
+              </div>
+
+              <div className="map-panel-actions">
+                <button
+                  className="map-action-btn"
+                  onClick={() => startPathFrom(selectedSemanticLink.edge.source)}
+                >
+                  Trace from source
+                </button>
+              </div>
             </div>
           </aside>
         )}

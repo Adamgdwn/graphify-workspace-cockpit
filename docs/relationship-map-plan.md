@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-21T16:44:10-06:00
-Status: semantic overlap review narrowed to an actionable queue; owner verification next
+Last Updated: 2026-06-21T18:34:52-06:00
+Status: semantic-link inspector options and scroll polish ready for owner verification
 Owner: Adam Goodwin
 
 ## Purpose
@@ -155,6 +155,12 @@ to `Show All`. `/graph/overlap-summary` adds actionability score, insight kind,
 and decision signals so the in-cockpit assistant receives a ranked semantic
 action queue and should answer with merge/bridge/compare/dismiss options rather
 than generic similarity narration.
+
+Polish note 2026-06-21T18:34:52-06:00: clicked semantic Evidence links now read
+more like decision briefs. The semantic-link inspector adds signal-aware
+options such as canonicalize, bridge, compare, document, dismiss, or choose a
+source of truth, and the drawer body scrolls independently so endpoint and
+provenance details no longer squeeze the "what can I do with this?" summary.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,
