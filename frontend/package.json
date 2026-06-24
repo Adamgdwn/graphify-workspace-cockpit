@@ -22,5 +22,8 @@
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^6.0.3",
     "vite": "^7.0.0"
+  },
+  "overrides": {
+    "esbuild": "0.28.1"
   }
 }
