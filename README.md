@@ -310,6 +310,32 @@ GRAPH_ESCALATION_BACKEND  Elevated Graphify extract backend when enabled
 API_KEY         Optional API key for non-local deployments
 ```
 
+### Tuning local AI for your machine
+
+The defaults above are calibrated for a mid-range laptop running **CPU-only**
+Ollama inference (roughly a 4-core machine with 16 GB RAM and integrated
+graphics). Your hardware and the model you actually have pulled will differ, so
+treat these as a starting point and adjust:
+
+- **Check what you're running first.** `ollama list` shows your installed models
+  and their sizes; `ollama ps` shows what is currently loaded and how much
+  memory it holds. Match `RECOMMEND_MODEL_DEFAULT` to a model you have pulled and
+  that comfortably fits in RAM (or VRAM, if you have a usable GPU).
+- **More capable machine?** If you have a strong GPU or plenty of memory, point
+  `RECOMMEND_MODEL_DEFAULT` at a larger/higher-quality model for better answers,
+  since inference will still feel fast.
+- **Lighter machine, or want snappier responses?** Use a smaller model and keep
+  `OLLAMA_KEEP_ALIVE` high (e.g. `30m` or `-1`) so you avoid a cold reload on
+  every interaction. If memory is tight when idle, lower it (e.g. `5m`) so the
+  model is released sooner.
+- **Using automatic graph escalation?** On a slow CPU, raise
+  `GRAPH_ESCALATION_DECIDER_TIMEOUT` so the local routing model has time to
+  respond before the cockpit falls back to its file/root heuristic.
+
+You can change any of these per machine in `backend/.env` (native runs) or `.env`
+(Docker) — no code changes needed. The Settings tab also exposes a model picker
+for the active chat/recommendation model.
+
 **Frontend** (see `frontend/.env.example`):
 
 ```
