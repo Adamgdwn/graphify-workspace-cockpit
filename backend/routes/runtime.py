@@ -53,10 +53,22 @@ def runtime_warning(
 
 def active_graph_readiness(deps: RuntimeDeps) -> dict:
     graph_path = deps.graph_path()
+    if not graph_path:
+        return {
+            "name": None,
+            "path": "",
+            "configured": False,
+            "exists": False,
+            "valid": False,
+            "node_count": 0,
+            "link_count": 0,
+            "error": "No workspace graph has been generated or uploaded yet.",
+        }
     graph_file = Path(graph_path)
     base = {
         "name": graph_file.name,
         "path": graph_path,
+        "configured": True,
         "exists": graph_file.exists(),
         "valid": False,
         "node_count": 0,
@@ -85,18 +97,27 @@ def active_graph_readiness(deps: RuntimeDeps) -> dict:
 
 def build_health(deps: RuntimeDeps) -> dict:
     graph = deps.graph_path()
-    demo_mode = Path(graph).resolve() == Path(deps.demo_graph_path()).resolve()
+    graph_configured = bool(graph)
+    demo_mode = (
+        Path(graph).resolve() == Path(deps.demo_graph_path()).resolve()
+        if graph_configured
+        else False
+    )
     graph_loaded = False
     graph_error = None
-    try:
-        deps.load_graph()
-        graph_loaded = True
-    except Exception as exc:
-        graph_error = str(exc)
+    if graph_configured:
+        try:
+            deps.load_graph()
+            graph_loaded = True
+        except Exception as exc:
+            graph_error = str(exc)
+    else:
+        graph_error = "No workspace graph has been generated or uploaded yet."
     return {
         "status": "ok",
         "version": deps.app_version(),
         "demo_mode": demo_mode,
+        "graph_configured": graph_configured,
         "graph_loaded": graph_loaded,
         "graph_error": graph_error,
         "graphify": deps.graphify_status(include_version=False),
@@ -112,7 +133,15 @@ def build_runtime_status(deps: RuntimeDeps) -> dict:
     connectors = deps.connector_readiness()
 
     warnings: list[dict] = []
-    if not graph["valid"]:
+    if not graph.get("configured"):
+        warnings.append(runtime_warning(
+            "NO_GRAPH",
+            "This instance does not have a workspace graph yet.",
+            severity="warning",
+            action_label="Open Workspace Scope",
+            destination="scope",
+        ))
+    elif not graph["valid"]:
         warnings.append(runtime_warning(
             "GRAPH_INVALID",
             graph["error"] or "Active graph is missing or invalid.",
@@ -129,6 +158,12 @@ def build_runtime_status(deps: RuntimeDeps) -> dict:
         warnings.append(runtime_warning(
             "OLLAMA_UNAVAILABLE",
             f"Ollama is not reachable at {ollama.get('url')}.",
+            action_label="Review Ollama settings",
+        ))
+    elif not ollama.get("chat_model_available", True):
+        warnings.append(runtime_warning(
+            "OLLAMA_MODEL_UNAVAILABLE",
+            f"Configured Ollama model {ollama.get('chat_model')} is not installed at {ollama.get('url')}.",
             action_label="Review Ollama settings",
         ))
     if not storage.get("ready", True):
@@ -162,7 +197,10 @@ def build_runtime_status(deps: RuntimeDeps) -> dict:
                 action_label="Review connector sync",
             ))
 
-    if not graph["valid"]:
+    if not graph.get("configured"):
+        readiness = "not_ready"
+        summary = "This instance does not have a workspace graph yet."
+    elif not graph["valid"]:
         readiness = "not_ready"
         summary = "Active graph needs attention before the workspace is usable."
     elif warnings:

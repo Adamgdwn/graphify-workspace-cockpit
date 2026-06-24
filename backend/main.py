@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import fnmatch
 import os
 import re
 import uuid
@@ -43,11 +44,13 @@ try:
         GraphifyServiceError,
         get_graphify_status,
         run_graphify_ask,
+        run_graphify_extract,
         run_graphify_update,
     )
     from backend.state_store import write_json_atomic
     from backend.storage_status import StorageStatusProvider, safe_error_message
     from backend.workspace_scope import (
+        DEFAULT_EXCLUDE_PATTERNS,
         WorkspaceScopeError,
         apply_signal_tiers_to_graph,
         filter_workspace_scope_graph,
@@ -81,11 +84,13 @@ except ModuleNotFoundError:
         GraphifyServiceError,
         get_graphify_status,
         run_graphify_ask,
+        run_graphify_extract,
         run_graphify_update,
     )
     from state_store import write_json_atomic
     from storage_status import StorageStatusProvider, safe_error_message
     from workspace_scope import (
+        DEFAULT_EXCLUDE_PATTERNS,
         WorkspaceScopeError,
         apply_signal_tiers_to_graph,
         filter_workspace_scope_graph,
@@ -359,9 +364,12 @@ def _load_graph() -> dict:
     global _graph_cache
     if _graph_cache is None:
         path = _graph_path()
-        if not Path(path).exists():
+        if not path:
+            raise FileNotFoundError("No workspace graph has been generated or uploaded yet.")
+        graph_file = Path(path)
+        if not graph_file.is_file():
             raise FileNotFoundError(path)
-        with open(path) as f:
+        with open(graph_file) as f:
             _graph_cache = normalize_graph(json.load(f))
     return _graph_cache
 
@@ -370,7 +378,8 @@ def _graph_path() -> str:
     if SETTINGS_FILE.exists():
         try:
             s = json.loads(SETTINGS_FILE.read_text())
-            return s.get("graph_path", DEFAULT_GRAPH)
+            graph_path = str(s.get("graph_path") or "").strip()
+            return graph_path or DEFAULT_GRAPH
         except Exception:
             pass
     return DEFAULT_GRAPH
@@ -806,7 +815,7 @@ def _scope_ask_evidence(evidence: list[dict]) -> list[dict]:
         n for n in graph.get("nodes", [])
         if isinstance(n, dict)
         and _is_node_selected(n, sel_sources, sel_clusters)
-        and is_visible_signal_node(n)
+        and str(n.get("signal_tier") or "evidence") not in {"hidden", "excluded"}
     ]
     by_id = {str(n.get("id", "")): n for n in nodes}
     by_label = {str(n.get("label", "")): n for n in nodes}
@@ -920,10 +929,16 @@ app.include_router(create_runtime_router(
 
 
 def _workspace_scope_deps() -> WorkspaceScopeDeps:
+    graph_path = _graph_path()
     return WorkspaceScopeDeps(
         inspect_scope=inspect_workspace_scope,
         scope_file=lambda: WORKSPACE_SCOPE_FILE,
         write_json_atomic=write_json_atomic,
+        suggested_roots=lambda: _workspace_scope_routes.suggested_workspace_roots(
+            repo_root=_REPO_ROOT,
+            workspace_state=WORKSPACE_STATE,
+            graph_path=Path(graph_path) if graph_path else None,
+        ),
     )
 
 
@@ -1542,7 +1557,19 @@ app.include_router(create_decisions_router(
 RECOMMENDATIONS_DIR = WORKSPACE_STATE / "recommendations"
 ACTION_QUEUE_DIR     = WORKSPACE_STATE / "action-queue"
 NOTES_DIR            = WORKSPACE_STATE / "notes"
-RECOMMEND_MODEL_DEFAULT = "phi4:latest"
+RECOMMEND_MODEL_DEFAULT = _config.RECOMMEND_MODEL_DEFAULT
+SEMANTIC_MODEL_DEFAULT = _config.SEMANTIC_MODEL_DEFAULT
+GRAPH_ESCALATION_ENABLED = _config.GRAPH_ESCALATION_ENABLED
+GRAPH_ESCALATION_BACKEND = _config.GRAPH_ESCALATION_BACKEND
+GRAPH_ESCALATION_MODEL = _config.GRAPH_ESCALATION_MODEL
+GRAPH_ESCALATION_MODE = _config.GRAPH_ESCALATION_MODE
+GRAPH_ESCALATION_FILE_THRESHOLD = _config.GRAPH_ESCALATION_FILE_THRESHOLD
+GRAPH_ESCALATION_ROOT_THRESHOLD = _config.GRAPH_ESCALATION_ROOT_THRESHOLD
+GRAPH_ESCALATION_DECIDER_MODEL = _config.GRAPH_ESCALATION_DECIDER_MODEL
+GRAPH_ESCALATION_DECIDER_TIMEOUT = _config.GRAPH_ESCALATION_DECIDER_TIMEOUT
+GRAPH_ESCALATION_TIMEOUT = _config.GRAPH_ESCALATION_TIMEOUT
+GRAPH_ESCALATION_API_TIMEOUT = _config.GRAPH_ESCALATION_API_TIMEOUT
+GRAPH_ESCALATION_MAX_CONCURRENCY = _config.GRAPH_ESCALATION_MAX_CONCURRENCY
 
 MODE_PROMPT_FILES: dict[str, str] = {
     "next-build": "recommend_ranked.txt",
@@ -2060,6 +2087,20 @@ def _extract_json(text: str) -> dict:
             except Exception:
                 pass
     return {}
+
+
+def _ollama_model_available(models: list[str], model: str) -> bool:
+    candidate = model.strip()
+    if not candidate:
+        return False
+    names = {item.strip() for item in models if item.strip()}
+    if candidate in names:
+        return True
+    if ":" not in candidate and f"{candidate}:latest" in names:
+        return True
+    if candidate.endswith(":latest") and candidate[:-7] in names:
+        return True
+    return False
 
 
 def _call_ollama(prompt: str, model: str, timeout: int = 120) -> str:
@@ -2677,7 +2718,8 @@ def get_settings() -> dict:
     return {
         "version": app.version,
         "graph_path": graph_path,
-        "graph_name": Path(graph_path).name,
+        "graph_name": Path(graph_path).name if graph_path else "No graph yet",
+        "graph_configured": bool(graph_path),
         "node_count": node_count,
         "edge_count": edge_count,
         "state_dir": str(WORKSPACE_STATE),
@@ -2691,13 +2733,33 @@ def get_settings() -> dict:
 def ollama_status() -> dict:
     import urllib.request as _req2
     _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+    chat_model = str(_load_chat_config().get("model") or RECOMMEND_MODEL_DEFAULT).strip() or RECOMMEND_MODEL_DEFAULT
     try:
         with _req2.urlopen(f"{_ollama_base}/api/tags", timeout=3) as r:
             data = json.load(r)
             models = [m["name"] for m in data.get("models", [])]
-            return {"connected": True, "models": models, "url": _ollama_base}
-    except Exception:
-        return {"connected": False, "models": [], "url": _ollama_base}
+            return {
+                "connected": True,
+                "models": models,
+                "url": _ollama_base,
+                "default_model": RECOMMEND_MODEL_DEFAULT,
+                "chat_model": chat_model,
+                "chat_model_available": _ollama_model_available(models, chat_model),
+                "embedding_model": SEMANTIC_MODEL_DEFAULT,
+                "embedding_model_available": _ollama_model_available(models, SEMANTIC_MODEL_DEFAULT),
+            }
+    except Exception as exc:
+        return {
+            "connected": False,
+            "models": [],
+            "url": _ollama_base,
+            "default_model": RECOMMEND_MODEL_DEFAULT,
+            "chat_model": chat_model,
+            "chat_model_available": False,
+            "embedding_model": SEMANTIC_MODEL_DEFAULT,
+            "embedding_model_available": False,
+            "error": str(exc),
+        }
 
 
 @app.post("/graph/upload", status_code=201)
@@ -2753,17 +2815,6 @@ def list_graphs() -> list[dict]:
     active = _graph_path()
     graphs: list[dict] = []
 
-    # Demo graph (always listed if it exists)
-    demo = Path(_DEMO_GRAPH)
-    if demo.exists():
-        graphs.append({
-            "name": demo.name,
-            "path": str(demo),
-            "active": str(demo) == active,
-            "source": "demo",
-            "uploaded_at": None,
-        })
-
     # Uploaded graphs in GRAPHS_DIR
     if GRAPHS_DIR.exists():
         for p in sorted(GRAPHS_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -2778,8 +2829,8 @@ def list_graphs() -> list[dict]:
             })
 
     # Custom GRAPH_PATH env var not covered above
-    active_path = Path(active)
-    if not any(g["path"] == active for g in graphs) and active_path.exists():
+    active_path = Path(active) if active else None
+    if active_path and not any(g["path"] == active for g in graphs) and active_path.is_file():
         graphs.insert(0, {
             "name": active_path.name,
             "path": active,
@@ -2802,16 +2853,12 @@ def _graph_activation_candidate(name: str) -> Path:
     if candidate.is_file():
         return candidate
 
-    demo = Path(_DEMO_GRAPH)
-    if demo.name == name and demo.is_file():
-        return demo
-
     raise HTTPException(status_code=404, detail=f"Graph '{name}' not found.")
 
 
 @app.post("/graphs/{name}/activate")
 def activate_graph(name: str) -> dict:
-    """Switch the active graph by name. Must exist in GRAPHS_DIR or be the demo graph."""
+    """Switch the active graph by name. Must exist in GRAPHS_DIR."""
     global _graph_cache, _summary_cache
     candidate = _graph_activation_candidate(name)
     try:
@@ -2837,17 +2884,27 @@ def get_org_settings() -> dict:
         except Exception:
             pass
     return {
-        "active_graph": {
-            "name": Path(graph_path).name,
-            "path": graph_path,
-        },
+        "active_graph": (
+            {
+                "name": Path(graph_path).name,
+                "path": graph_path,
+            }
+            if graph_path
+            else None
+        ),
         "ollama_url": os.environ.get("OLLAMA_URL", "http://localhost:11434"),
+        "recommend_model_default": RECOMMEND_MODEL_DEFAULT,
+        "semantic_model_default": SEMANTIC_MODEL_DEFAULT,
         "storage_backend": STORAGE_BACKEND,
         "storage": _storage_status(),
-        "last_seen_devices": [
-            {"user": user, "last_seen": ts}
-            for user, ts in sorted(devices.items(), key=lambda x: x[1], reverse=True)
-        ],
+        "last_seen_devices": (
+            [
+                {"user": user, "last_seen": ts}
+                for user, ts in sorted(devices.items(), key=lambda x: x[1], reverse=True)
+            ]
+            if graph_path
+            else []
+        ),
         "graph_stats": _graph_stats(),
     }
 
@@ -2896,6 +2953,185 @@ def _load_workspace_scope_for_rebuild() -> dict | None:
             str(exc),
             status_code=422,
         ) from exc
+
+
+def _is_within_path(path: Path, parent: Path) -> bool:
+    try:
+        path.expanduser().resolve().relative_to(parent.expanduser().resolve())
+        return True
+    except ValueError:
+        return False
+    except Exception:
+        return False
+
+
+def _matches_rebuild_exclude(path: Path, root: Path, patterns: list[str]) -> bool:
+    try:
+        rel = path.resolve().relative_to(root.resolve()).as_posix()
+    except Exception:
+        rel = path.name
+    candidate = f"{rel}/" if path.is_dir() else rel
+    name = path.name
+    for pattern in patterns:
+        raw = str(pattern or "").strip()
+        if not raw:
+            continue
+        normalized = raw.replace("\\", "/")
+        if normalized.endswith("/"):
+            marker = normalized.rstrip("/")
+            parts = rel.split("/")
+            if name == marker or marker in parts or candidate.startswith(normalized):
+                return True
+            continue
+        if fnmatch.fnmatch(name, normalized) or fnmatch.fnmatch(rel, normalized):
+            return True
+    return False
+
+
+def _estimate_rebuild_source_files(scan_roots: list[Path], profile: dict | None) -> dict:
+    limit = max(GRAPH_ESCALATION_FILE_THRESHOLD * 2, GRAPH_ESCALATION_FILE_THRESHOLD + 1, 1)
+    patterns = list((profile or {}).get("exclude_patterns") or DEFAULT_EXCLUDE_PATTERNS)
+    excluded_paths = [
+        Path(raw).expanduser().resolve()
+        for raw in (profile or {}).get("excluded_paths", [])
+        if isinstance(raw, str) and raw.strip()
+    ]
+    count = 0
+    truncated = False
+    for scan_root in scan_roots:
+        try:
+            root = scan_root.expanduser().resolve()
+        except Exception:
+            continue
+        if any(root == excluded or _is_within_path(root, excluded) for excluded in excluded_paths):
+            continue
+        for current, dir_names, file_names in os.walk(root):
+            current_path = Path(current)
+            kept_dirs: list[str] = []
+            for dir_name in dir_names:
+                dir_path = current_path / dir_name
+                if any(dir_path == excluded or _is_within_path(dir_path, excluded) for excluded in excluded_paths):
+                    continue
+                if _matches_rebuild_exclude(dir_path, root, patterns):
+                    continue
+                kept_dirs.append(dir_name)
+            dir_names[:] = kept_dirs
+            for file_name in file_names:
+                file_path = current_path / file_name
+                if _matches_rebuild_exclude(file_path, root, patterns):
+                    continue
+                count += 1
+                if count >= limit:
+                    return {"estimated_files": count, "truncated": True}
+    return {"estimated_files": count, "truncated": truncated}
+
+
+def _fallback_rebuild_route(estimate: dict, scan_root_count: int) -> tuple[str, str]:
+    estimated_files = int(estimate.get("estimated_files") or 0)
+    if scan_root_count > GRAPH_ESCALATION_ROOT_THRESHOLD:
+        return (
+            "elevated",
+            f"{scan_root_count} scan roots exceed the local routing threshold of {GRAPH_ESCALATION_ROOT_THRESHOLD}.",
+        )
+    if estimated_files > GRAPH_ESCALATION_FILE_THRESHOLD:
+        return (
+            "elevated",
+            f"{estimated_files} estimated source files exceed the local routing threshold of {GRAPH_ESCALATION_FILE_THRESHOLD}.",
+        )
+    return (
+        "local",
+        f"{estimated_files} estimated source files fit the local routing threshold.",
+    )
+
+
+def _decide_rebuild_route(scan_roots: list[Path], profile: dict | None) -> dict:
+    estimate = _estimate_rebuild_source_files(scan_roots, profile)
+    scan_root_count = len(scan_roots)
+    base = {
+        "route": "local",
+        "enabled": GRAPH_ESCALATION_ENABLED,
+        "configured": bool(GRAPH_ESCALATION_BACKEND),
+        "backend": GRAPH_ESCALATION_BACKEND or None,
+        "model": GRAPH_ESCALATION_MODEL or None,
+        "decision_source": "config",
+        "reason": "Graph escalation is disabled.",
+        "estimated_files": estimate["estimated_files"],
+        "estimate_truncated": estimate["truncated"],
+        "scan_root_count": scan_root_count,
+        "file_threshold": GRAPH_ESCALATION_FILE_THRESHOLD,
+        "root_threshold": GRAPH_ESCALATION_ROOT_THRESHOLD,
+    }
+    if not GRAPH_ESCALATION_ENABLED:
+        return base
+    if not GRAPH_ESCALATION_BACKEND:
+        return {
+            **base,
+            "decision_source": "config",
+            "reason": "Graph escalation is enabled but GRAPH_ESCALATION_BACKEND is not configured.",
+        }
+
+    fallback_route, fallback_reason = _fallback_rebuild_route(estimate, scan_root_count)
+    prompt = (
+        "You are the local routing model for Graphify workspace graph generation. "
+        "Choose whether the local AST-only graph build is enough, or whether this selection should be elevated "
+        "to the configured Graphify semantic extraction backend. Return JSON only with keys route and reason. "
+        "route must be either local or elevated. Prefer local for small, focused selections. Prefer elevated "
+        "when the selection is broad, multi-root, likely to timeout locally, or needs semantic LLM extraction.\n"
+        f"estimated_source_files={estimate['estimated_files']}\n"
+        f"estimate_truncated={estimate['truncated']}\n"
+        f"scan_root_count={scan_root_count}\n"
+        f"local_file_threshold={GRAPH_ESCALATION_FILE_THRESHOLD}\n"
+        f"local_root_threshold={GRAPH_ESCALATION_ROOT_THRESHOLD}\n"
+        f"configured_elevation_backend={GRAPH_ESCALATION_BACKEND}\n"
+    )
+    try:
+        raw = _call_ollama(
+            prompt,
+            GRAPH_ESCALATION_DECIDER_MODEL,
+            timeout=GRAPH_ESCALATION_DECIDER_TIMEOUT,
+        )
+        parsed = _extract_json(raw)
+        route = str(parsed.get("route") or "").strip().lower()
+        if route not in {"local", "elevated"}:
+            raise ValueError("routing model returned an invalid route")
+        reason = str(parsed.get("reason") or "").strip()[:300]
+        return {
+            **base,
+            "route": route,
+            "decision_source": "ollama",
+            "reason": reason or fallback_reason,
+            "decider_model": GRAPH_ESCALATION_DECIDER_MODEL,
+        }
+    except Exception as exc:
+        return {
+            **base,
+            "route": fallback_route,
+            "decision_source": "heuristic",
+            "reason": fallback_reason,
+            "decider_model": GRAPH_ESCALATION_DECIDER_MODEL,
+            "decider_error": type(exc).__name__,
+        }
+
+
+def _run_graphify_rebuild_command(
+    target: str | Path,
+    *,
+    cwd: str | Path,
+    route: dict,
+) -> GraphifyCommandResult:
+    if route.get("route") == "elevated":
+        return run_graphify_extract(
+            target,
+            cwd=cwd,
+            backend=GRAPH_ESCALATION_BACKEND,
+            model=GRAPH_ESCALATION_MODEL or None,
+            mode=GRAPH_ESCALATION_MODE or None,
+            timeout=GRAPH_ESCALATION_TIMEOUT,
+            api_timeout=GRAPH_ESCALATION_API_TIMEOUT,
+            max_concurrency=GRAPH_ESCALATION_MAX_CONCURRENCY,
+            no_cluster=True,
+        )
+    return run_graphify_update(target, cwd=cwd, timeout=300)
 
 
 def _dedupe_raw_graphify_node_ids(graph: dict) -> dict:
@@ -3029,7 +3265,7 @@ def _merge_graph_outputs(graph_paths: list[str], out_path: Path) -> None:
     write_json_atomic(out_path, _merge_normalized_graphs(graph_paths))
 
 
-def _run_scoped_rebuild(profile: dict, repo_root: Path) -> None:
+def _run_scoped_rebuild(profile: dict, repo_root: Path, route: dict) -> None:
     scan_roots = workspace_scope_scan_roots(profile)
     if not scan_roots:
         raise GraphifyServiceError(
@@ -3044,7 +3280,7 @@ def _run_scoped_rebuild(profile: dict, repo_root: Path) -> None:
     removed_node_count = 0
     for index, scan_root in enumerate(scan_roots, start=1):
         try:
-            run_graphify_update(str(scan_root), cwd=scan_root, timeout=300)
+            _run_graphify_rebuild_command(str(scan_root), cwd=scan_root, route=route)
             source_graph_path = scan_root / "graphify-out" / "graph.json"
             if not source_graph_path.exists():
                 scan_errors.append(f"{scan_root.name}: no graph.json produced")
@@ -3079,17 +3315,32 @@ def _run_scoped_rebuild(profile: dict, repo_root: Path) -> None:
 
 def _run_rebuild() -> None:
     global _graph_cache, _summary_cache
-    _REBUILD_STATUS.update({"status": "running", "error": None, "code": None, "detail": None})
+    _REBUILD_STATUS.update({
+        "status": "running",
+        "error": None,
+        "code": None,
+        "detail": None,
+        "route": "evaluating",
+        "escalation": None,
+    })
     try:
         repo_root = _REPO_ROOT
         workspace_scope_profile = _load_workspace_scope_for_rebuild()
         scan_dirs = _load_scan_dirs()
+        if workspace_scope_profile is not None:
+            scan_roots = workspace_scope_scan_roots(workspace_scope_profile)
+        elif scan_dirs:
+            scan_roots = [Path(d).expanduser().resolve() for d in scan_dirs]
+        else:
+            scan_roots = [repo_root]
+        route = _decide_rebuild_route(scan_roots, workspace_scope_profile)
+        _REBUILD_STATUS.update({"route": route["route"], "escalation": route})
 
         if workspace_scope_profile is not None:
-            _run_scoped_rebuild(workspace_scope_profile, repo_root)
+            _run_scoped_rebuild(workspace_scope_profile, repo_root, route)
         elif not scan_dirs:
             # Default: scan just this repo
-            result = run_graphify_update(".", cwd=repo_root, timeout=300)
+            result = _run_graphify_rebuild_command(".", cwd=repo_root, route=route)
             ts = datetime.now(tz=timezone.utc).isoformat()
             if result.returncode != 0:
                 _REBUILD_STATUS.update({
@@ -3106,7 +3357,7 @@ def _run_rebuild() -> None:
             scan_errors: list[str] = []
             for d in scan_dirs:
                 try:
-                    run_graphify_update(d, cwd=d, timeout=300)
+                    _run_graphify_rebuild_command(d, cwd=d, route=route)
                     candidate = Path(d) / "graphify-out" / "graph.json"
                     if candidate.exists():
                         graph_paths.append(str(candidate))
@@ -3146,6 +3397,8 @@ def _run_rebuild() -> None:
             "error": None,
             "code": None,
             "detail": None,
+            "route": route["route"],
+            "escalation": route,
         })
     except GraphifyServiceError as exc:
         _set_rebuild_error(exc)
@@ -3188,6 +3441,8 @@ def rebuild_status() -> dict:
         "error": _REBUILD_STATUS.get("error"),
         "code": _REBUILD_STATUS.get("code"),
         "detail": _REBUILD_STATUS.get("detail"),
+        "route": _REBUILD_STATUS.get("route"),
+        "escalation": _REBUILD_STATUS.get("escalation"),
     }
 
 
@@ -3241,13 +3496,29 @@ def remove_scan_dir(body: ScanDirBody) -> dict:
 # Semantic similarity pass
 # ---------------------------------------------------------------------------
 
-def _read_source_window(source_file: str, n_lines: int = 35) -> str:
-    """Read up to n_lines from a node's source file, checking all known repo roots."""
+def _read_source_window(source_file: str, source_root: str = "", n_lines: int = 35) -> str:
+    """Read up to n_lines from a node's source file, preferring that node's root."""
     if not source_file:
         return ""
-    roots = _configured_source_roots()
-    for root in roots:
-        p = root / source_file
+
+    roots: list[Path] = []
+
+    def add_root(raw: str | Path) -> None:
+        try:
+            root = Path(raw).expanduser().resolve()
+        except Exception:
+            root = Path(raw).expanduser()
+        if root not in roots:
+            roots.append(root)
+
+    if str(source_root or "").strip():
+        add_root(source_root)
+    for root in _configured_source_roots():
+        add_root(root)
+
+    raw_path = Path(source_file).expanduser()
+    candidates = [raw_path] if raw_path.is_absolute() else [root / source_file for root in roots]
+    for p in candidates:
         if p.exists():
             try:
                 return "\n".join(p.read_text(errors="replace").splitlines()[:n_lines])
@@ -3265,6 +3536,63 @@ def _cosine_sim(a: list[float], b: list[float]) -> float:
 def _semantic_scope_fingerprint(node_ids: list[str]) -> str:
     payload = json.dumps(sorted(node_ids), separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _embedding_vector(raw: object) -> list[float]:
+    if not isinstance(raw, list):
+        return []
+    vector: list[float] = []
+    try:
+        for value in raw:
+            vector.append(float(value))
+    except (TypeError, ValueError):
+        return []
+    return vector
+
+
+def _post_ollama_json(url: str, payload: dict, timeout: int) -> dict:
+    import urllib.request as _ureq
+
+    request = _ureq.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with _ureq.urlopen(request, timeout=timeout) as response:
+        data = json.loads(response.read())
+    return data if isinstance(data, dict) else {}
+
+
+def _embed_text_batch_ollama(model: str, texts: list[str], ollama_base: str) -> list[list[float]]:
+    if not texts:
+        return []
+
+    try:
+        data = _post_ollama_json(
+            f"{ollama_base}/api/embed",
+            {"model": model, "input": texts},
+            timeout=180,
+        )
+        raw_embeddings = data.get("embeddings")
+        if isinstance(raw_embeddings, list) and len(raw_embeddings) == len(texts):
+            return [_embedding_vector(raw) for raw in raw_embeddings]
+    except Exception:
+        pass
+
+    vectors: list[list[float]] = []
+    legacy_url = f"{ollama_base}/api/embeddings"
+    for text in texts:
+        try:
+            data = _post_ollama_json(
+                legacy_url,
+                {"model": model, "prompt": text},
+                timeout=90,
+            )
+            vectors.append(_embedding_vector(data.get("embedding")))
+        except Exception:
+            vectors.append([])
+    return vectors
 
 
 def _semantic_edge_policy_stale(payload: dict) -> bool:
@@ -3553,7 +3881,6 @@ def _run_semantic_pass(
     mutual_top_neighbors: bool = True,
     max_edges: int = SEMANTIC_DEFAULT_MAX_STORED_EDGES,
 ) -> None:
-    import urllib.request as _ureq
     global _SEMANTIC_STATUS
     threshold = _bounded_semantic_threshold(threshold)
     max_neighbors_per_node = _bounded_semantic_neighbor_count(max_neighbors_per_node)
@@ -3579,28 +3906,27 @@ def _run_semantic_pass(
         _SEMANTIC_STATUS["scope_node_count"] = len(nodes)
 
         _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
-        embed_url = f"{_ollama_base}/api/embeddings"
-
-        embeddings: list[tuple[str, list[float]]] = []
-
-        for i, node in enumerate(nodes):
+        embed_inputs: list[tuple[str, str]] = []
+        for node in nodes:
             nid = str(node["id"])
             label = node.get("label", nid)
             ftype = node.get("file_type", "code")
-            window = _read_source_window(node.get("source_file", ""))
+            window = _read_source_window(
+                node.get("source_file", ""),
+                str(node.get("source_root") or ""),
+            )
             text = f"{ftype}: {label}\n{window}".strip()[:2000]
+            embed_inputs.append((nid, text))
 
-            try:
-                payload = json.dumps({"model": model, "prompt": text}).encode()
-                req = _ureq.Request(embed_url, data=payload,
-                                    headers={"Content-Type": "application/json"}, method="POST")
-                with _ureq.urlopen(req, timeout=90) as resp:
-                    vec = json.loads(resp.read()).get("embedding", [])
-                if vec:
-                    embeddings.append((nid, vec))
-            except Exception:
-                pass
-            _SEMANTIC_STATUS["progress"] = i + 1
+        embeddings: list[tuple[str, list[float]]] = []
+        batch_size = 32
+        for start in range(0, len(embed_inputs), batch_size):
+            batch = embed_inputs[start:start + batch_size]
+            vectors = _embed_text_batch_ollama(model, [text for _, text in batch], _ollama_base)
+            for (nid, _text), vector in zip(batch, vectors):
+                if vector:
+                    embeddings.append((nid, vector))
+            _SEMANTIC_STATUS["progress"] = min(len(nodes), start + len(batch))
 
         semantic_edges = _semantic_edges_from_embeddings(
             embeddings,
@@ -3643,7 +3969,7 @@ def _run_semantic_pass(
 
 
 class SemanticPassBody(BaseModel):
-    model: str = "nomic-embed-text"
+    model: str = SEMANTIC_MODEL_DEFAULT
     threshold: float = SEMANTIC_DEFAULT_THRESHOLD
     include_low_signal: bool = False
     knowledge_only: bool = False

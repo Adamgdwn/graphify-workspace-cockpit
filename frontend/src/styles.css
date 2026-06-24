@@ -31,10 +31,11 @@ body {
   letter-spacing: 0.03em;
 }
 
-.demo-banner {
+.setup-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   padding: 8px 20px;
   background: #2a1f0a;
   border-bottom: 1px solid #6b4c0a;
@@ -42,7 +43,14 @@ body {
   font-size: 0.85rem;
 }
 
-.demo-banner-link {
+.setup-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.setup-banner-link {
   background: none;
   border: none;
   color: #f0c060;
@@ -52,24 +60,8 @@ body {
   text-decoration: underline;
 }
 
-.demo-banner-link:hover {
+.setup-banner-link:hover {
   color: #ffe090;
-}
-
-.demo-banner-close {
-  background: none;
-  border: none;
-  color: #a07030;
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 2px 6px;
-  border-radius: 3px;
-  line-height: 1;
-}
-
-.demo-banner-close:hover {
-  background: #3a2a0a;
-  color: #e0a84a;
 }
 
 .cockpit-tabs {

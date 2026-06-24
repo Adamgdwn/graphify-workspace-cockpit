@@ -5,10 +5,12 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from backend import main
+from backend.routes.workspace_scope import suggested_workspace_roots
 from backend.workspace_scope import (
     apply_signal_tiers_to_graph,
     filter_workspace_scope_graph,
     inspect_workspace_scope,
+    normalize_workspace_scope_profile,
     workspace_scope_scan_roots,
 )
 
@@ -107,6 +109,66 @@ def test_workspace_scope_inspect_endpoint_rejects_missing_root() -> None:
 
     assert response.status_code == 422
     assert "Root does not exist" in response.json()["detail"]
+
+
+def test_suggested_workspace_roots_prefers_repo_parent(tmp_path: Path) -> None:
+    repo = tmp_path / "projects" / "graphify-workspace-cockpit"
+    state = repo / "workspace" / "state"
+    graph = repo / "workspace" / "demo" / "graph.json"
+    state.mkdir(parents=True)
+    graph.parent.mkdir(parents=True)
+    graph.write_text("{}")
+
+    suggestions = suggested_workspace_roots(
+        repo_root=repo,
+        workspace_state=state,
+        graph_path=graph,
+        home=tmp_path,
+    )
+
+    assert suggestions["initial_root"] == str(repo.parent.resolve())
+    assert str(repo.resolve()) in suggestions["roots"]
+    assert suggestions["repo_root"] == str(repo.resolve())
+    assert suggestions["state_dir"] == str(state.resolve())
+    assert suggestions["graph_path"] == str(graph.resolve())
+
+
+def test_suggested_workspace_roots_allows_no_active_graph(tmp_path: Path) -> None:
+    repo = tmp_path / "projects" / "graphify-workspace-cockpit"
+    state = repo / "workspace" / "state"
+    state.mkdir(parents=True)
+
+    suggestions = suggested_workspace_roots(
+        repo_root=repo,
+        workspace_state=state,
+        graph_path=None,
+        home=tmp_path,
+    )
+
+    assert suggestions["initial_root"] == str(repo.parent.resolve())
+    assert suggestions["graph_path"] == ""
+
+
+def test_suggested_workspace_roots_includes_all_home_onedrives(tmp_path: Path) -> None:
+    repo = tmp_path / "projects" / "graphify-workspace-cockpit"
+    state = repo / "workspace" / "state"
+    personal = tmp_path / "OneDrive"
+    operations = tmp_path / "OneDrive - A.G. Operations Ltd"
+    client = tmp_path / "OneDrive - Prime Boiler Services Ltd"
+    for path in (state, personal, operations, client):
+        path.mkdir(parents=True)
+
+    suggestions = suggested_workspace_roots(
+        repo_root=repo,
+        workspace_state=state,
+        graph_path=None,
+        home=tmp_path,
+    )
+
+    roots = set(suggestions["roots"])
+    assert str(personal.resolve()) in roots
+    assert str(operations.resolve()) in roots
+    assert str(client.resolve()) in roots
 
 
 def test_workspace_scope_profile_endpoint_persists_normalized_scope(monkeypatch, tmp_path: Path) -> None:
@@ -208,6 +270,68 @@ def test_workspace_scope_profile_rejects_default_ignored_included_path(monkeypat
     assert response.status_code == 422
     assert "default-ignored paths" in response.json()["detail"]
     assert not state_file.exists()
+
+
+def test_workspace_scope_profile_rejects_onedrive_account_root(monkeypatch, tmp_path: Path) -> None:
+    one_drive = tmp_path / "OneDrive"
+    one_drive.mkdir()
+    monkeypatch.setenv("OneDrive", str(one_drive))
+
+    response = TestClient(main.app).put(
+        "/workspace-scope",
+        json={
+            "root": str(one_drive),
+            "profile_name": "Unsafe OneDrive",
+            "included_paths": [str(one_drive)],
+        },
+    )
+
+    assert response.status_code == 422
+    assert "OneDrive account roots" in response.json()["detail"]
+
+
+def test_inspect_workspace_scope_marks_onedrive_root_excluded(monkeypatch, tmp_path: Path) -> None:
+    one_drive = tmp_path / "OneDrive - Example"
+    one_drive.mkdir()
+    monkeypatch.setenv("OneDriveCommercial", str(one_drive))
+
+    summary = inspect_workspace_scope(one_drive)
+
+    assert summary["tree"]["state"] == "excluded"
+    assert "OneDrive account roots are excluded" in summary["tree"]["reasons"][0]
+    assert summary["tree"]["estimated_file_count"] == 0
+    assert summary["tree"]["children"] == []
+    assert "OneDrive account root was not expanded." in summary["tree"]["warnings"]
+
+
+def test_workspace_scope_scan_roots_skips_stale_onedrive_account_root(monkeypatch, tmp_path: Path) -> None:
+    one_drive = tmp_path / "OneDrive"
+    one_drive.mkdir()
+    monkeypatch.setenv("OneDrive", str(one_drive))
+    profile = {
+        "root": str(one_drive),
+        "profile_name": "Stale OneDrive",
+        "included_paths": [str(one_drive)],
+        "excluded_paths": [],
+    }
+
+    assert workspace_scope_scan_roots(profile) == []
+
+
+def test_workspace_scope_allows_narrow_folder_inside_onedrive(monkeypatch, tmp_path: Path) -> None:
+    one_drive = tmp_path / "OneDrive"
+    project = one_drive / "Local Project"
+    project.mkdir(parents=True)
+    monkeypatch.setenv("OneDrive", str(one_drive))
+
+    profile = normalize_workspace_scope_profile({
+        "root": str(one_drive),
+        "profile_name": "Narrow OneDrive Folder",
+        "included_paths": [str(project)],
+    })
+
+    assert profile["included_paths"] == [str(project.resolve())]
+    assert workspace_scope_scan_roots(profile) == [project.resolve()]
 
 
 def test_workspace_scope_scan_roots_uses_only_selected_includes(tmp_path: Path) -> None:

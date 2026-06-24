@@ -30,30 +30,27 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
-const BANNER_KEY = "demo_banner_dismissed";
-
 type ConnStatus = "ok" | "degraded" | "offline";
 
 export default function App() {
   const [active, setActive] = useState<Tab>("dashboard");
-  const [demoMode, setDemoMode] = useState(false);
-  const [bannerDismissed, setBannerDismissed] = useState(
-    () => sessionStorage.getItem(BANNER_KEY) === "1"
-  );
+  const [graphConfigured, setGraphConfigured] = useState(true);
+  const [graphLoaded, setGraphLoaded] = useState(true);
   const [connStatus, setConnStatus] = useState<ConnStatus>("ok");
   const [focusTrigger, setFocusTrigger] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
   const [activeContext, setActiveContext] = useState<ActiveCockpitContext | null>(null);
   const askRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // Connection status + demo mode poll (15s)
+  // Connection status + graph setup poll (15s)
   useEffect(() => {
     async function checkStatus() {
       try {
         const r = await apiFetch(`/health`);
         if (!r.ok) { setConnStatus("offline"); return; }
         const d = await r.json();
-        setDemoMode(!!d.demo_mode);
+        setGraphConfigured(!!d.graph_configured);
+        setGraphLoaded(!!d.graph_loaded);
 
         const ol = await apiFetch(`/status/ollama`);
         const olData = await ol.json();
@@ -80,11 +77,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  function dismissBanner() {
-    sessionStorage.setItem(BANNER_KEY, "1");
-    setBannerDismissed(true);
-  }
-
   function navigateToMapContext(context: ActiveCockpitContext) {
     setActiveContext(context);
     setActive("map");
@@ -94,7 +86,7 @@ export default function App() {
     setActive(destination);
   }
 
-  const showBanner = demoMode && !bannerDismissed;
+  const showSetupBanner = !graphConfigured || !graphLoaded;
 
   const connDotClass =
     connStatus === "ok" ? "conn-dot conn-ok" :
@@ -125,22 +117,29 @@ export default function App() {
           </div>
         </header>
         <HelpModal open={showHelp} onClose={() => setShowHelp(false)} />
-        {showBanner && (
-          <div className="demo-banner">
+        {showSetupBanner && (
+          <div className="setup-banner">
             <span>
-              Demo graph active — upload a real graph in{" "}
+              {!graphConfigured
+                ? "No workspace graph yet."
+                : "Workspace graph is not loaded."}
+            </span>
+            <div className="setup-banner-actions">
               <button
                 type="button"
-                className="demo-banner-link"
+                className="setup-banner-link"
+                onClick={() => setActive("scope")}
+              >
+                Open Scope
+              </button>
+              <button
+                type="button"
+                className="setup-banner-link"
                 onClick={() => setActive("settings")}
               >
                 Settings
-              </button>{" "}
-              to get started.
-            </span>
-            <button type="button" className="demo-banner-close" onClick={dismissBanner} aria-label="Dismiss">
-              ✕
-            </button>
+              </button>
+            </div>
           </div>
         )}
         <nav className="cockpit-tabs">

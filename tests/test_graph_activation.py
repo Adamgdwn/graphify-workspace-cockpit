@@ -36,13 +36,13 @@ def _patch_graph_state(monkeypatch, tmp_path: Path) -> tuple[Path, Path, Path]:
     monkeypatch.setattr(main, "SETTINGS_FILE", settings_file)
     monkeypatch.setattr(main, "SEMANTIC_EDGES_FILE", semantic_edges_file)
     monkeypatch.setattr(main, "_DEMO_GRAPH", str(demo_graph))
-    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(demo_graph))
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", "")
     monkeypatch.setattr(main, "_graph_cache", None)
     monkeypatch.setattr(main, "_summary_cache", {})
     return demo_graph, uploaded_graph, settings_file
 
 
-def test_activate_demo_graph_by_listed_name(monkeypatch, tmp_path: Path) -> None:
+def test_bundled_demo_graph_is_not_activatable(monkeypatch, tmp_path: Path) -> None:
     demo_graph, uploaded_graph, settings_file = _patch_graph_state(monkeypatch, tmp_path)
     client = TestClient(main.app)
     activate_uploaded = client.post(f"/graphs/{quote(uploaded_graph.name)}/activate")
@@ -50,9 +50,9 @@ def test_activate_demo_graph_by_listed_name(monkeypatch, tmp_path: Path) -> None
 
     response = client.post(f"/graphs/{quote(demo_graph.name)}/activate")
 
-    assert response.status_code == 200
-    assert response.json() == {"activated": demo_graph.name, "path": str(demo_graph)}
-    assert json.loads(settings_file.read_text())["graph_path"] == str(demo_graph)
+    assert response.status_code == 404
+    assert response.json()["detail"] == f"Graph '{demo_graph.name}' not found."
+    assert json.loads(settings_file.read_text())["graph_path"] == str(uploaded_graph)
 
 
 def test_activate_uploaded_graph_by_listed_name(monkeypatch, tmp_path: Path) -> None:

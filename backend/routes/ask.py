@@ -59,7 +59,7 @@ def parse_query_output(raw: str) -> tuple[str, list[dict]]:
     header = lines[0] if lines else raw
     evidence: list[dict] = []
     pattern = re.compile(
-        r"^NODE\s+(.+?)\s+\[src=(.+?)\s+loc=(L\d+)\s+community=([^\]]*)\]"
+        r"^NODE\s+(.+?)\s+\[src=(.*?)\s+loc=([^\s\]]*)\s+community=([^\]]*)\]"
     )
     for line in lines[1:]:
         m = pattern.match(line.strip())
@@ -68,10 +68,17 @@ def parse_query_output(raw: str) -> tuple[str, list[dict]]:
                 {
                     "label": m.group(1).strip(),
                     "src": m.group(2),
-                    "loc": m.group(3),
+                    "loc": m.group(3) or None,
                     "community": m.group(4).strip(),
                 }
             )
+    if not evidence:
+        start_match = re.search(r"Start:\s*\[(.*?)\]", header)
+        if start_match:
+            for item in re.findall(r"'([^']+)'|\"([^\"]+)\"", start_match.group(1)):
+                label = item[0] or item[1]
+                if label:
+                    evidence.append({"label": label.strip()})
     return header, evidence
 
 
@@ -118,6 +125,11 @@ def suggestions(question: str, mode: Mode, evidence: list[dict]) -> list[str]:
 
 def answer_question(req: AskRequest, deps: AskDeps) -> AskResponse:
     graph = deps.graph_path()
+    if not graph:
+        raise HTTPException(
+            status_code=503,
+            detail="This instance does not have a workspace graph yet.",
+        )
     if not Path(graph).exists():
         raise HTTPException(
             status_code=503,

@@ -23,6 +23,23 @@ changed, or fixed in that chunk.
 - Saved-scope rebuilds now allow explicitly included child folders under excluded parent paths.
 - Running semantic analysis no longer shows a stale red "not run" alert while work is in progress.
 
+## Windows Semantic Map Closeout (2026-06-21)
+
+### Added
+- Native Windows restart helper: `launcher\restart-cockpit.bat`
+- `-Restart` support in `launcher\launch-cockpit.ps1` for refreshing the backend and frontend listeners after pulls or code changes
+- Semantic Link inspector decision options for clicked bright semantic Evidence links
+
+### Changed
+- Windows launcher path is now documented as a usable local review and recording flow
+- Demo checklist and recording notes now include Windows smoke commands and the semantic-link inspector walkthrough
+- Relationship-map handoff marks this as a Windows-usable owner video verification build
+
+### Verified
+- Backend tests: `102 passed`
+- Frontend production build: `npm run build`
+- Native launcher restart, runtime health, Ollama model detection, current semantic cache, and overlap summary loading on Windows
+
 ## Chunk Thirty — Decision Packet View (2026-06-15)
 
 ### Added

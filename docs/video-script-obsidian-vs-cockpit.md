@@ -1,6 +1,6 @@
 # Video Script: From One Folder to a Cross-Repo Decision Map
 
-Last Updated: 2026-06-21T19:34:50-06:00
+Last Updated: 2026-06-21T20:01:05-06:00
 
 Recording state 2026-06-21: second video ready. The latest Map pass lets the
 operator run Semantic Analysis directly from the map, keeps visible semantic
@@ -295,6 +295,10 @@ workspace root away from this.
 
 ## Recording Notes
 
+- **Windows perspective variant:** start with the Windows launcher visible if
+  useful: `launcher\launch-cockpit.bat` opens the cockpit, and
+  `launcher\restart-cockpit.bat` refreshes both local services after code pulls.
+  This is now a usable native Windows build, not just a Linux recording port.
 - **Read live numbers off the Command tab; don't hardcode them.** Counts drift
   every time the graph is rebuilt. The script deliberately uses round phrasing
   ("around forty thousand nodes," "over twenty-two thousand") so it stays true
@@ -305,13 +309,11 @@ workspace root away from this.
   oversized `/graph/full` requests with the message "Full evidence graph is too
   large for default browser rendering. Use the overview/drilldown map or narrow
   the workspace scope." You can trigger it live on the full workspace.
-- **The scope claim in Section 3 is verifiable, so state it confidently.** The
-  graph is built from exactly one root, recorded in
-  `Tools/graphify/workspace/out/.graphify_root` (currently
-  `/home/adamgoodwin/code`). It recurses every repo *under* that folder and
-  nothing outside it; ignores live in `Tools/graphify/workspace/.graphifyignore`
-  (git internals, `.env`/keys, `node_modules`, build output). Say "every repo
-  under one folder I choose," never "the whole drive" — the latter is false.
+- **The scope claim in Section 3 is verifiable, so state it confidently.** Show
+  the active Scope/Command status or runtime graph path and say "every repo under
+  one folder I choose," never "the whole drive." On the Windows recording build,
+  the active graph is local to the selected project/workspace folder and the
+  OneDrive account roots are not part of the active scan.
 - **The staged build (Section 3) maps to Slices 1–5** in
   `docs/relationship-map-plan.md` (summary layer → broad overlap → gap triage →
   importance lens → decision overlay) plus the comparison-layout + constant-size
@@ -324,6 +326,11 @@ workspace root away from this.
   drift, shared pattern, intentional reference, or cross-app similarity. If the
   button shows something like `Semantic (0/14)`, read it as 0 actionable links out
   of 14 raw in-scope matches, not as a failure.
+- **Clicked semantic links now have a decision brief.** In Evidence/full view,
+  click a bright semantic edge and show the `Semantic Link` drawer: actionability,
+  similarity, why it matters, decision signals, endpoints, provenance, and
+  options such as canonicalize, bridge, compare, document, dismiss, or choose a
+  source of truth.
 - **Do not force a semantic-link demo from a bad scope.** After the June 20 video
   shoot, the honest recording lesson is that many scopes should show zero
   actionable semantic overlap. For a visible semantic demo, use a current
@@ -335,8 +342,9 @@ workspace root away from this.
   built against a broader or different graph. Say "the stored cache is broader
   than this selected folder," then rerun Semantic Analysis for the recording scope
   if you need fresh cross-folder links.
-- **Smoke-check before recording:**
-  `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs` — verifies
+- **Smoke-check before recording:** on Windows, run
+  `node scripts/demo-path-smoke.mjs`; on Linux/macOS, run
+  `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs`. This verifies
   backend health, graph summary, Ask evidence, and the core endpoints. Full demo
   preconditions are in `docs/demo-path-checklist.md`.
 - **What to narrate vs. show:** Sections 1–2 can be mostly narrated over a small

@@ -82,6 +82,52 @@ def test_run_graphify_update_maps_command_failure(monkeypatch, tmp_path: Path) -
     assert exc.value.to_detail()["stderr"] == "bad graph path"
 
 
+def test_run_graphify_extract_builds_provider_command(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(service.shutil, "which", lambda _name: "/usr/bin/graphify")
+    calls: list[dict] = []
+
+    def fake_run(*args, **kwargs):
+        calls.append({"args": args, "kwargs": kwargs})
+        return subprocess.CompletedProcess(
+            args=args[0],
+            returncode=0,
+            stdout="ok",
+            stderr="",
+        )
+
+    monkeypatch.setattr(service.subprocess, "run", fake_run)
+
+    result = service.run_graphify_extract(
+        tmp_path,
+        cwd=tmp_path,
+        backend="openai",
+        model="gpt-4.1",
+        timeout=42,
+        api_timeout=30,
+        max_concurrency=1,
+    )
+
+    assert result.returncode == 0
+    assert calls[0]["args"][0] == [
+        "/usr/bin/graphify",
+        "extract",
+        str(tmp_path),
+        "--backend",
+        "openai",
+        "--model",
+        "gpt-4.1",
+        "--mode",
+        "deep",
+        "--max-concurrency",
+        "1",
+        "--api-timeout",
+        "30",
+        "--no-cluster",
+    ]
+    assert calls[0]["kwargs"]["cwd"] == str(tmp_path)
+    assert calls[0]["kwargs"]["timeout"] == 42
+
+
 def test_ask_endpoint_returns_structured_graphify_error(monkeypatch, tmp_path: Path) -> None:
     graph = tmp_path / "graph.json"
     graph.write_text('{"nodes": [], "links": []}')
@@ -264,6 +310,86 @@ def test_rebuild_with_workspace_scope_scans_and_activates_filtered_graph(
     assert summary["workspace_scope"]["included_paths"] == [str(app), str(excluded)]
     assert summary["workspace_scope"]["excluded_paths"] == [str(excluded)]
     assert main._REBUILD_STATUS["status"] == "complete"
+
+
+def test_scoped_rebuild_elevates_when_local_decider_requests_it(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    state_dir = tmp_path / "state"
+    workspace_root = tmp_path / "code"
+    app = workspace_root / "app"
+    app.mkdir(parents=True)
+    (app / "src").mkdir()
+    (app / "src" / "main.py").write_text("print('ok')")
+    repo_root.mkdir()
+    state_dir.mkdir()
+
+    scope_file = state_dir / "workspace-scope.json"
+    settings_file = state_dir / "settings.json"
+    scope_file.write_text(json.dumps({
+        "root": str(workspace_root),
+        "profile_name": "Elevated Scope",
+        "included_paths": [str(app)],
+        "excluded_paths": [],
+    }))
+
+    monkeypatch.setattr(main, "_REPO_ROOT", repo_root)
+    monkeypatch.setattr(main, "WORKSPACE_SCOPE_FILE", scope_file)
+    monkeypatch.setattr(main, "SCAN_DIRS_FILE", state_dir / "scan-dirs.json")
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings_file)
+    monkeypatch.setattr(main, "_REBUILD_STATUS", {"status": "idle", "last_run": None})
+    monkeypatch.setattr(main, "GRAPH_ESCALATION_ENABLED", True)
+    monkeypatch.setattr(main, "GRAPH_ESCALATION_BACKEND", "openai")
+    monkeypatch.setattr(main, "GRAPH_ESCALATION_MODEL", "gpt-4.1")
+    monkeypatch.setattr(
+        main,
+        "_call_ollama",
+        lambda *_args, **_kwargs: '{"route":"elevated","reason":"needs semantic extraction"}',
+    )
+
+    update_calls: list[tuple[str, str]] = []
+    extract_calls: list[tuple[str, str, str, str]] = []
+
+    def fake_run_graphify_update(target, *, cwd=None, timeout=300):
+        update_calls.append((str(target), str(cwd)))
+        return service.GraphifyCommandResult(["graphify", "update"], 0, "", "")
+
+    def fake_run_graphify_extract(
+        target,
+        *,
+        cwd=None,
+        backend,
+        model=None,
+        mode="deep",
+        timeout=1800,
+        api_timeout=600,
+        max_concurrency=2,
+        no_cluster=True,
+    ):
+        extract_calls.append((str(target), str(cwd), backend, model or ""))
+        graph_path = Path(cwd) / "graphify-out" / "graph.json"
+        graph_path.parent.mkdir(parents=True, exist_ok=True)
+        graph_path.write_text(json.dumps({
+            "nodes": [{"id": "keep", "label": "main.py", "source_file": "src/main.py"}],
+            "links": [],
+        }))
+        return service.GraphifyCommandResult(["graphify", "extract"], 0, "", "")
+
+    monkeypatch.setattr(main, "run_graphify_update", fake_run_graphify_update)
+    monkeypatch.setattr(main, "run_graphify_extract", fake_run_graphify_extract)
+
+    main._run_rebuild()
+
+    assert update_calls == []
+    assert extract_calls == [(str(app), str(app), "openai", "gpt-4.1")]
+    assert main._REBUILD_STATUS["status"] == "complete"
+    assert main._REBUILD_STATUS["route"] == "elevated"
+    assert main._REBUILD_STATUS["escalation"]["decision_source"] == "ollama"
+    active_path = json.loads(settings_file.read_text())["graph_path"]
+    active_graph = json.loads(Path(active_path).read_text())
+    assert [node["id"] for node in active_graph["nodes"]] == ["keep"]
 
 
 def test_scoped_rebuild_repairs_duplicate_graphify_node_ids(tmp_path: Path) -> None:
@@ -456,6 +582,58 @@ def test_semantic_edges_from_embeddings_keeps_mutual_top_neighbors() -> None:
         frozenset(("beta", "beta-copy")),
     }
     assert all(edge["similarity"] >= 0.86 for edge in edges)
+
+
+def test_semantic_source_window_prefers_node_source_root(monkeypatch, tmp_path: Path) -> None:
+    app_repo = tmp_path / "cockpit"
+    source_repo = tmp_path / "code" / "project"
+    app_repo.mkdir()
+    source_repo.mkdir(parents=True)
+    (app_repo / "README.md").write_text("wrong cockpit readme\n")
+    (source_repo / "README.md").write_text("right project readme\n")
+    monkeypatch.setattr(main, "_configured_source_roots", lambda: [app_repo, source_repo])
+
+    text = main._read_source_window("README.md", str(source_repo))
+
+    assert text == "right project readme"
+
+
+def test_embed_text_batch_ollama_uses_batch_endpoint(monkeypatch) -> None:
+    calls: list[tuple[str, dict, int]] = []
+
+    def fake_post(url: str, payload: dict, timeout: int) -> dict:
+        calls.append((url, payload, timeout))
+        return {"embeddings": [[1, "2"], [3.5, 4]]}
+
+    monkeypatch.setattr(main, "_post_ollama_json", fake_post)
+
+    vectors = main._embed_text_batch_ollama("embedder", ["alpha", "beta"], "http://ollama")
+
+    assert vectors == [[1.0, 2.0], [3.5, 4.0]]
+    assert calls == [
+        ("http://ollama/api/embed", {"model": "embedder", "input": ["alpha", "beta"]}, 180)
+    ]
+
+
+def test_embed_text_batch_ollama_falls_back_to_legacy_endpoint(monkeypatch) -> None:
+    calls: list[tuple[str, dict, int]] = []
+
+    def fake_post(url: str, payload: dict, timeout: int) -> dict:
+        calls.append((url, payload, timeout))
+        if url.endswith("/api/embed"):
+            raise OSError("batch endpoint unavailable")
+        return {"embedding": [len(str(payload["prompt"])), 1]}
+
+    monkeypatch.setattr(main, "_post_ollama_json", fake_post)
+
+    vectors = main._embed_text_batch_ollama("embedder", ["alpha", "beta"], "http://ollama")
+
+    assert vectors == [[5.0, 1.0], [4.0, 1.0]]
+    assert calls == [
+        ("http://ollama/api/embed", {"model": "embedder", "input": ["alpha", "beta"]}, 180),
+        ("http://ollama/api/embeddings", {"model": "embedder", "prompt": "alpha"}, 90),
+        ("http://ollama/api/embeddings", {"model": "embedder", "prompt": "beta"}, 90),
+    ]
 
 
 def test_graph_endpoints_preserve_scoped_signal_metadata(monkeypatch, tmp_path: Path) -> None:
@@ -1086,6 +1264,8 @@ def test_ask_evidence_is_enriched_from_scoped_visible_graph(monkeypatch, tmp_pat
                 "source_root": str(app_a),
                 "source_root_name": "app-a",
                 "repo_project_name": "app-a",
+                "importance_tier": "evidence",
+                "signal_tier": "evidence",
             },
             {
                 "id": "lock",
@@ -1095,6 +1275,8 @@ def test_ask_evidence_is_enriched_from_scoped_visible_graph(monkeypatch, tmp_pat
                 "source_root": str(app_a),
                 "source_root_name": "app-a",
                 "repo_project_name": "app-a",
+                "importance_tier": "hidden",
+                "signal_tier": "hidden",
             },
         ],
         "links": [{"source": "readme", "target": "lock", "relation": "mentions"}],
@@ -1132,7 +1314,7 @@ def test_ask_evidence_is_enriched_from_scoped_visible_graph(monkeypatch, tmp_pat
     assert [item["label"] for item in evidence] == ["README"]
     assert evidence[0]["repo"] == "app-a"
     assert evidence[0]["community"] == "app-a"
-    assert evidence[0]["signal_tier"] == "important"
+    assert evidence[0]["signal_tier"] == "evidence"
 
 
 def test_graph_context_describes_scope_exclusions_and_token_savings(monkeypatch, tmp_path: Path) -> None:

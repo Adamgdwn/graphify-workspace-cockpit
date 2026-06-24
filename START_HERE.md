@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-21T19:34:50-06:00
-Status: second video ready after semantic decision-link polish; boxed for night
+Last Updated: 2026-06-23T09:57:48-06:00
+Status: automatic graph escalation drafted and documentation boxed up; owner verification next
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,15 +12,26 @@ historical build log by default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/session-handoff-2026-06-21.md` for the latest shutdown note.
+3. Read `docs/session-handoff-2026-06-23.md` for the latest shutdown note.
 4. Read `docs/relationship-map-plan.md`.
-5. Start with owner review or post-review tuning unless Adam redirects.
+5. Start with owner verification of automatic graph escalation or post-review tuning unless Adam redirects.
 6. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
 7. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 8. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
 
 ## State at Pause
+
+Handoff 2026-06-23T09:57:48-06:00: automatic graph escalation is implemented
+behind explicit environment configuration. Map generation now routes through a
+local Ollama decision (`local` vs `elevated`) with heuristic fallback, then runs
+either `graphify update --no-cluster` or configured `graphify extract --backend
+... --no-cluster`. Default behavior remains local-only. Docs/control records
+were updated, including ADR-009, model registry, tool matrix, architecture,
+runbook, README/env examples, and Windows work tracking. Validation passed:
+focused graph service tests, full backend tests, backend compile, frontend
+typecheck, frontend build, and `git diff --check`. Live elevated provider
+execution remains unverified until credentials are configured.
 
 Night closeout 2026-06-20: Adam shot the video and likes the project direction.
 The day focused on relationship-map polish, not a rebuild. Pushed commits on

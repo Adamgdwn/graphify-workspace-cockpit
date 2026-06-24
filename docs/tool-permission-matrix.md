@@ -2,14 +2,15 @@
 
 Document ID: TPM-001
 Status: current
-Last Updated: 2026-06-15
+Last Updated: 2026-06-23
 
 Applies to all backend tools and agent actions in this cockpit.
 
 | Tool | Purpose | Allowed Actions | Prohibited Actions | Approval Required | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Read graph.json | Load workspace graph for queries and map rendering | Read user-selected local graph.json | Read any file not explicitly selected by user | No | User selects path at startup or in settings |
-| Graphify CLI | Run query, path, explain against loaded graph | `graphify query`, `graphify path`, `graphify explain` | `graphify update`, `graphify init`, any mutation subcommand | No | Subprocess only; no shell expansion from user input |
+| Graphify CLI | Run query, path, explain against loaded graph and rebuild selected workspace graphs | `graphify query`, `graphify path`, `graphify explain`, `graphify update --no-cluster` for selected scope rebuild | `graphify init`, hook installation, arbitrary mutation subcommands | No | Subprocess only; no shell expansion from user input |
+| Graphify elevated extract | Optional stronger graph extraction for broad or hard selected scopes | `graphify extract --backend <configured> --no-cluster` against user-selected scan roots when `GRAPH_ESCALATION_ENABLED=true` | Use unconfigured providers; send env files, secrets, or unselected paths; run without explicit env configuration | No per run after env opt-in | Local Ollama makes a quick route decision; heuristic fallback is used if Ollama is unavailable |
 | Read workspace files | Load file content for Ask context | Read files within user-selected roots | Read secrets, .env files, or files outside selected roots | No for reads within selected roots | Selected roots configured in settings; .env and secrets excluded at all times |
 | Write decision state | Persist decision records | Write to `workspace/state/decisions.json` | Write outside `workspace/state/` | No | App-internal state only |
 | Write recommendation state | Persist recommendation cards | Write to `workspace/state/recommendations/` | Write outside `workspace/state/` | No | Cards are proposals only; no action is triggered by writing them |

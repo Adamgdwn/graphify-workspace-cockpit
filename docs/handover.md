@@ -1,7 +1,7 @@
 # Handover — Graphify Workspace Cockpit
 
-Status: superseded archive — 0-to-1 decision-flow polish evidence
-Date: 2026-06-17
+Status: living archive — 0-to-1 decision-flow evidence plus current restart notes
+Date: 2026-06-23
 Owner: Adam Goodwin
 
 ---
@@ -60,6 +60,35 @@ Agents AG-001, AG-002, AG-003, and AG-005 cannot mutate workspace files. Only AG
 
 ## Current State at Pause
 
+### 2026-06-23 Update - Automatic Graph Escalation
+
+The current Windows-side build has automatic graph escalation drafted behind an
+explicit env gate. Workspace map generation now makes a quick local Ollama
+route decision and records the result in `/graph/rebuild/status`.
+
+- Default path remains local-only.
+- With `GRAPH_ESCALATION_ENABLED=true` and `GRAPH_ESCALATION_BACKEND` set, the
+  backend can elevate selected graph generation to Graphify `extract --backend
+  <provider> --no-cluster`.
+- If the local Ollama router is unavailable or returns invalid JSON,
+  deterministic source-file/root-count heuristics choose the route.
+- Both local and elevated routes pass through the existing workspace-scope
+  filtering, merge, graph activation, and semantic-cache clearing path.
+- ADR-009 records the decision and rollback path.
+
+Validation for this update:
+
+- `backend\.venv\Scripts\python.exe -m pytest tests -q`: 104 passed.
+- `backend\.venv\Scripts\python.exe -m compileall -q backend`: passed.
+- `npm --prefix frontend run typecheck`: passed.
+- `npm --prefix frontend run build`: passed.
+- `git diff --check`: passed with Windows LF/CRLF warnings only.
+
+Live elevated provider execution is not yet verified; configure provider
+credentials and generate a broad workspace map to validate the route in practice.
+
+### 0-to-1 Archive State
+
 The cockpit is fully functional for the current local demo path. All 26 chunks
 in the documented build pathway are complete, with the current decision-flow
 polish path marked integration complete. Project completion and release
@@ -88,15 +117,18 @@ decisions remain Adam's call after hands-on testing.
 - Markdown rendering for Ask and Chat responses
 - Graph rebuild progress streaming (currently polls status endpoint)
 - Mobile layout below 768px
-- Hosted model adapters (Claude API, OpenAI) — requires separate ADR
+- Hosted chat/recommendation adapters (Claude API, OpenAI) — requires separate
+  ADR; graph generation escalation is covered separately by ADR-009
 
 ---
 
 ## How To Resume
 
-1. Open this repo: `cd /home/adamgoodwin/code/agents/graphify-workspace-cockpit`
+1. Open this repo: `cd "C:\Users\adamg\01. Code Projects\Enhanced Graphify"` on
+   Windows, or the matching Linux workspace path when working there.
 2. Run `git status --short` and read `AGENTS.md` plus `START_HERE.md`.
-3. Read `docs/relationship-map-plan.md` for the active continuation path.
+3. Read `docs/session-handoff-2026-06-23.md` and
+   `docs/relationship-map-plan.md` for the active continuation path.
 4. Open this handover, `docs/workspace-scope-and-signal-plan.md`, `docs/current-build-pathway.md`, or `docs/stabilization-plan.md` only for historical evidence or regression context.
 5. Use `docs/context-map.md` to select which docs to load for the task.
 
@@ -122,6 +154,7 @@ decisions remain Adam's call after hands-on testing.
 | Context routing map | `docs/context-map.md` |
 | Deployment and env vars | `docs/deployment-guide.md` |
 | Cloud + Supabase setup | `docs/integration-guide.md` |
+| Automatic graph escalation decision | `docs/adr-009-automatic-graph-escalation.md` |
 | App state | `workspace/state/` |
 | Demo graph | `workspace/demo/graph.json` |
 | Real workspace graph | `graphify-out/graph.json` |

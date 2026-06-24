@@ -2,7 +2,7 @@
 
 Document ID: AGT-INV-001
 Status: current
-Last Updated: 2026-06-14
+Last Updated: 2026-06-23
 
 | Agent ID | Name | Purpose | Autonomy | Model | Owner | Status |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -11,6 +11,7 @@ Last Updated: 2026-06-14
 | AG-003 | Steady Work Agent | Run bounded background analysis missions: find archive candidates, identify duplicated build surfaces, rank next-build candidates, find weak docs/tests; write recommendation cards only, no file mutations | A1 (write to `state/recommendations/` only) | Ollama local | Adam Goodwin | Implemented (Chunk 7) |
 | AG-004 | Action Executor | Execute approved actions from work queue with dry-run first, explicit approval gate, rollback note, and execution report | A2 (requires explicit human approval before execution) | N/A (shell/git subprocess) | Adam Goodwin | Implemented (Chunk 8) |
 | AG-005 | AI Assistant | Stream conversational responses from Ollama using cluster-filtered graph context; read-only; cannot trigger actions, decisions, or mutations; session records saved to `state/chat-sessions/` | A1 (read-only) | Ollama local (required for chat) | Adam Goodwin | Implemented (Chunk 17) |
+| AG-006 | Graph Build Router | Decide whether selected workspace graph generation should stay local or use configured elevated Graphify extraction | A1 for local routing; external call only when `GRAPH_ESCALATION_ENABLED=true` and provider credentials are configured | Ollama local router plus configured Graphify extract backend | Adam Goodwin | Implemented (2026-06-23) |
 
 ## Autonomy Level Reference
 
@@ -22,5 +23,6 @@ Last Updated: 2026-06-14
 
 - AG-001 through AG-003 and AG-005 are safe by construction: they cannot mutate workspace files or call external services.
 - AG-004 is gated: enabled only after dry-run infrastructure and approval UI are validated.
+- AG-006 is disabled by default for external calls. When enabled, it may send selected graph extraction context to the configured provider and records the routing decision in rebuild status.
 - All agents log to `workspace/state/sessions/` (Ask) or `workspace/state/chat-sessions/` (AI Assistant).
-- Model is Ollama-local for all agents. If Ollama is unreachable, AG-001 returns graph-only results; AG-002 and AG-005 return an error message; AG-003 skips synthesis.
+- Model is Ollama-local for Ask, recommendations, steady work, chat, and the graph routing decision. If Ollama is unreachable, AG-006 falls back to size/root heuristics.

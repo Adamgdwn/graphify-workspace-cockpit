@@ -34,6 +34,15 @@ export interface WorkspaceScopeProfile {
   };
 }
 
+interface WorkspaceRootSuggestions {
+  platform: string;
+  initial_root: string;
+  roots: string[];
+  repo_root: string;
+  state_dir: string;
+  graph_path: string;
+}
+
 interface WorkspaceScopeInspect {
   root: {
     name: string;
@@ -56,6 +65,14 @@ interface RebuildStatus {
   last_run: string | null;
   error?: string | null;
   code?: string | null;
+  route?: "evaluating" | "local" | "elevated" | null;
+  escalation?: {
+    route?: "local" | "elevated";
+    decision_source?: string;
+    reason?: string;
+    backend?: string | null;
+    model?: string | null;
+  } | null;
 }
 
 interface WorkspaceScopePickerProps {
@@ -69,18 +86,6 @@ interface WorkspaceScopePickerProps {
   onGenerated?: () => void;
   onProfileSaved?: (profile: WorkspaceScopeProfile) => void;
 }
-
-const DEFAULT_ROOT_OPTIONS = [
-  "/",
-  "/home/adamgoodwin",
-  "/home/adamgoodwin/code",
-  "/home/adamgoodwin/code/agents",
-  "/home/adamgoodwin/code/Applications",
-  "/home/adamgoodwin/code/Tools",
-  "/home/adamgoodwin/code/Infrastructure",
-  "/mnt",
-  "/media",
-];
 
 const EVIDENCE_NODE_LIMIT = 15000;
 
@@ -115,6 +120,15 @@ function defaultExpandedPaths(tree: WorkspaceScopeNode): Set<string> {
 
 function uniqueOptions(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.map((value) => value?.trim()).filter(Boolean) as string[])];
+}
+
+function rebuildStatusText(status: RebuildStatus): string {
+  if (status.route === "elevated") {
+    const backend = status.escalation?.backend ? ` via ${status.escalation.backend}` : "";
+    return `Elevated graph extraction is running${backend}.`;
+  }
+  if (status.route === "local") return "Local graph generation is running.";
+  return "Choosing the graph generation route...";
 }
 
 function normalizedPathList(values: Iterable<string> | undefined): string[] {
@@ -210,6 +224,12 @@ function requestWorkspaceScopeInspection(root: string, maxDepth: number): Promis
   return request;
 }
 
+async function requestWorkspaceRootSuggestions(): Promise<WorkspaceRootSuggestions> {
+  const response = await apiFetch(`/workspace-scope/suggested-roots`);
+  if (!response.ok) throw new Error(await apiErrorMessage(response));
+  return response.json() as Promise<WorkspaceRootSuggestions>;
+}
+
 export function WorkspaceScopePicker({
   mode = "settings",
   title = "Workspace Scope",
@@ -217,7 +237,7 @@ export function WorkspaceScopePicker({
   generateLabel = "Generate Map",
   autoInspectSavedProfile,
   restoreSavedSelection,
-  initialRoot = "/home/adamgoodwin/code",
+  initialRoot,
   onGenerated,
   onProfileSaved,
 }: WorkspaceScopePickerProps) {
@@ -238,10 +258,12 @@ export function WorkspaceScopePicker({
   const [generating, setGenerating] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rootSuggestions, setRootSuggestions] = useState<WorkspaceRootSuggestions | null>(null);
+  const suggestedInitialRoot = rootSuggestions?.initial_root || initialRoot || "";
 
   const rootOptions = useMemo(
-    () => uniqueOptions([profile?.root, selectedRootOption, ...DEFAULT_ROOT_OPTIONS]),
-    [profile?.root, selectedRootOption],
+    () => uniqueOptions([profile?.root, selectedRootOption, initialRoot, ...(rootSuggestions?.roots ?? [])]),
+    [initialRoot, profile?.root, rootSuggestions?.roots, selectedRootOption],
   );
 
   const includedCount = included.size;
@@ -336,10 +358,10 @@ export function WorkspaceScopePicker({
       .then((data) => {
         setProfile(data.profile);
         if (!data.profile) {
-          if (mode === "startup") {
-            setRootInput(initialRoot);
-            setSelectedRootOption(initialRoot);
-            void inspectRoot(initialRoot, null);
+          if (mode === "startup" && suggestedInitialRoot) {
+            setRootInput(suggestedInitialRoot);
+            setSelectedRootOption(suggestedInitialRoot);
+            void inspectRoot(suggestedInitialRoot, null);
           }
           return;
         }
@@ -353,8 +375,15 @@ export function WorkspaceScopePicker({
           void inspectRoot(data.profile.root, shouldRestoreSavedSelection ? data.profile : null);
         }
       })
-      .catch(() => setProfile(null));
-  }, [initialRoot, inspectRoot, mode, shouldAutoInspectSavedProfile, shouldRestoreSavedSelection]);
+      .catch(() => {
+        setProfile(null);
+        if (mode === "startup" && suggestedInitialRoot) {
+          setRootInput(suggestedInitialRoot);
+          setSelectedRootOption(suggestedInitialRoot);
+          void inspectRoot(suggestedInitialRoot, null);
+        }
+      });
+  }, [inspectRoot, mode, shouldAutoInspectSavedProfile, shouldRestoreSavedSelection, suggestedInitialRoot]);
 
   useEffect(() => {
     loadSavedProfile();
@@ -362,6 +391,22 @@ export function WorkspaceScopePicker({
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [loadSavedProfile]);
+
+  useEffect(() => {
+    let alive = true;
+    requestWorkspaceRootSuggestions()
+      .then((data) => {
+        if (!alive) return;
+        setRootSuggestions(data);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setRootSuggestions(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   function handleRootOption(value: string) {
     setSelectedRootOption(value);
@@ -477,6 +522,9 @@ export function WorkspaceScopePicker({
           const statusResponse = await apiFetch(`/graph/rebuild/status`);
           if (!statusResponse.ok) throw new Error(await apiErrorMessage(statusResponse));
           const status = await statusResponse.json() as RebuildStatus;
+          if (status.status === "running") {
+            setMessage(rebuildStatusText(status));
+          }
           if (status.status === "complete") {
             clearInterval(pollRef.current!);
             pollRef.current = null;
@@ -584,12 +632,12 @@ export function WorkspaceScopePicker({
       ) : (
         <div className="scope-empty-tree">
           {inspecting ? (
-            <WorkingStatus label="Inspecting folders" detail={rootInput || initialRoot} />
+            <WorkingStatus label="Inspecting folders" detail={rootInput || suggestedInitialRoot} />
           ) : (
             <div className="scope-empty-row">
               <span className="scope-empty-expander">v</span>
               <input type="checkbox" disabled aria-label="Workspace folders loading" />
-              <span className="settings-mono">{rootInput || initialRoot}</span>
+              <span className="settings-mono">{rootInput || suggestedInitialRoot || "Choose a local folder"}</span>
               <span className="scope-state-badge scope-state-partial">choose root</span>
             </div>
           )}
@@ -644,7 +692,7 @@ export function WorkspaceScopePicker({
           className="settings-mono-input scope-root-input"
           value={rootInput}
           onChange={(event) => setRootInput(event.target.value)}
-          placeholder="/home/adamgoodwin/code"
+          placeholder={suggestedInitialRoot || "Choose a local folder path"}
           type="text"
           aria-label="Exact workspace path"
         />
@@ -755,7 +803,7 @@ export function WorkspaceScopePicker({
       {generating && (
         <WorkingStatus
           label="Generating workspace map"
-          detail="Watching the scoped rebuild"
+          detail={message || "Watching the scoped rebuild"}
         />
       )}
       {error && <p className="settings-err">{error}</p>}

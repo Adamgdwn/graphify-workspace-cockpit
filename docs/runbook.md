@@ -1,7 +1,7 @@
 # Runbook
 
 Status: current
-Last Updated: 2026-06-16
+Last Updated: 2026-06-21T20:01:05-06:00
 Owner: Adam Goodwin
 
 ## What This System Does In Operation
@@ -15,11 +15,24 @@ Neither process connects to the internet unless Supabase (`STORAGE_BACKEND=supab
 
 ## Starting the Cockpit
 
-**Via desktop launcher:** click "Graphify Cockpit" on the desktop. The launcher script starts both processes if not already running, waits for health checks, and opens the browser.
+**Via Windows launcher:** double-click `launcher\launch-cockpit.bat`. The launcher script starts both processes if not already running, waits for health checks, and opens the browser.
 
-**Via terminal:**
+After pulling updates or changing local cockpit code, double-click `launcher\restart-cockpit.bat` or run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File launcher\launch-cockpit.ps1 -Restart
+```
+
+The restart path stops only the cockpit listeners on ports 8000 and 5173, then starts them again.
+
+**Via Linux/macOS terminal:**
 ```bash
 bash /path/to/repo/scripts/start.sh
+```
+
+**Via Windows terminal:**
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File launcher\launch-cockpit.ps1
 ```
 
 **Via Docker:**
@@ -35,8 +48,9 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and Caddy
 curl http://localhost:8000/health
 ```
 
-Response includes `status`, `graph_loaded`, `demo_mode`, `graphify`, and
-`storage`. If `graph_loaded` is false, check `GRAPH_PATH` in `backend/.env`.
+Response includes `status`, `graph_configured`, `graph_loaded`, `demo_mode`,
+`graphify`, and `storage`. On a fresh instance, `graph_configured: false` means
+no workspace graph has been generated or uploaded yet.
 If `STORAGE_BACKEND=supabase` and `storage.ready` is false, apply the migration
 named in `storage.required_migration` after owner approval before using
 Supabase mode for hosted beta. Check Ollama separately with
@@ -59,11 +73,27 @@ runtime warning state that should be reviewed before hosted beta use.
 With both processes running, use the lightweight smoke gate before recording or
 handoff:
 
+Windows PowerShell:
+
+```powershell
+node scripts/demo-path-smoke.mjs
+```
+
+Linux/macOS:
+
 ```bash
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 ```
 
 If the app is bound to `localhost` instead of `127.0.0.1`, override the URLs:
+
+Windows PowerShell:
+
+```powershell
+$env:API_URL="http://localhost:8000"; $env:FRONTEND_URL="http://localhost:5173"; node scripts/demo-path-smoke.mjs
+```
+
+Linux/macOS:
 
 ```bash
 source "$HOME/.nvm/nvm.sh" && API_URL=http://localhost:8000 FRONTEND_URL=http://localhost:5173 node scripts/demo-path-smoke.mjs
@@ -91,7 +121,8 @@ source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_U
 | Symptom | Likely Cause | First Action |
 |---------|-------------|--------------|
 | Backend won't start | Missing `.venv` or `requirements.txt` changed | `cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt` |
-| `graph_loaded: false` in `/health` | `GRAPH_PATH` points to a missing or malformed file | Check `backend/.env` or `backend/.env.example`; default graph is `workspace/demo/graph.json` |
+| `graph_configured: false` in `/health` | Fresh instance with no workspace graph yet | Open Scope to generate a workspace graph or upload one in Settings |
+| `graph_configured: true` and `graph_loaded: false` in `/health` | `GRAPH_PATH` points to a missing or malformed file | Check `.env` for Docker or `backend/.env` for native runs |
 | Ask/Chat returns error | Ollama not running | `ollama serve` in a separate terminal; confirm model is pulled (`ollama list`) |
 | 401 Unauthorized | `API_KEY` is set but client isn't sending the header | Set `Authorization: Bearer <key>` or `X-API-Key: <key>`; or unset `API_KEY` for local-only use |
 | 429 Too Many Requests | Rate limit hit (60 req/min per IP) | Wait 60 seconds; `/health` is exempt |
@@ -102,6 +133,8 @@ source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_U
 | Frontend won't load | Port 5173 in use or Vite didn't start | Check `launcher/frontend.log`; kill stale process on that port |
 | `GRAPHIFY_MISSING` in Ask or rebuild | Graphify CLI is not installed or not on `PATH` | Run `pip install graphifyy`, rebuild Docker if applicable, then confirm `graphify --version` |
 | `GRAPHIFY_TIMEOUT` in Ask or rebuild | Graphify CLI exceeded the route timeout | Retry on a smaller graph or inspect the configured scan directories |
+| Rebuild never elevates | `GRAPH_ESCALATION_ENABLED` is false or no `GRAPH_ESCALATION_BACKEND` is configured | Set both env vars, configure the provider key expected by Graphify, restart the backend, then check `/graph/rebuild/status` |
+| Elevated rebuild fails | Provider key/model/backend is unavailable or Graphify extract timed out | Check `/graph/rebuild/status.detail`, provider env vars, and `GRAPH_ESCALATION_TIMEOUT`; roll back by setting `GRAPH_ESCALATION_ENABLED=false` |
 | Graph rebuild hanging | `graphify update` subprocess stalled | Check `GET /graph/rebuild/status`; kill backend and restart if stuck |
 
 ## Dependencies
@@ -119,7 +152,9 @@ source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_U
 
 If started with `start.sh`: press `Ctrl-C` — the trap kills both background processes.
 
-If started via the desktop launcher (`nohup`/`disown`):
+If started via the Windows launcher, use `launcher\restart-cockpit.bat` to refresh both services after code updates, or stop the listener processes on ports 8000 and 5173 from Task Manager.
+
+If started via the Linux desktop launcher (`nohup`/`disown`):
 ```bash
 pkill -f "uvicorn main:app"
 pkill -f "vite"
@@ -131,7 +166,7 @@ pkill -f "vite"
 
 **Corrupted state:** state files live in `workspace/state/`. They are JSON; delete the corrupted file and the backend will recreate it on next write. No data is truly lost — decisions, recommendations, and actions are only ever written; nothing auto-deletes.
 
-**Demo graph vs real graph:** if `demo_mode: true` in `/health` but you expect a real graph, set `GRAPH_PATH` to the absolute path of the real `graph.json` and restart the backend.
+**Active graph:** if `graph_configured: false`, the instance has no workspace graph yet. Generate one from Scope, upload one in Settings, or set `GRAPH_PATH` to an existing `graph.json` and restart the backend.
 
 ## Escalation
 

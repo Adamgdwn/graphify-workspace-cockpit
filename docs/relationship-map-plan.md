@@ -1,7 +1,7 @@
 # Relationship Map Plan
 
-Last Updated: 2026-06-21T19:34:50-06:00
-Status: second video ready; semantic decision-link polish boxed for night
+Last Updated: 2026-06-23T09:57:48-06:00
+Status: automatic graph escalation drafted; owner verification next
 Owner: Adam Goodwin
 
 ## Purpose
@@ -178,6 +178,32 @@ and readable, overlap defaults to a top action queue, clicked links explain thei
 endpoints and options, and the AI assistant can reason from the exact selected
 semantic link. Next work should be owner review/recording or very small copy/UI
 tuning only if the next pass exposes it.
+
+Windows closeout 2026-06-21T20:01:05-06:00: the final semantic-link inspector
+commit is pulled into the Windows build and the native launcher path is now
+usable for recording. The Windows launcher can start the cockpit from
+`launcher\launch-cockpit.bat`, and `launcher\restart-cockpit.bat` refreshes the
+backend/frontend listeners after pulls or code changes. Live verification on
+Windows passed backend tests, frontend build, launcher restart, runtime health,
+Ollama model detection, current semantic cache checks, and overlap summary
+loading. This is a good stop point for an owner-recorded Windows perspective
+video.
+
+Implementation note 2026-06-23T09:24:27-06:00: automatic graph escalation is
+now drafted for owner verification. Workspace map generation can make a quick
+local Ollama routing decision and, when `GRAPH_ESCALATION_ENABLED=true` plus a
+configured `GRAPH_ESCALATION_BACKEND` are present, run elevated Graphify
+`extract --no-cluster` instead of local `update --no-cluster`. The same
+scope-filter, merge, activation, and semantic-cache clearing path is preserved.
+Default behavior remains local-only.
+
+Closeout note 2026-06-23T09:57:48-06:00: the escalation work is boxed up in
+`docs/session-handoff-2026-06-23.md`, `docs/handover.md`, ADR-009, and the
+Windows `01 Work Tracking` ledger. Validation passed for backend tests,
+backend compile, frontend typecheck/build, diff whitespace, and
+`graphify update . --no-cluster` (1,765 nodes, 3,400 edges). Live elevated
+provider execution remains the owner-verification step once credentials are
+configured.
 
 Shutdown handoff 2026-06-18T22:45:26-06:00: see
 `docs/session-handoff-2026-06-18.md` for the compact restart packet. Slices 1-5,

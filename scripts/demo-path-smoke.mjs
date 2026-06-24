@@ -2,12 +2,13 @@
 
 import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
 const apiUrl = (process.env.API_URL ?? "http://127.0.0.1:8000").replace(/\/$/, "");
-const frontendUrl = (process.env.FRONTEND_URL ?? "http://127.0.0.1:5173").replace(/\/$/, "");
+const frontendUrl = (process.env.FRONTEND_URL ?? "http://localhost:5173").replace(/\/$/, "");
 const askQuestion = process.env.SMOKE_ASK_QUESTION ?? "What projects are in this workspace?";
 const smokeApiKey = process.env.SMOKE_API_KEY ?? process.env.API_KEY ?? "";
 
@@ -46,9 +47,40 @@ async function fetchJson(path, options = {}) {
   }
 }
 
+async function fetchStatus(path, options = {}) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), Number(process.env.SMOKE_TIMEOUT_MS ?? 15000));
+  try {
+    const response = await fetch(`${apiUrl}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(smokeApiKey ? { "X-API-Key": smokeApiKey } : {}),
+        ...(options.headers ?? {}),
+      },
+    });
+    const text = await response.text();
+    return { status: response.status, ok: response.ok, text };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function findChromium() {
+  const windowsCandidates = process.platform === "win32"
+    ? [
+        "chrome.exe",
+        "msedge.exe",
+        "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+        "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+        "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      ]
+    : [];
   const candidates = [
     process.env.CHROMIUM_BIN,
+    ...windowsCandidates,
     "chromium",
     "chromium-browser",
     "google-chrome",
@@ -56,7 +88,7 @@ async function findChromium() {
   ].filter(Boolean);
 
   for (const candidate of candidates) {
-    if (candidate.includes("/")) {
+    if (isAbsolute(candidate) || candidate.includes("/") || candidate.includes("\\")) {
       try {
         await access(candidate);
         return candidate;
@@ -65,8 +97,9 @@ async function findChromium() {
       }
     }
     try {
-      await execFileAsync("which", [candidate]);
-      return candidate;
+      const lookup = process.platform === "win32" ? "where.exe" : "which";
+      const { stdout } = await execFileAsync(lookup, [candidate]);
+      return stdout.trim().split(/\r?\n/)[0] || candidate;
     } catch {
       // Keep searching.
     }
@@ -82,7 +115,48 @@ function assertArray(value, name) {
 async function checkBackendContract() {
   const health = await fetchJson("/health");
   if (health?.status !== "ok") throw new Error(`unexpected health status ${health?.status}`);
-  pass("backend health", `demo_mode=${Boolean(health.demo_mode)}`);
+  pass("backend health", `graph_configured=${Boolean(health.graph_configured)}`);
+
+  if (!health.graph_configured) {
+    const runtime = await fetchJson("/runtime/status");
+    if (runtime?.state !== "not_ready") throw new Error(`expected not_ready for fresh instance, got ${runtime?.state}`);
+    if (runtime?.warnings?.[0]?.code !== "NO_GRAPH") throw new Error("fresh instance did not report NO_GRAPH");
+    pass("fresh instance readiness", runtime.summary ?? "No workspace graph yet");
+
+    const settings = await fetchJson("/settings");
+    if (settings?.graph_configured !== false) throw new Error("settings did not report graph_configured=false");
+    pass("settings empty graph", settings.graph_name ?? "No graph yet");
+
+    const graphs = assertArray(await fetchJson("/graphs"), "graphs");
+    pass("available graphs", `${graphs.length} instance graph${graphs.length === 1 ? "" : "s"} found`);
+
+    const ask = await fetchStatus("/ask", {
+      method: "POST",
+      body: JSON.stringify({ question: askQuestion, mode: "query" }),
+    });
+    if (ask.status !== 503 || !ask.text.includes("workspace graph")) {
+      throw new Error(`Ask empty-state response was unexpected: HTTP ${ask.status}: ${ask.text.slice(0, 120)}`);
+    }
+    pass("Ask empty state", "reports no workspace graph yet");
+
+    const recommendations = assertArray(await fetchJson("/recommendations"), "recommendations");
+    pass("recommendation queue", `${recommendations.length} records readable`);
+
+    const actions = assertArray(await fetchJson("/actions"), "actions");
+    pass("work queue actions", `${actions.length} records readable`);
+
+    const decisions = assertArray(await fetchJson("/decisions"), "decisions");
+    pass("decision ledger", `${decisions.length} records readable`);
+
+    const overlap = await fetchJson("/graph/overlap-report");
+    const overlapGroups = assertArray(overlap?.groups, "overlap.groups");
+    pass("overlap report", `${overlapGroups.length} groups readable`);
+    return;
+  }
+
+  if (!health.graph_loaded) {
+    throw new Error(`configured graph did not load: ${health.graph_error ?? "unknown error"}`);
+  }
 
   const summary = await fetchJson("/graph/summary");
   const summaryNodes = assertArray(summary?.nodes, "summary.nodes");
@@ -134,10 +208,14 @@ async function checkFrontendShell() {
     "Recommendations",
     "Work Queue",
     "Settings",
-    "Pending Recommendations",
+    "Current Map Recommendations",
     "Untriaged Overlaps",
     "Active Graph",
   ];
+  const health = await fetchJson("/health");
+  if (!health.graph_configured) {
+    requiredText.push("No graph yet");
+  }
 
   const missing = requiredText.filter((text) => !stdout.includes(text));
   if (missing.length) throw new Error(`missing frontend text: ${missing.join(", ")}`);
@@ -145,7 +223,7 @@ async function checkFrontendShell() {
 }
 
 async function main() {
-  console.log(`Demo path smoke check`);
+  console.log(`Workspace cockpit smoke check`);
   console.log(`API_URL=${apiUrl}`);
   console.log(`FRONTEND_URL=${frontendUrl}`);
   console.log(`SMOKE_API_KEY=${smokeApiKey ? "set" : "unset"}`);

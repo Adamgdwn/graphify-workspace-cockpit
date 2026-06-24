@@ -3,7 +3,7 @@ import { API_AUTH_ERROR_MESSAGE, apiErrorMessage, apiFetch } from "../api/client
 import { WorkingStatus } from "../components/WorkingStatus";
 import type { ActiveCockpitContext } from "../domain/cockpitContext";
 
-export type DashboardDestination = "map" | "recommendations" | "work-queue" | "settings";
+export type DashboardDestination = "scope" | "map" | "recommendations" | "work-queue" | "settings";
 
 type RecStatus = "pending" | "accepted" | "rejected" | "deferred";
 type ActionStatus = "pending" | "dry-run-ready" | "executed" | "failed";
@@ -89,9 +89,10 @@ interface RuntimeStatus {
   summary: string;
   backend: { online: boolean; version: string };
   graph: {
+    configured: boolean;
     valid: boolean;
     exists: boolean;
-    name: string;
+    name: string | null;
     node_count: number;
     link_count: number;
     error?: string | null;
@@ -215,7 +216,9 @@ function ReadinessPanel({
         {
           label: "Graph",
           ok: status.graph.valid,
-          detail: status.graph.valid
+          detail: !status.graph.configured
+            ? "No graph yet"
+            : status.graph.valid
             ? `${status.graph.node_count.toLocaleString()} nodes / ${status.graph.link_count.toLocaleString()} links`
             : status.graph.exists ? "Invalid" : "Missing",
         },
@@ -460,7 +463,7 @@ export function Dashboard({ onNavigate, onNavigateMapContext }: DashboardProps) 
 
         <section className="dash-section">
           <div className="dash-section-title">Active Graph</div>
-          <div className="dash-graph-name">{org.active_graph?.name ?? "No graph selected"}</div>
+          <div className="dash-graph-name">{org.active_graph?.name ?? "No graph yet"}</div>
           <div className="dash-graph-meta">
             {(org.graph_stats?.raw_node_count ?? 0).toLocaleString()} nodes
             {" · "}

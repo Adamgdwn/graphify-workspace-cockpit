@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Last Updated: 2026-06-19
+Last Updated: 2026-06-21T20:01:05-06:00
 
 This guide covers running the Graphify Workspace Cockpit beyond the default
 local dev setup — on a Windows machine via Docker Desktop, on a Linux server,
@@ -12,18 +12,46 @@ and optionally with HTTPS via Caddy.
 
 See the main [README](../README.md) Quick Start. The fastest path is the
 one-command launcher — `launcher/launch-cockpit.sh` on Linux/macOS,
-`launcher\launch-cockpit.bat` on Windows — which bootstraps and starts both
-services; `scripts/start.sh` is the manual equivalent. No Docker required.
+`launcher\launch-cockpit.bat` on Windows — which bootstraps dependencies,
+starts both services, waits for health checks, and opens the browser. No Docker
+required.
+
+---
+
+## Windows — Native Launcher
+
+Use this path for local Windows recording, review, and day-to-day use when
+Python 3.10+ and Node 18+ are on PATH.
+
+```powershell
+git clone https://github.com/Adamgdwn/graphify-workspace-cockpit.git
+cd graphify-workspace-cockpit
+launcher\launch-cockpit.bat
+```
+
+The launcher creates `backend\.venv`, installs backend and frontend
+dependencies when needed, loads optional `backend\.env` and `frontend\.env`,
+starts FastAPI on `http://127.0.0.1:8000`, starts Vite on
+`http://localhost:5173`, waits for health checks, and opens the browser.
+
+After pulling updates or changing code, refresh the running local services with:
+
+```powershell
+launcher\restart-cockpit.bat
+```
+
+This stops only the cockpit listeners on ports 8000 and 5173, then starts them
+again. It is the preferred Windows path for making sure the browser is serving
+the latest local build.
 
 ---
 
 ## Windows — Docker Desktop
 
-> **Non-Docker option:** there's now a best-effort native launcher — double-click
-> `launcher\launch-cockpit.bat` (needs Python 3.10+ and Node 18+ on PATH). It
-> isn't yet tested across native Windows setups, so the Docker path below remains
-> the verified option. A true double-click app with a native installer is planned
-> once usability on more machines is confirmed.
+> **Non-Docker option:** double-click `launcher\launch-cockpit.bat` for the
+> native Windows launcher. It needs Python 3.10+ and Node 18+ on PATH. Docker
+> Desktop remains useful when you want the same container path used for hosted
+> deployments.
 
 ### Prerequisites
 
@@ -45,14 +73,14 @@ git clone https://github.com/Adamgdwn/graphify-workspace-cockpit.git
 cd graphify-workspace-cockpit
 ```
 
-**2. Configure** (optional — demo graph is used by default):
+**2. Configure** (optional — first launch starts with no active graph):
 
 ```bash
-copy backend\.env.example .env
+copy .env.example .env
 ```
 
-Edit `.env` in Notepad to set `GRAPH_PATH` if you have a local graph, or leave
-it as-is to use the bundled demo.
+Edit `.env` in Notepad to set `GRAPH_PATH` if you already have a local graph,
+or leave it blank and generate/upload a workspace graph from the cockpit.
 
 **3. Start:**
 
@@ -78,6 +106,8 @@ Open `http://localhost:5173` in any browser. Backend API is at `http://localhost
   `host.docker.internal` is Docker Desktop's built-in alias for the host machine.
 - **Firewall**: Docker Desktop manages port exposure. No Windows Firewall rules
   are needed for localhost access.
+- **Native local use**: for a non-container recording or review session, prefer
+  the native launcher section above.
 
 ---
 
@@ -89,7 +119,7 @@ Same as Windows Docker above, but with native Docker (no Desktop required):
 sudo apt install docker.io docker-compose-plugin   # Debian/Ubuntu
 git clone https://github.com/Adamgdwn/graphify-workspace-cockpit.git
 cd graphify-workspace-cockpit
-cp backend/.env.example .env
+cp .env.example .env
 docker compose up --build -d
 ```
 
@@ -98,8 +128,7 @@ Access from the same machine: `http://localhost:5173`
 Access from another machine on the local network: `http://<server-ip>:5173`
 
 If you configure graph scan directories for Docker, mount those host paths into
-the backend container and use the in-container paths in Settings. The demo graph
-works without any additional mounts.
+the backend container and use the in-container paths in Settings.
 
 ---
 

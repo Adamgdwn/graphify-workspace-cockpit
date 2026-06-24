@@ -35,7 +35,7 @@ def _patch_empty_state(monkeypatch, tmp_path: Path) -> tuple[Path, Path]:
     monkeypatch.setattr(main, "RECOMMENDATIONS_DIR", state_dir / "recommendations")
     monkeypatch.setattr(main, "ACTION_QUEUE_DIR", state_dir / "action-queue")
     monkeypatch.setattr(main, "_DEMO_GRAPH", str(demo_graph))
-    monkeypatch.setattr(main, "DEFAULT_GRAPH", str(demo_graph))
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", "")
     monkeypatch.setattr(main, "_graph_cache", None)
     monkeypatch.setattr(main, "_summary_cache", {})
     monkeypatch.setattr(main, "_supabase_client", None)
@@ -128,7 +128,7 @@ def test_clean_empty_state_can_write_local_json_surfaces(monkeypatch, tmp_path: 
     session_file = main.SESSIONS_DIR / f"{ask.json()['session_id']}.json"
 
     chat_config = main.update_chat_config(
-        main.ChatConfigBody(system_prompt="Stay grounded.", model="phi4:latest")
+        main.ChatConfigBody(system_prompt="Stay grounded.", model="local-balanced:latest")
     )
     assert chat_config["system_prompt"] == "Stay grounded."
 

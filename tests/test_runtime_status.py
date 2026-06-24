@@ -119,6 +119,36 @@ def test_runtime_status_marks_missing_active_graph_not_ready(monkeypatch, tmp_pa
     assert body["next_best_action"]["destination"] == "settings"
 
 
+def test_runtime_status_reports_fresh_instance_without_graph(monkeypatch, tmp_path: Path) -> None:
+    state_dir = tmp_path / "state"
+    settings_file = state_dir / "settings.json"
+    state_dir.mkdir(parents=True, exist_ok=True)
+    settings_file.write_text("{}")
+
+    monkeypatch.setattr(main, "WORKSPACE_STATE", state_dir)
+    monkeypatch.setattr(main, "SETTINGS_FILE", settings_file)
+    monkeypatch.setattr(main, "DEFAULT_GRAPH", "")
+    monkeypatch.setattr(main, "API_KEY", "")
+    monkeypatch.setattr(main, "_graph_cache", None)
+    monkeypatch.setattr(main, "_summary_cache", {})
+    _patch_ready_dependencies(monkeypatch)
+    client = TestClient(main.app)
+
+    runtime = client.get("/runtime/status")
+    health = client.get("/health")
+
+    assert runtime.status_code == 200
+    body = runtime.json()
+    assert body["state"] == "not_ready"
+    assert body["summary"] == "This instance does not have a workspace graph yet."
+    assert body["graph"]["configured"] is False
+    assert body["warnings"][0]["code"] == "NO_GRAPH"
+    assert body["next_best_action"] == {"label": "Open Workspace Scope", "destination": "scope"}
+    assert health.status_code == 200
+    assert health.json()["graph_configured"] is False
+    assert health.json()["graph_loaded"] is False
+
+
 def test_runtime_status_marks_missing_optional_runtime_partial(monkeypatch, tmp_path: Path) -> None:
     _patch_runtime_graph(monkeypatch, tmp_path)
     _patch_ready_dependencies(monkeypatch)
@@ -168,6 +198,34 @@ def test_runtime_status_marks_missing_optional_runtime_partial(monkeypatch, tmp_
     assert "OLLAMA_UNAVAILABLE" in codes
     assert "CONNECTOR_AUTH_REQUIRED" in codes
     assert body["next_best_action"]["label"] == "Review Graphify setup"
+
+
+def test_runtime_status_warns_when_configured_ollama_model_is_missing(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    _patch_runtime_graph(monkeypatch, tmp_path)
+    _patch_ready_dependencies(monkeypatch)
+    monkeypatch.setattr(
+        main,
+        "ollama_status",
+        lambda: {
+            "connected": True,
+            "models": ["local-fast:latest"],
+            "url": "http://localhost:11434",
+            "chat_model": "local-balanced:latest",
+            "chat_model_available": False,
+        },
+    )
+    client = TestClient(main.app)
+
+    response = client.get("/runtime/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "partial"
+    assert body["warnings"][0]["code"] == "OLLAMA_MODEL_UNAVAILABLE"
+    assert body["warnings"][0]["action"]["destination"] == "settings"
 
 
 def test_runtime_status_reports_auth_requirement_after_authorized_request(

@@ -6,6 +6,7 @@ mapping out of the FastAPI route handlers.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -139,6 +140,32 @@ def run_graphify_update(
     )
 
 
+def run_graphify_extract(
+    target: str | Path,
+    *,
+    cwd: str | Path | None = None,
+    backend: str,
+    model: str | None = None,
+    mode: str | None = "deep",
+    timeout: int = 1800,
+    api_timeout: int = 600,
+    max_concurrency: int = 2,
+    no_cluster: bool = True,
+) -> GraphifyCommandResult:
+    args = ["extract", str(target), "--backend", backend]
+    if model:
+        args.extend(["--model", model])
+    if mode:
+        args.extend(["--mode", mode])
+    if max_concurrency > 0:
+        args.extend(["--max-concurrency", str(max_concurrency)])
+    if api_timeout > 0:
+        args.extend(["--api-timeout", str(api_timeout)])
+    if no_cluster:
+        args.append("--no-cluster")
+    return _run_graphify(args, cwd=cwd, timeout=timeout)
+
+
 def run_graphify_merge(
     graph_paths: Iterable[str | Path],
     *,
@@ -217,7 +244,13 @@ def _resolve_graphify(executable: str = GRAPHIFY_EXECUTABLE) -> str | None:
 
     # Launchers call `.venv/bin/uvicorn` directly without activating the venv,
     # so PATH may not include the sibling `graphify` console script.
-    candidate = Path(sys.executable).with_name(executable)
-    if candidate.is_file():
-        return str(candidate)
+    candidates = [Path(sys.executable).with_name(executable)]
+    if os.name == "nt" and not Path(executable).suffix:
+        candidates.extend(
+            Path(sys.executable).with_name(f"{executable}{suffix}")
+            for suffix in (".exe", ".cmd", ".bat")
+        )
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate)
     return None

@@ -199,6 +199,11 @@ EXCLUDED_DIR_REASONS = {
     "graphify-out": "Generated Graphify output is excluded before indexing.",
 }
 
+ONEDRIVE_ROOT_REASON = (
+    "OneDrive account roots are excluded to avoid hydrating cloud-only files; "
+    "select a narrower local subfolder instead."
+)
+
 MEDIA_EXTENSIONS = {
     ".avif",
     ".bmp",
@@ -299,6 +304,9 @@ def _basic_exclusion_reasons(path: Path, root: Path) -> list[str]:
     if _contains_workspace_state(path, root):
         reasons.append("Cockpit local state is excluded before indexing.")
 
+    if kind == "directory" and _is_onedrive_account_root(path):
+        reasons.append(ONEDRIVE_ROOT_REASON)
+
     if kind == "directory" and name in EXCLUDED_DIR_REASONS:
         reasons.append(EXCLUDED_DIR_REASONS[name])
 
@@ -334,6 +342,49 @@ def _remove_excluded_include_ancestors(
     return cleaned
 
 
+def _candidate_onedrive_account_roots() -> list[Path]:
+    candidates: list[Path] = []
+    for name in ("OneDrive", "OneDriveConsumer", "OneDriveCommercial"):
+        value = os.environ.get(name)
+        if value:
+            candidates.append(Path(value))
+
+    try:
+        home_path = Path.home().expanduser().resolve()
+        candidates.extend(
+            child
+            for child in home_path.iterdir()
+            if child.is_dir() and child.name.lower().startswith("onedrive")
+        )
+    except Exception:
+        pass
+
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.expanduser().resolve()
+        except Exception:
+            continue
+        if not resolved.is_dir():
+            continue
+        key = os.path.normcase(str(resolved))
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append(resolved)
+    return roots
+
+
+def _is_onedrive_account_root(path: Path) -> bool:
+    try:
+        resolved = path.expanduser().resolve()
+    except Exception:
+        return False
+    key = os.path.normcase(str(resolved))
+    return any(os.path.normcase(str(root)) == key for root in _candidate_onedrive_account_roots())
+
+
 def _path_matches_default_exclusion(
     path: Path,
     root: Path,
@@ -343,6 +394,8 @@ def _path_matches_default_exclusion(
     parts = _path_parts(path, root)
     name = path.name.lower()
 
+    if _is_onedrive_account_root(path):
+        return True
     if any(part in EXCLUDED_DIR_REASONS for part in parts):
         return True
     if any(left == "workspace" and right == "state" for left, right in zip(parts, parts[1:])):
@@ -451,12 +504,18 @@ def _build_node(
     is_root = path == root
     should_stop_at_project = bool(project_type) and not is_root
     count_budget = CountBudget()
-    included_count, excluded_count = _count_files(
-        path,
-        root,
-        excluded=bool(reasons),
-        budget=count_budget,
-    )
+    skip_count = kind == "directory" and _is_onedrive_account_root(path)
+    if skip_count:
+        included_count = 0
+        excluded_count = 0
+        count_budget.truncated = True
+    else:
+        included_count, excluded_count = _count_files(
+            path,
+            root,
+            excluded=bool(reasons),
+            budget=count_budget,
+        )
 
     children: list[dict] = []
     children_truncated = False
@@ -489,7 +548,9 @@ def _build_node(
         state = "included"
 
     warnings: list[str] = []
-    if count_budget.truncated or children_truncated:
+    if skip_count:
+        warnings.append("OneDrive account root was not expanded.")
+    elif count_budget.truncated or children_truncated:
         warnings.append("Inspection was truncated to keep the summary bounded.")
     if included_count > 1_000:
         warnings.append("Large folder; review scope before rebuilding.")
@@ -602,6 +663,8 @@ def normalize_workspace_scope_profile(payload: dict) -> dict:
         path = Path(path_text)
         if not path.is_dir():
             raise WorkspaceScopeError(f"included_paths must contain directories: {path}")
+        if _is_onedrive_account_root(path):
+            raise WorkspaceScopeError(f"included_paths cannot include OneDrive account roots: {path}")
         if _path_matches_default_exclusion(path, root_path, normalized_exclude_patterns):
             raise WorkspaceScopeError(f"included_paths cannot include default-ignored paths: {path}")
 

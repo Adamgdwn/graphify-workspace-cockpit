@@ -23,6 +23,7 @@ interface AppSettings {
   version: string;
   graph_path: string;
   graph_name: string;
+  graph_configured: boolean;
   node_count: number;
   edge_count: number;
   state_dir: string;
@@ -41,13 +42,19 @@ interface OllamaStatus {
   connected: boolean;
   models: string[];
   url: string;
+  default_model?: string;
+  chat_model?: string;
+  chat_model_available?: boolean;
+  embedding_model?: string;
+  embedding_model_available?: boolean;
+  error?: string;
 }
 
 interface GraphEntry {
   name: string;
   path: string;
   active: boolean;
-  source: "demo" | "uploaded" | "configured";
+  source: "uploaded" | "configured";
   uploaded_at: string | null;
 }
 
@@ -58,8 +65,10 @@ interface GraphStats {
 }
 
 interface OrgSettings {
-  active_graph: { name: string; path: string };
+  active_graph: { name: string; path: string } | null;
   ollama_url: string;
+  recommend_model_default?: string;
+  semantic_model_default?: string;
   storage_backend: string;
   last_seen_devices: { user: string; last_seen: string }[];
   graph_stats?: GraphStats;
@@ -70,6 +79,14 @@ interface RebuildStatus {
   last_run: string | null;
   error?: string | null;
   code?: string | null;
+  route?: "evaluating" | "local" | "elevated" | null;
+  escalation?: {
+    route?: "local" | "elevated";
+    decision_source?: string;
+    reason?: string;
+    backend?: string | null;
+    model?: string | null;
+  } | null;
 }
 
 interface ConnectorSync {
@@ -119,6 +136,26 @@ interface ClusterSelectionData {
   available_clusters: ClusterOption[];
 }
 
+const DEFAULT_SEMANTIC_MODEL = "nomic-embed-text:latest";
+
+function ollamaModelAvailable(models: string[], model: string | undefined): boolean {
+  const candidate = (model ?? "").trim();
+  if (!candidate) return false;
+  if (models.includes(candidate)) return true;
+  if (!candidate.includes(":") && models.includes(`${candidate}:latest`)) return true;
+  if (candidate.endsWith(":latest") && models.includes(candidate.slice(0, -7))) return true;
+  return false;
+}
+
+function rebuildRouteLabel(status: RebuildStatus | null): string {
+  if (status?.route === "elevated") {
+    const backend = status.escalation?.backend ? ` via ${status.escalation.backend}` : "";
+    return `Running elevated graph extraction${backend}...`;
+  }
+  if (status?.route === "local") return "Running local graph update...";
+  return "Choosing graph generation route...";
+}
+
 export function Settings({ onNavigateScope }: SettingsProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [settingsLoadError, setSettingsLoadError] = useState<string | null>(null);
@@ -163,7 +200,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
     status: string; progress: number; total: number;
     last_run: string | null; error: string | null; edge_count: number; model: string | null;
   } | null>(null);
-  const [semanticModel, setSemanticModel] = useState("nomic-embed-text:latest");
+  const [semanticModel, setSemanticModel] = useState(DEFAULT_SEMANTIC_MODEL);
   const [runningSemantic, setRunningSemantic] = useState(false);
   const semanticPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -196,7 +233,12 @@ export function Settings({ onNavigateScope }: SettingsProps) {
         setSettingsLoadError(err instanceof Error ? err.message : "Settings unavailable");
       });
     loadJson<OllamaStatus>(`/status/ollama`)
-      .then(setOllama)
+      .then((data) => {
+        setOllama(data);
+        if (data.embedding_model) {
+          setSemanticModel((prev) => prev === DEFAULT_SEMANTIC_MODEL ? data.embedding_model! : prev);
+        }
+      })
       .catch(() => setOllama(null));
     loadJson<GraphEntry[]>(`/graphs`)
       .then(setGraphs)
@@ -627,8 +669,15 @@ export function Settings({ onNavigateScope }: SettingsProps) {
     });
   }
 
-  const edgesZero = settings !== null && settings.edge_count === 0;
+  const hasActiveGraph = Boolean(settings?.graph_configured);
+  const edgesZero = Boolean(settings?.graph_configured) && settings !== null && settings.edge_count === 0;
   const graphifyMissing = settings?.graphify.available === false;
+  const semanticModelInstalled = ollama?.connected
+    ? ollamaModelAvailable(ollama.models, semanticModel)
+    : false;
+  const chatDraftModelInstalled = ollama?.connected && chatDraft
+    ? ollamaModelAvailable(ollama.models, chatDraft.model)
+    : true;
 
   return (
     <div className="settings-pane">
@@ -658,14 +707,16 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             <div className="settings-row">
               <span className="settings-label">Nodes / Edges</span>
               <span className={`settings-value${edgesZero ? " settings-warn" : ""}`}>
-                {settings.node_count} nodes / {settings.edge_count} edges
+                {hasActiveGraph
+                  ? `${settings.node_count} nodes / ${settings.edge_count} edges`
+                  : "No workspace graph yet"}
                 {edgesZero && <span className="settings-warn-tag"> ⚠ no edges — run graphify update to rebuild</span>}
               </span>
             </div>
             <div className="settings-row">
               <span className="settings-label">Path</span>
               <span className="settings-value settings-mono settings-break">
-                {settings.graph_path}
+                {settings.graph_path || "No graph has been generated or uploaded yet."}
               </span>
             </div>
             <div className="settings-row">
@@ -698,7 +749,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
           </button>
         </div>
         {graphs.length === 0 ? (
-          <p className="settings-dim">No graphs found.</p>
+          <p className="settings-dim">No graphs generated or uploaded yet.</p>
         ) : (
           <div className="settings-graph-list">
             {graphs.map((g) => (
@@ -706,7 +757,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
                 <div className="settings-graph-info">
                   <span className="settings-graph-name">{g.name}</span>
                   <span className="settings-graph-meta">
-                    {g.source === "demo" ? "demo" : g.source === "configured" ? "configured" : `uploaded ${fmtDate(g.uploaded_at)}`}
+                    {g.source === "configured" ? "configured" : `uploaded ${fmtDate(g.uploaded_at)}`}
                   </span>
                 </div>
                 {g.active ? (
@@ -770,7 +821,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
               Graphify CLI missing
             </span>
           )}
-          {rebuilding && <span className="settings-dim" style={{ fontSize: 12 }}>Running graphify update…</span>}
+          {rebuilding && <span className="settings-dim" style={{ fontSize: 12 }}>{rebuildRouteLabel(rebuildStatus)}</span>}
           {rebuildStatus && !rebuilding && rebuildStatus.status !== "idle" && (
             <span className={`settings-dim${rebuildStatus.status === "error" ? " settings-warn" : ""}`} style={{ fontSize: 12 }}>
               {rebuildStatus.status === "complete"
@@ -841,11 +892,11 @@ export function Settings({ onNavigateScope }: SettingsProps) {
           </p>
         )}
 
-        {ollama?.connected && !ollama.models.some((m) => m.startsWith("nomic-embed-text")) && (
+        {ollama?.connected && !semanticModelInstalled && (
           <div className="settings-row" style={{ marginBottom: 10, padding: "8px 10px", background: "#1a1c2a", borderRadius: 6, border: "1px solid #2a3050" }}>
             <span className="settings-dim" style={{ fontSize: 12 }}>
-              Recommended: <code>nomic-embed-text</code> (137 MB, purpose-built for semantic similarity).
-              Run <code>ollama pull nomic-embed-text</code> in a terminal then reload this page, or pick an existing model below.
+              Recommended: <code>{ollama.embedding_model ?? DEFAULT_SEMANTIC_MODEL}</code> for semantic similarity.
+              Pull it with Ollama, reload this page, or pick an installed embedding-capable model below.
             </span>
           </div>
         )}
@@ -858,6 +909,9 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             value={semanticModel}
             onChange={(e) => setSemanticModel(e.target.value)}
           >
+            {ollama?.connected && !semanticModelInstalled && (
+              <option value={semanticModel}>{semanticModel} (not installed)</option>
+            )}
             {ollama?.models.filter((m) => m.startsWith("nomic-embed-text")).map((m) => (
               <option key={m} value={m}>{m} (recommended)</option>
             ))}
@@ -904,7 +958,7 @@ export function Settings({ onNavigateScope }: SettingsProps) {
         <button
           className="settings-upload-btn"
           onClick={handleRunSemanticPass}
-          disabled={runningSemantic || !ollama?.connected || semanticStatus?.status === "running"}
+          disabled={runningSemantic || !ollama?.connected || !semanticModelInstalled || semanticStatus?.status === "running"}
         >
           {runningSemantic || semanticStatus?.status === "running"
             ? `Analysing… ${semanticStatus?.progress ?? 0}/${semanticStatus?.total ?? 0}`
@@ -1013,12 +1067,23 @@ export function Settings({ onNavigateScope }: SettingsProps) {
               <span className="settings-label">Model</span>
               <input
                 className="settings-mono-input"
+                list="ollama-chat-models"
                 value={chatDraft.model}
                 onChange={(e) => setChatDraft({ ...chatDraft, model: e.target.value })}
-                placeholder="phi4:latest"
+                placeholder={ollama?.default_model ?? "local-balanced:latest"}
               />
+              <datalist id="ollama-chat-models">
+                {ollama?.models.map((model) => (
+                  <option key={model} value={model} />
+                ))}
+              </datalist>
             </div>
           </div>
+          {!chatDraftModelInstalled && (
+            <p className="settings-dim" style={{ color: "#f97316", marginTop: 8 }}>
+              Model <code>{chatDraft.model}</code> is not installed in Ollama.
+            </p>
+          )}
           <div style={{ padding: "8px 16px 4px" }}>
             <button
               className="settings-upload-btn"
@@ -1058,6 +1123,20 @@ export function Settings({ onNavigateScope }: SettingsProps) {
               <span className="settings-label">URL</span>
               <span className="settings-value settings-mono">{ollama.url}</span>
             </div>
+            <div className="settings-row">
+              <span className="settings-label">Chat model</span>
+              <span className={`settings-value settings-mono${ollama.chat_model_available === false ? " settings-warn" : ""}`}>
+                {ollama.chat_model ?? ollama.default_model ?? "Unknown"}
+                {ollama.chat_model_available === false && <span className="settings-warn-tag"> not installed</span>}
+              </span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Embedding model</span>
+              <span className={`settings-value settings-mono${ollama.embedding_model_available === false ? " settings-warn" : ""}`}>
+                {ollama.embedding_model ?? DEFAULT_SEMANTIC_MODEL}
+                {ollama.embedding_model_available === false && <span className="settings-warn-tag"> not installed</span>}
+              </span>
+            </div>
             {ollama.connected && ollama.models.length > 0 && (
               <div className="settings-row">
                 <span className="settings-label">Models</span>
@@ -1088,6 +1167,10 @@ export function Settings({ onNavigateScope }: SettingsProps) {
             <div className="settings-row">
               <span className="settings-label">Ollama URL</span>
               <span className="settings-value settings-mono">{org.ollama_url}</span>
+            </div>
+            <div className="settings-row">
+              <span className="settings-label">Default chat model</span>
+              <span className="settings-value settings-mono">{org.recommend_model_default ?? "local-balanced:latest"}</span>
             </div>
             <div className="settings-row">
               <span className="settings-label">Est. tokens saved/query</span>

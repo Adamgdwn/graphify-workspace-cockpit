@@ -15,7 +15,8 @@ Graphify Workspace Cockpit is a local web application that turns a Graphify `gra
 | Backend API | Python FastAPI | Graph query, recommendation, decision, action, decision-packet, overlap-review, chat, and config endpoints |
 | Rate Limiter | slowapi | 60 req/min per IP on all endpoints; `/health` exempt |
 | Graphify Adapter | Graphify CLI subprocess | Run `graphify query/path/explain` against user-selected `graph.json` |
-| Ollama Adapter | Ollama HTTP API | Local model synthesis for Ask, Recommendations, and Chat endpoints (optional — degrades gracefully) |
+| Ollama Adapter | Ollama HTTP API | Local model synthesis for Ask, Recommendations, Chat, and graph-route decisions (optional — degrades gracefully) |
+| Graph Escalation Adapter | Graphify CLI `extract` | Optional elevated graph extraction for selected workspace scopes when explicitly enabled by env |
 | Frontend Shell | React/Vite TypeScript | Seven-tab cockpit: Command, Ask, Map, Decisions, Recommendations, Work Queue, Settings |
 | Command Center | React tab (`Dashboard.tsx`) | First-screen attention surface for pending recommendations, accepted-not-queued work, dry-run-ready actions, untriaged overlaps, graph freshness, and semantic freshness |
 | AICopilot | React component (`AICopilot.tsx`) | Floating draggable/resizable overlay panel; SSE streaming chat; visible in every tab |
@@ -34,8 +35,9 @@ Graphify Workspace Cockpit is a local web application that turns a Graphify `gra
 6. User accepts recommendation → backend writes action record to `workspace/state/action-queue/`; no execution without explicit approval
 7. User approves action → backend runs dry-run preview first, then executes on approval, writes result + rollback note to action record
 8. User sends a chat message (AI assistant panel) → backend prepends cluster-filtered graph nodes as system context, streams SSE tokens from Ollama `/api/chat`; frontend displays tokens in real time via `ReadableStream`
+9. User generates a workspace map → backend asks the local Ollama router for a quick local/elevated decision; local route runs `graphify update --no-cluster`, elevated route runs configured `graphify extract --backend ... --no-cluster`; both routes pass through the same scope filtering and activation path
 
-No sensitive data flows through the backend. Graph files remain on local disk. Ollama is the only external call in the data path; all other calls are local.
+No sensitive data flows through the backend by default. Graph files remain on local disk. Ollama is the default model call in the data path. If `GRAPH_ESCALATION_ENABLED=true`, selected graph extraction content may be sent to the configured Graphify backend during map generation.
 
 ## Boundaries and Non-Goals
 
@@ -96,10 +98,12 @@ All hardcoded paths and service URLs are configurable via environment variables.
 
 | Variable | Where | Default | Purpose |
 |----------|-------|---------|---------|
-| `GRAPH_PATH` | backend | `workspace/demo/graph.json` | Path to graph.json |
+| `GRAPH_PATH` | backend | unset | Optional path to graph.json; blank means no active graph yet |
 | `STATE_DIR` | backend | `workspace/state` | Persistent state root |
 | `CORS_ORIGINS` | backend | `http://localhost:5173` | Allowed frontend origins; include each exact localhost or LAN origin used by browsers |
 | `OLLAMA_URL` | backend | `http://localhost:11434` | Ollama server base URL |
+| `GRAPH_ESCALATION_ENABLED` | backend | `false` | Enables automatic local/elevated graph generation routing |
+| `GRAPH_ESCALATION_BACKEND` | backend | unset | Graphify `extract` backend for elevated map generation |
 | `API_KEY` | backend | (unset) | Bearer token for network-facing deployments |
 | `VITE_API_URL` | frontend | `http://localhost:8000` | Backend URL for browser requests |
 
@@ -117,3 +121,4 @@ Set `API_KEY` in the backend environment to require `Authorization: Bearer <key>
 - ADR-006 (Chunk 17): AI assistant as floating overlay panel, not a tab — available in every tab without navigation, draggable and resizable by the user
 - ADR-007 (Chunks 20–26): Decision-flow polish stays inside the existing surfaces; Command Center is an attention layer, not a replacement for detailed tabs
 - ADR-008 (Chunks 27–30): Ground-level decision evidence should aggregate in read-only packets before mutating workflows; approval and execution remain in existing recommendation and Work Queue controls
+- ADR-009: Automatic graph escalation is env-gated and routes through Graphify CLI extraction rather than app-native hosted model adapters

@@ -7,9 +7,34 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.parent
 
+
+def repo_relative_path(raw: str) -> Path:
+    path = Path(raw).expanduser()
+    if path.is_absolute():
+        return path
+    return REPO_ROOT / path
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
 STATE_DIR_ENV = os.environ.get("STATE_DIR", "")
 WORKSPACE_STATE = (
-    Path(STATE_DIR_ENV)
+    repo_relative_path(STATE_DIR_ENV)
     if STATE_DIR_ENV
     else REPO_ROOT / "workspace" / "state"
 )
@@ -39,10 +64,34 @@ CHAT_DEFAULT_SYSTEM_PROMPT = (
 
 USERS_FILE = REPO_ROOT / "config" / "users.json"
 DEMO_GRAPH = str(REPO_ROOT / "workspace" / "demo" / "graph.json")
-DEFAULT_GRAPH = os.environ.get("GRAPH_PATH", DEMO_GRAPH)
+GRAPH_PATH_ENV = os.environ.get("GRAPH_PATH", "")
+DEFAULT_GRAPH = str(repo_relative_path(GRAPH_PATH_ENV)) if GRAPH_PATH_ENV else ""
 API_KEY = os.environ.get("API_KEY", "")
 GRAPH_UPLOAD_MAX_BYTES = 10 * 1024 * 1024
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "file")
+
+RECOMMEND_MODEL_DEFAULT = (
+    os.environ.get("RECOMMEND_MODEL_DEFAULT")
+    or os.environ.get("OLLAMA_MODEL")
+    or "local-balanced:latest"
+).strip() or "local-balanced:latest"
+SEMANTIC_MODEL_DEFAULT = (
+    os.environ.get("SEMANTIC_MODEL_DEFAULT") or "nomic-embed-text:latest"
+).strip() or "nomic-embed-text:latest"
+
+GRAPH_ESCALATION_ENABLED = env_bool("GRAPH_ESCALATION_ENABLED", False)
+GRAPH_ESCALATION_BACKEND = os.environ.get("GRAPH_ESCALATION_BACKEND", "").strip()
+GRAPH_ESCALATION_MODEL = os.environ.get("GRAPH_ESCALATION_MODEL", "").strip()
+GRAPH_ESCALATION_MODE = os.environ.get("GRAPH_ESCALATION_MODE", "deep").strip()
+GRAPH_ESCALATION_FILE_THRESHOLD = env_int("GRAPH_ESCALATION_FILE_THRESHOLD", 1500)
+GRAPH_ESCALATION_ROOT_THRESHOLD = env_int("GRAPH_ESCALATION_ROOT_THRESHOLD", 2)
+GRAPH_ESCALATION_DECIDER_MODEL = (
+    os.environ.get("GRAPH_ESCALATION_DECIDER_MODEL") or RECOMMEND_MODEL_DEFAULT
+).strip() or RECOMMEND_MODEL_DEFAULT
+GRAPH_ESCALATION_DECIDER_TIMEOUT = env_int("GRAPH_ESCALATION_DECIDER_TIMEOUT", 12)
+GRAPH_ESCALATION_TIMEOUT = env_int("GRAPH_ESCALATION_TIMEOUT", 1800)
+GRAPH_ESCALATION_API_TIMEOUT = env_int("GRAPH_ESCALATION_API_TIMEOUT", 600)
+GRAPH_ESCALATION_MAX_CONCURRENCY = env_int("GRAPH_ESCALATION_MAX_CONCURRENCY", 2)
 
 CORS_ORIGINS = [
     origin.strip()

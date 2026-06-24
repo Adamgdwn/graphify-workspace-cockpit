@@ -58,7 +58,7 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 |---------|--------------|
 | **Command** | First-screen readiness and attention view for runtime state, pending recommendations, accepted-but-not-queued work, dry-run-ready actions, untriaged overlaps, and graph freshness |
 | **Ask** | Natural language questions answered from your graph (`graphify query/path/explain`) with optional local Ollama synthesis |
-| **Map** | Interactive project-level relationship map — click to inspect, filter by type/theme/decision, drill down on demand |
+| **Map** | Interactive project-level relationship map — inspect nodes, trace paths, review overlap, and click semantic links for decision options |
 | **Decisions** | Durable ledger of human decisions about workspace areas: invest, client-ready, monitor, archive, or paused |
 | **Recommendations** | Model-backed cards with evidence, confidence, risk, action plans, read-only decision packets, and accept/reject/defer controls |
 | **Work Queue** | Approval-gated action queue with dry-run previews, rollback notes, and execution reports |
@@ -74,6 +74,7 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 - Decision packets combine evidence, judgement, recommendations, and approval state for review only; actions still flow through the Work Queue dry-run gate.
 - No autonomous commits, pushes, deletes, or unapproved external side effects.
 - Supabase and cloud connectors are opt-in and disabled unless configured.
+- Automatic graph escalation is opt-in. When configured, the local Ollama router can choose an elevated Graphify extraction backend for broad or hard workspace selections.
 - User-supplied graphs stay local. Secrets and environment files are never indexed, printed, or committed.
 
 > **Security note:** Leave `API_KEY` unset only for localhost use. Set `API_KEY` before exposing the backend to any non-local network, and prefer HTTPS for hosted deployments.
@@ -84,7 +85,7 @@ The cockpit is a UI layer on top of that graph. All credit for the core extracti
 
 - Python 3.10+ (backend)
 - Node.js 18+ and npm (frontend)
-- [Graphify](https://github.com/safishamsi/graphify): `pip install graphifyy` (required for Ask and graph rebuild; demo graph browsing still works without it)
+- [Graphify](https://github.com/safishamsi/graphify): `pip install graphifyy` (required for Ask and workspace graph rebuild)
 - [Ollama](https://ollama.com) (optional — cockpit works without it, recommendations fall back to graph-only)
 
 ---
@@ -117,12 +118,21 @@ Then start the cockpit any time from your app menu — no terminal needed.
 ```bat
 git clone <repo-url>
 cd graphify-workspace-cockpit
+launcher\launch-cockpit.bat
 ```
 
-Then double-click `launcher\launch-cockpit.bat`.
+The Windows launcher creates `backend\.venv`, installs backend and frontend
+dependencies when needed, loads optional `backend\.env` and `frontend\.env`
+files, starts both services, and opens the browser.
 
-> The Windows launcher is **best-effort** and not yet tested across native Windows
-> setups. If it misbehaves, use the verified Docker path below.
+After pulling updates or changing cockpit code, use:
+
+```bat
+launcher\restart-cockpit.bat
+```
+
+That refreshes the backend and frontend dev servers on ports 8000 and 5173 so
+the browser sees the latest local code.
 
 **Any OS (Docker)**
 
@@ -165,11 +175,11 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-**3. Point it at your graph** (optional — demo graph is used by default)
+**3. Point it at your graph** (optional — first launch starts with no graph)
 
 ```bash
-cp .env.example .env               # from the backend/ directory
-# Edit .env and set GRAPH_PATH to your graph.json:
+cp .env.example .env               # still in the backend/ directory
+# Leave GRAPH_PATH blank for a fresh instance, or set it to an existing graph.json:
 # GRAPH_PATH=/path/to/your/workspace/graph.json
 ```
 
@@ -180,8 +190,8 @@ graphify update /path/to/your/workspace
 ```
 
 The backend reports Graphify runtime status in `/health` and Settings. If the
-CLI is missing, the cockpit still loads with the active graph, but Ask and graph
-rebuild return `GRAPHIFY_MISSING` until Graphify is installed on `PATH`.
+CLI is missing, the cockpit still opens, but Ask and graph rebuild return
+`GRAPHIFY_MISSING` until Graphify is installed on `PATH`.
 
 **4. Set up the frontend**
 
@@ -191,6 +201,15 @@ npm install
 ```
 
 **5. Launch both**
+
+Windows:
+
+```powershell
+cd ..
+powershell -NoProfile -ExecutionPolicy Bypass -File launcher\launch-cockpit.ps1
+```
+
+Linux / macOS:
 
 ```bash
 cd ..
@@ -216,8 +235,8 @@ cd graphify-workspace-cockpit
 **2. Configure**
 
 ```bash
-cp backend/.env.example .env
-# Optionally edit .env — the demo graph is used by default
+cp .env.example .env
+# Optionally edit .env — leave GRAPH_PATH blank for a fresh instance
 ```
 
 **3. Start**
@@ -239,10 +258,16 @@ exist inside the container.
 
 | Variable | Default | Notes |
 |----------|---------|-------|
-| `GRAPH_PATH` | `workspace/demo/graph.json` | Path to your graph.json inside the container |
+| `GRAPH_PATH` | unset | Optional path to your graph.json inside the container. Leave blank until you generate or upload a workspace graph. |
 | `STATE_DIR` | `workspace/state` | Persistent state directory |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated list of allowed frontend origins; include the exact `localhost` or `127.0.0.1` URL you use |
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama server URL — `host.docker.internal` reaches the host machine |
+| `RECOMMEND_MODEL_DEFAULT` | `local-balanced:latest` | Local Ollama model for chat, recommendations, and overlap triage |
+| `SEMANTIC_MODEL_DEFAULT` | `nomic-embed-text:latest` | Local Ollama embedding model for semantic overlap analysis |
+| `GRAPH_ESCALATION_ENABLED` | `false` | Enables automatic local-vs-elevated routing during graph generation |
+| `GRAPH_ESCALATION_BACKEND` | unset | Graphify `extract` backend used when the local router elevates (`gemini`, `claude`, `openai`, `deepseek`, `ollama`, etc.) |
+| `GRAPH_ESCALATION_MODEL` | unset | Optional model override for the elevated backend |
+| `GRAPH_ESCALATION_FILE_THRESHOLD` | `1500` | Heuristic fallback threshold when the local routing model is unavailable |
 | `VITE_API_URL` | `http://localhost:8000` | Backend URL the browser sends requests to (build-time). Use `/api` for Caddy-hosted same-origin deployments; use an absolute backend URL when the frontend and API are served separately. |
 | `API_KEY` | unset | Required before exposing the backend beyond trusted localhost use |
 
@@ -254,9 +279,9 @@ To use your own graph with Docker, either:
 
 ---
 
-## Demo
+## Sample Graph
 
-A synthetic demo graph (`workspace/demo/graph.json`) ships with the cockpit. It contains three fictional projects — `cockpit`, `knowledge-hub`, and `automation` — with enough nodes and links to demonstrate all tabs and the AI assistant. No private workspace data is included.
+A synthetic sample graph (`workspace/demo/graph.json`) ships with the repo for tests and manual demo work. It is not activated by default; a fresh instance starts with no workspace graph until you generate one from Scope or upload one in Settings. No private workspace data is included.
 
 For the current demo-readiness gate, run:
 
@@ -270,13 +295,16 @@ Then follow `docs/demo-path-checklist.md` for the manual click path.
 
 ## Configuration Reference
 
-**Backend** (see `backend/.env.example`):
+**Backend** (see `.env.example` for Docker/project defaults, or
+`backend/.env.example` for native local runs):
 
 ```
-GRAPH_PATH      Path to graph.json (default: workspace/demo/graph.json)
+GRAPH_PATH      Optional path to graph.json (default: unset; no active graph yet)
 STATE_DIR       Persistent state directory (default: workspace/state)
 CORS_ORIGINS    Comma-separated allowed origins (default: http://localhost:5173)
 OLLAMA_URL      Ollama base URL (default: http://localhost:11434)
+GRAPH_ESCALATION_ENABLED  Enable automatic graph escalation (default: false)
+GRAPH_ESCALATION_BACKEND  Elevated Graphify extract backend when enabled
 API_KEY         Optional API key for non-local deployments
 ```
 

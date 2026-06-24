@@ -182,6 +182,14 @@ interface RebuildStatus {
   last_run: string | null;
   error?: string | null;
   code?: string | null;
+  route?: "evaluating" | "local" | "elevated" | null;
+  escalation?: {
+    route?: "local" | "elevated";
+    decision_source?: string;
+    reason?: string;
+    backend?: string | null;
+    model?: string | null;
+  } | null;
 }
 
 // Full graph (all raw nodes/edges)
@@ -286,6 +294,15 @@ function shouldOpenExpandedEvidence(summary: GraphSummary, project?: string): bo
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function rebuildGateStatusText(status: RebuildStatus): string {
+  if (status.route === "elevated") {
+    const backend = status.escalation?.backend ? ` via ${status.escalation.backend}` : "";
+    return `Elevated graph extraction is running${backend}...`;
+  }
+  if (status.route === "local") return "Local graph generation is running...";
+  return "Choosing the graph generation route...";
 }
 
 const MAP_MODES: Array<{ id: MapMode; label: string; subLabel: string; hint: string; tooltip: string }> = [
@@ -3388,6 +3405,9 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         const statusResponse = await apiFetch(`/graph/rebuild/status`);
         if (!statusResponse.ok) throw new Error(await apiErrorMessage(statusResponse));
         const status = await statusResponse.json() as RebuildStatus;
+        if (status.status === "running") {
+          setScopeGateReason(rebuildGateStatusText(status));
+        }
         if (status.status === "complete") {
           const refreshedProfile = await loadWorkspaceScopeProfile();
           await fetchSummary(undefined, undefined, refreshedProfile ?? profile);

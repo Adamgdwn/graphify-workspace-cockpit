@@ -18,7 +18,19 @@ the technical component map.
 
 ## How To Run It
 
-**Local dev:**
+**Windows native launcher:**
+
+```bat
+launcher\launch-cockpit.bat
+```
+
+After pulling updates or changing code:
+
+```bat
+launcher\restart-cockpit.bat
+```
+
+**Linux/macOS local dev:**
 
 ```bash
 bash scripts/start.sh
@@ -41,7 +53,7 @@ See `docs/deployment-guide.md` for network deployments, API key setup, and HTTPS
 |-----|---------|
 | **Command** | First-screen decision command center. Shows workspace readiness, pending recommendations, accepted-but-not-queued recommendations, dry-run-ready actions, untriaged overlaps, graph freshness, and semantic freshness. |
 | **Ask** | Ask natural language questions about your workspace graph. Answers are backed by `graphify query/path/explain` with optional Ollama synthesis. Evidence nodes link directly to map view. |
-| **Map** | Interactive Cytoscape.js graph at project/cluster level. Click any node to inspect. Filter by type, theme, or decision status. Use Explore / Trace / Overlap / Review modes to move between browsing, path tracing, semantic overlap review, and evidence review. |
+| **Map** | Interactive Cytoscape.js graph at project/cluster level. Click any node to inspect. Filter by type, theme, or decision status. Use Explore / Trace / Overlap / Review modes to move between browsing, path tracing, semantic overlap review, and evidence review. Bright semantic links open an inspector with actionability, decision signals, endpoints, and practical options. |
 | **Decisions** | Record durable human decisions about workspace areas. Classifications: invest, client-ready, monitor, archive, paused. Decision badges appear on Map nodes. |
 | **Recommendations** | Review model-backed cards with evidence, confidence, risk, proposed action, implementation brief, and an expandable read-only decision packet. Accept, reject, or defer. Accepted recommendations flow into the Work Queue. |
 | **Work Queue** | Review queued actions from accepted recommendations. Every action requires a dry-run preview before execution. Executed actions include a rollback note. |
@@ -106,6 +118,14 @@ For material or risk-triggering changes:
 
 Before recording or handoff, run the lightweight live smoke gate:
 
+Windows PowerShell:
+
+```powershell
+node scripts/demo-path-smoke.mjs
+```
+
+Linux/macOS:
+
 ```bash
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 ```
@@ -115,7 +135,7 @@ Then walk the manual path in `docs/demo-path-checklist.md`.
 ## Common Gotchas
 
 - **Ollama not running:** Ask and Chat return an error message; the cockpit still works for Map, Decisions, and Work Queue. Start Ollama with `ollama serve`.
-- **Graph not loading:** Check `GRAPH_PATH` in `backend/.env`. The default is the demo graph at `workspace/demo/graph.json`.
+- **Graph not loading:** On a fresh instance, generate a graph from Scope or upload one in Settings. If `GRAPH_PATH` is set in `backend/.env`, confirm the file exists and is valid JSON.
 - **CORS errors:** `CORS_ORIGINS` must match the exact scheme + host + port the browser uses.
 - **API 401:** Set `Authorization: Bearer <key>` or `X-API-Key: <key>` if `API_KEY` is set.
 - **Panel off-screen:** The AI assistant position is saved in `localStorage`. Clear `copilot_pos` from browser DevTools → Application → localStorage to reset it.
