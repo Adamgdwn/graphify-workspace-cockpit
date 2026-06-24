@@ -1559,6 +1559,7 @@ ACTION_QUEUE_DIR     = WORKSPACE_STATE / "action-queue"
 NOTES_DIR            = WORKSPACE_STATE / "notes"
 RECOMMEND_MODEL_DEFAULT = _config.RECOMMEND_MODEL_DEFAULT
 SEMANTIC_MODEL_DEFAULT = _config.SEMANTIC_MODEL_DEFAULT
+OLLAMA_KEEP_ALIVE = _config.OLLAMA_KEEP_ALIVE
 GRAPH_ESCALATION_ENABLED = _config.GRAPH_ESCALATION_ENABLED
 GRAPH_ESCALATION_BACKEND = _config.GRAPH_ESCALATION_BACKEND
 GRAPH_ESCALATION_MODEL = _config.GRAPH_ESCALATION_MODEL
@@ -2110,6 +2111,7 @@ def _call_ollama(prompt: str, model: str, timeout: int = 120) -> str:
         "prompt": prompt,
         "stream": False,
         "format": "json",
+        "keep_alive": OLLAMA_KEEP_ALIVE,
     }).encode("utf-8")
     _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
     request = _req.Request(
@@ -5082,6 +5084,7 @@ def _chat_deps() -> ChatDeps:
         graph_summary=graph_summary,
         build_graph_context=_build_graph_context,
         ollama_url=lambda: os.environ.get("OLLAMA_URL", "http://localhost:11434"),
+        ollama_keep_alive=lambda: OLLAMA_KEEP_ALIVE,
     )
 
 

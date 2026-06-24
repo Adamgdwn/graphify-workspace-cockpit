@@ -264,6 +264,7 @@ exist inside the container.
 | `OLLAMA_URL` | `http://host.docker.internal:11434` | Ollama server URL — `host.docker.internal` reaches the host machine |
 | `RECOMMEND_MODEL_DEFAULT` | `local-balanced:latest` | Local Ollama model for chat, recommendations, and overlap triage |
 | `SEMANTIC_MODEL_DEFAULT` | `nomic-embed-text:latest` | Local Ollama embedding model for semantic overlap analysis |
+| `OLLAMA_KEEP_ALIVE` | `30m` | How long Ollama keeps the local model resident between requests (sent per-request). Keeps the model warm so CPU-only machines avoid a cold reload each interaction. Duration (`30m`), seconds, `0` to unload immediately, or `-1` to stay loaded. |
 | `GRAPH_ESCALATION_ENABLED` | `false` | Enables automatic local-vs-elevated routing during graph generation |
 | `GRAPH_ESCALATION_BACKEND` | unset | Graphify `extract` backend used when the local router elevates (`gemini`, `claude`, `openai`, `deepseek`, `ollama`, etc.) |
 | `GRAPH_ESCALATION_MODEL` | unset | Optional model override for the elevated backend |
@@ -303,6 +304,7 @@ GRAPH_PATH      Optional path to graph.json (default: unset; no active graph yet
 STATE_DIR       Persistent state directory (default: workspace/state)
 CORS_ORIGINS    Comma-separated allowed origins (default: http://localhost:5173)
 OLLAMA_URL      Ollama base URL (default: http://localhost:11434)
+OLLAMA_KEEP_ALIVE  Keep the local model warm between requests (default: 30m)
 GRAPH_ESCALATION_ENABLED  Enable automatic graph escalation (default: false)
 GRAPH_ESCALATION_BACKEND  Elevated Graphify extract backend when enabled
 API_KEY         Optional API key for non-local deployments

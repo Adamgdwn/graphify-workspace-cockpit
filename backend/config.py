@@ -79,6 +79,16 @@ SEMANTIC_MODEL_DEFAULT = (
     os.environ.get("SEMANTIC_MODEL_DEFAULT") or "nomic-embed-text:latest"
 ).strip() or "nomic-embed-text:latest"
 
+# How long Ollama keeps the chat/recommendation model resident after a request.
+# Passed per-request as the Ollama `keep_alive` field, so the cockpit controls it
+# directly without touching the separate `ollama serve` process. On CPU-only
+# machines a warm model avoids a multi-second cold reload on every interaction.
+# Accepts a duration ("30m", "1h"), seconds ("1800"), 0 to unload immediately, or
+# -1 to keep loaded until the next model is requested.
+OLLAMA_KEEP_ALIVE = (
+    os.environ.get("OLLAMA_KEEP_ALIVE") or "30m"
+).strip() or "30m"
+
 GRAPH_ESCALATION_ENABLED = env_bool("GRAPH_ESCALATION_ENABLED", False)
 GRAPH_ESCALATION_BACKEND = os.environ.get("GRAPH_ESCALATION_BACKEND", "").strip()
 GRAPH_ESCALATION_MODEL = os.environ.get("GRAPH_ESCALATION_MODEL", "").strip()
@@ -88,7 +98,7 @@ GRAPH_ESCALATION_ROOT_THRESHOLD = env_int("GRAPH_ESCALATION_ROOT_THRESHOLD", 2)
 GRAPH_ESCALATION_DECIDER_MODEL = (
     os.environ.get("GRAPH_ESCALATION_DECIDER_MODEL") or RECOMMEND_MODEL_DEFAULT
 ).strip() or RECOMMEND_MODEL_DEFAULT
-GRAPH_ESCALATION_DECIDER_TIMEOUT = env_int("GRAPH_ESCALATION_DECIDER_TIMEOUT", 12)
+GRAPH_ESCALATION_DECIDER_TIMEOUT = env_int("GRAPH_ESCALATION_DECIDER_TIMEOUT", 20)
 GRAPH_ESCALATION_TIMEOUT = env_int("GRAPH_ESCALATION_TIMEOUT", 1800)
 GRAPH_ESCALATION_API_TIMEOUT = env_int("GRAPH_ESCALATION_API_TIMEOUT", 600)
 GRAPH_ESCALATION_MAX_CONCURRENCY = env_int("GRAPH_ESCALATION_MAX_CONCURRENCY", 2)

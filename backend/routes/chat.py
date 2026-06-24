@@ -42,6 +42,7 @@ class ChatDeps:
     graph_summary: Callable[[], dict]
     build_graph_context: Callable[[dict], str]
     ollama_url: Callable[[], str]
+    ollama_keep_alive: Callable[[], str]
 
 
 def get_chat_config(deps: ChatDeps) -> dict:
@@ -95,11 +96,12 @@ def chat_stream(req: ChatRequest, deps: ChatDeps):
     deps.prune_chat_sessions()
 
     ollama_base = deps.ollama_url()
+    keep_alive = deps.ollama_keep_alive()
 
     def _generate():
         import urllib.request as _ureq
         yield f"data: {json.dumps({'type': 'meta', 'nodes_used': nodes_used, 'session_id': session_id})}\n\n"
-        payload = json.dumps({"model": model, "messages": messages, "stream": True}).encode()
+        payload = json.dumps({"model": model, "messages": messages, "stream": True, "keep_alive": keep_alive}).encode()
         req_obj = _ureq.Request(
             f"{ollama_base}/api/chat",
             data=payload,

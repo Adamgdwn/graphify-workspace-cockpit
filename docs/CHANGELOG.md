@@ -6,6 +6,20 @@ changed, or fixed in that chunk.
 
 ---
 
+## CPU-Tier Local Model Tuning (2026-06-24)
+
+### Added
+- `OLLAMA_KEEP_ALIVE` setting (default `30m`), sent as a per-request `keep_alive`
+  field on the chat and recommendation/triage Ollama calls. Keeps the local model
+  resident between interactions so CPU-only machines avoid a multi-second cold
+  reload each time. Because it travels in the request body, it works even though
+  the launcher never starts the Ollama server itself.
+
+### Changed
+- `GRAPH_ESCALATION_DECIDER_TIMEOUT` default raised from 12s to 20s so the local
+  routing decision completes on a cold CPU model load instead of silently falling
+  back to the file/root heuristic. Only affects users who opt into escalation.
+
 ## Relationship Map Second Video Readiness (2026-06-21)
 
 ### Added
