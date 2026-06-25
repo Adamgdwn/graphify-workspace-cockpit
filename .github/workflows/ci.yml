@@ -1,39 +1,121 @@
-name: CI
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub Actions workflow: Continuous Integration (CI)
+#
+# WHAT THIS FILE IS
+#   A workflow is a recipe GitHub runs *on its own servers* ("runners") when
+#   something happens in your repo — here, when you push code or open a pull
+#   request. It checks out your code, installs dependencies, and runs your
+#   tests. If anything fails, GitHub marks the commit/PR with a red ✗ so you
+#   know *before* the bad code becomes a problem.
+#
+# WHERE IT LIVES
+#   GitHub only looks for workflows in `.github/workflows/*.yml`. The filename
+#   (ci.yml) is just a label; the `name:` below is what shows in the UI.
+# ─────────────────────────────────────────────────────────────────────────────
 
+name: CI   # Display name shown in the repo's "Actions" tab.
+
+# ── on: WHAT TRIGGERS THIS WORKFLOW ─────────────────────────────────────────
+# These are the events that make GitHub start a run.
 on:
   push:
-    branches: ["**"]
-  pull_request:
+    branches: ["**"]   # "**" = every branch. Push anywhere → tests run.
+  pull_request:        # Also run when a PR is opened/updated, so the PR page
+                       # shows a green ✓ or red ✗ next to the "Merge" button.
 
+# ── jobs: THE UNITS OF WORK ─────────────────────────────────────────────────
+# A workflow is made of one or more "jobs". By default jobs run in PARALLEL,
+# each on its own fresh, throwaway virtual machine. Below we have two:
+# one for the frontend, one for the backend tests.
 jobs:
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 1: Frontend — make sure the TypeScript still type-checks and builds.
+  # ───────────────────────────────────────────────────────────────────────────
   frontend:
     name: Frontend typecheck and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest   # The OS image GitHub gives this job. Linux is the
+                             # cheapest/fastest and the frontend is OS-agnostic.
+
+    # "steps" run top-to-bottom on the SAME machine. Two kinds of step:
+    #   - `uses:` → run a prebuilt, shared Action (someone else's reusable step).
+    #   - `run:`  → run a shell command, exactly as you would in a terminal.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Pull your repo's code onto the runner. Without this the machine is empty.
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Install Node.js, and cache npm downloads between runs to save time.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-        working-directory: frontend
-      - run: npm run typecheck
-        working-directory: frontend
-      - run: npm run build
+
+      # `npm ci` = a strict, reproducible install from package-lock.json.
+      # `working-directory` runs the command inside frontend/ instead of repo root.
+      - name: Install frontend dependencies
+        run: npm ci
         working-directory: frontend
 
+      - name: Type-check the frontend
+        run: npm run typecheck
+        working-directory: frontend
+
+      - name: Build the frontend
+        run: npm run build
+        working-directory: frontend
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # JOB 2: Backend tests — run pytest on BOTH Linux and Windows.
+  #
+  # WHY A MATRIX
+  #   A "matrix" runs this same job once per value you list — here, once on
+  #   Linux and once on Windows. That turns one job definition into two parallel
+  #   runs. It's the right tool for "the same tests, on every OS I support",
+  #   and it's directly why we don't need a separate Windows branch: one history,
+  #   proven on both platforms in one place.
+  # ───────────────────────────────────────────────────────────────────────────
   backend-tests:
-    name: Backend pytest
-    runs-on: ubuntu-latest
+    # ${{ ... }} is GitHub's template syntax. matrix.os is filled in per run,
+    # so the two runs are labelled "...(ubuntu-latest)" and "...(windows-latest)".
+    name: Backend pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      # fail-fast: false → if Windows fails, DON'T cancel the still-running
+      # Linux job. You want to see *both* results, not just the first failure.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Install Python and cache pip downloads keyed on requirements.txt, so
+      # unchanged dependencies don't get re-downloaded on every run.
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.12"   # Matches your local interpreter (3.12.10).
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
-      - run: python -m pip install --upgrade pip
-      - run: python -m pip install -r backend/requirements.txt
-      - run: python -m compileall -q backend
-      - run: python -m pytest
+
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements.txt
+
+      # A fast sanity check: compile every .py file. Catches syntax errors
+      # across the whole backend in seconds, before the slower test run.
+      - name: Byte-compile backend (syntax check)
+        run: python -m compileall -q backend
+
+      # The main event. Note we call pytest the same SAC-safe way the app does:
+      # `python -m pytest` invokes the test runner through the signed interpreter,
+      # not an unsigned pytest.exe shim — consistent on Linux and Windows.
+      - name: Run backend tests
+        run: python -m pytest
