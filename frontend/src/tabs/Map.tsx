@@ -292,10 +292,6 @@ function shouldOpenExpandedEvidence(summary: GraphSummary, project?: string): bo
   );
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
 function rebuildGateStatusText(status: RebuildStatus): string {
   if (status.route === "elevated") {
     const backend = status.escalation?.backend ? ` via ${status.escalation.backend}` : "";
@@ -2521,6 +2517,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
   const scopeProfileRef = useRef<WorkspaceScopeProfile | null>(null);
   const renderCycleRef = useRef(0);
   const semanticPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const rebuildPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { addToast } = useToast();
 
   // Refs for cy event handlers — avoids stale closures over React state
@@ -3377,6 +3374,54 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     return () => { cancelled = true; };
   }, [fetchSummary, loadWorkspaceScopeProfile]);
 
+  const stopRebuildPolling = useCallback(() => {
+    if (!rebuildPollRef.current) return;
+    clearInterval(rebuildPollRef.current);
+    rebuildPollRef.current = null;
+  }, []);
+
+  const handleRebuildComplete = useCallback(async () => {
+    stopRebuildPolling();
+    setGeneratingScopeMap(false);
+    const refreshedProfile = await loadWorkspaceScopeProfile().catch(() => scopeProfileRef.current);
+    await fetchSummary(undefined, undefined, refreshedProfile ?? scopeProfileRef.current);
+  }, [fetchSummary, loadWorkspaceScopeProfile, stopRebuildPolling]);
+
+  const handleRebuildError = useCallback((message: string) => {
+    stopRebuildPolling();
+    setGeneratingScopeMap(false);
+    setCanGenerateScopeMap(Boolean(scopeProfileRef.current));
+    setScopeGate("setup");
+    setScopeGateReason(message);
+  }, [stopRebuildPolling]);
+
+  // Poll the server-side rebuild status on an interval. The rebuild itself runs
+  // in a backend daemon thread, so the work survives this tab being backgrounded,
+  // throttled, or discarded. Using setInterval (rather than an inline await-loop
+  // bound to one call) lets the mount re-attach and the visibility catch-up below
+  // resume watching the same running job. This mirrors pollSemanticStatus.
+  const pollRebuildStatus = useCallback(() => {
+    stopRebuildPolling();
+    const tick = async () => {
+      try {
+        const statusResponse = await apiFetch(`/graph/rebuild/status`);
+        if (!statusResponse.ok) throw new Error(await apiErrorMessage(statusResponse));
+        const status = await statusResponse.json() as RebuildStatus;
+        if (status.status === "running") {
+          setScopeGateReason(rebuildGateStatusText(status));
+        } else if (status.status === "complete") {
+          await handleRebuildComplete();
+        } else if (status.status === "error") {
+          handleRebuildError(status.error || "Graph generation failed");
+        }
+      } catch (error) {
+        handleRebuildError(error instanceof Error ? error.message : "Lost graph generation status.");
+      }
+    };
+    rebuildPollRef.current = setInterval(() => { void tick(); }, 2000);
+    void tick(); // immediate fetch so a fresh attach/return doesn't wait a full interval
+  }, [handleRebuildComplete, handleRebuildError, stopRebuildPolling]);
+
   const handleGenerateScopeMap = useCallback(async () => {
     if (generatingScopeMap) return;
     setGeneratingScopeMap(true);
@@ -3387,6 +3432,7 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
     try {
       const profile = scopeProfileRef.current ?? await loadWorkspaceScopeProfile();
       if (!profile) {
+        setGeneratingScopeMap(false);
         setScopeGateReason("No workspace scope is selected yet. Select folders in Workspace Scope, then generate the map.");
         return;
       }
@@ -3400,31 +3446,43 @@ export function Map({ activeContext, onNavigateScope, onActiveContextChange }: M
         setScopeGateReason("Rebuild already in progress. Watching for completion...");
       }
 
-      while (true) {
-        await sleep(2000);
-        const statusResponse = await apiFetch(`/graph/rebuild/status`);
-        if (!statusResponse.ok) throw new Error(await apiErrorMessage(statusResponse));
-        const status = await statusResponse.json() as RebuildStatus;
-        if (status.status === "running") {
-          setScopeGateReason(rebuildGateStatusText(status));
-        }
-        if (status.status === "complete") {
-          const refreshedProfile = await loadWorkspaceScopeProfile();
-          await fetchSummary(undefined, undefined, refreshedProfile ?? profile);
-          return;
-        }
-        if (status.status === "error") {
-          throw new Error(status.error || "Graph generation failed");
-        }
-      }
+      pollRebuildStatus();
     } catch (e) {
-      setCanGenerateScopeMap(Boolean(scopeProfileRef.current));
-      setScopeGate("setup");
-      setScopeGateReason(e instanceof Error ? e.message : "Graph generation failed");
-    } finally {
-      setGeneratingScopeMap(false);
+      handleRebuildError(e instanceof Error ? e.message : "Graph generation failed");
     }
-  }, [fetchSummary, generatingScopeMap, loadWorkspaceScopeProfile]);
+  }, [generatingScopeMap, handleRebuildError, loadWorkspaceScopeProfile, pollRebuildStatus]);
+
+  // Re-attach to an in-flight rebuild on mount, and catch up immediately when the
+  // tab becomes visible again. A backgrounded/discarded tab never stops the work
+  // (it runs in a backend daemon thread); this just reconnects the UI to it.
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(`/graph/rebuild/status`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((status: RebuildStatus | null) => {
+        if (cancelled || !status || status.status !== "running") return;
+        setGeneratingScopeMap(true);
+        setCanGenerateScopeMap(false);
+        setScopeGate("setup");
+        setScopeGateReason(rebuildGateStatusText(status));
+        pollRebuildStatus();
+      })
+      .catch(() => {});
+
+    const onVisibilityChange = () => {
+      // When the tab regains focus while a rebuild is being watched, fetch right
+      // away instead of waiting out a background-throttled interval.
+      if (document.visibilityState === "visible" && rebuildPollRef.current) {
+        pollRebuildStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      stopRebuildPolling();
+    };
+  }, [pollRebuildStatus, stopRebuildPolling]);
 
   const fetchFullGraph = useCallback(async () => {
     const effectiveKnowledgeOnly = knowledgeOnly && !showLowSignal;
