@@ -11,7 +11,16 @@ from backend import main
 from backend.services import graphify_service as service
 
 
+def _disable_graphify_module(monkeypatch) -> None:
+    monkeypatch.setattr(
+        service,
+        "_graphify_module_available",
+        lambda module=service.GRAPHIFY_MODULE: False,
+    )
+
+
 def test_graphify_status_reports_missing_cli(monkeypatch) -> None:
+    _disable_graphify_module(monkeypatch)
     monkeypatch.setattr(service.shutil, "which", lambda _name: None)
     monkeypatch.setattr(service.sys, "executable", "/tmp/no-graphify-venv/python")
 
@@ -22,6 +31,7 @@ def test_graphify_status_reports_missing_cli(monkeypatch) -> None:
 
 
 def test_run_graphify_ask_raises_structured_missing_error(monkeypatch) -> None:
+    _disable_graphify_module(monkeypatch)
     monkeypatch.setattr(service.shutil, "which", lambda _name: None)
     monkeypatch.setattr(service.sys, "executable", "/tmp/no-graphify-venv/python")
 
@@ -38,6 +48,7 @@ def test_run_graphify_ask_raises_structured_missing_error(monkeypatch) -> None:
 
 
 def test_graphify_detection_checks_active_venv_sibling(monkeypatch, tmp_path: Path) -> None:
+    _disable_graphify_module(monkeypatch)
     graphify = tmp_path / "bin" / "graphify"
     graphify.parent.mkdir()
     graphify.write_text("#!/usr/bin/env bash\n")
@@ -45,6 +56,43 @@ def test_graphify_detection_checks_active_venv_sibling(monkeypatch, tmp_path: Pa
     monkeypatch.setattr(service.sys, "executable", str(tmp_path / "bin" / "python"))
 
     assert service.is_graphify_available() is True
+
+
+def test_run_graphify_prefers_signed_python_module(monkeypatch, tmp_path: Path) -> None:
+    # When the package is importable, launch via the signed interpreter
+    # (`python -m graphify`) so Smart App Control does not block the unsigned shim.
+    monkeypatch.setattr(
+        service,
+        "_graphify_module_available",
+        lambda module=service.GRAPHIFY_MODULE: True,
+    )
+    monkeypatch.setattr(service.sys, "executable", "/signed/python")
+    calls: list[list[str]] = []
+
+    def fake_run(*args, **_kwargs):
+        calls.append(args[0])
+        return subprocess.CompletedProcess(args=args[0], returncode=0, stdout="ok", stderr="")
+
+    monkeypatch.setattr(service.subprocess, "run", fake_run)
+
+    service.run_graphify_update(tmp_path, cwd=tmp_path)
+
+    assert calls[0][:3] == ["/signed/python", "-m", "graphify"]
+
+
+def test_run_graphify_maps_application_control_block(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(service.shutil, "which", lambda _name: "/usr/bin/graphify")
+
+    def fake_run(*_args, **_kwargs):
+        raise OSError("[WinError 4551] An Application Control policy has blocked this file")
+
+    monkeypatch.setattr(service.subprocess, "run", fake_run)
+
+    with pytest.raises(service.GraphifyServiceError) as exc:
+        service.run_graphify_update(tmp_path, cwd=tmp_path)
+
+    assert exc.value.code == service.GRAPHIFY_BLOCKED
+    assert "4551" in (exc.value.stderr or "")
 
 
 def test_run_graphify_update_maps_timeout(monkeypatch, tmp_path: Path) -> None:
@@ -83,6 +131,7 @@ def test_run_graphify_update_maps_command_failure(monkeypatch, tmp_path: Path) -
 
 
 def test_run_graphify_extract_builds_provider_command(monkeypatch, tmp_path: Path) -> None:
+    _disable_graphify_module(monkeypatch)
     monkeypatch.setattr(service.shutil, "which", lambda _name: "/usr/bin/graphify")
     calls: list[dict] = []
 

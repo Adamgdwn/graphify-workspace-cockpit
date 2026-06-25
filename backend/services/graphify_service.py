@@ -2,10 +2,19 @@
 
 This module keeps subprocess behavior, runtime detection, and safe error
 mapping out of the FastAPI route handlers.
+
+Graphify is launched through the signed Python interpreter (``python -m
+graphify``) rather than the unsigned pip console-script shim. On Windows,
+Smart App Control / WDAC blocks unsigned executables with WinError 4551
+("An Application Control policy has blocked this file"); running the module
+through the signed interpreter avoids that block. The resolved console script
+remains a fallback when the package is not importable for the active
+interpreter.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -15,9 +24,11 @@ from pathlib import Path
 from typing import Iterable, Literal, Sequence
 
 GRAPHIFY_EXECUTABLE = "graphify"
+GRAPHIFY_MODULE = "graphify"
 GRAPHIFY_MISSING = "GRAPHIFY_MISSING"
 GRAPHIFY_TIMEOUT = "GRAPHIFY_TIMEOUT"
 GRAPHIFY_COMMAND_FAILED = "GRAPHIFY_COMMAND_FAILED"
+GRAPHIFY_BLOCKED = "GRAPHIFY_BLOCKED"
 GRAPHIFY_VERSION_UNKNOWN = "GRAPHIFY_VERSION_UNKNOWN"
 
 GraphifyAskMode = Literal["query", "path", "explain"]
@@ -62,7 +73,7 @@ class GraphifyServiceError(RuntimeError):
 
 
 def is_graphify_available(executable: str = GRAPHIFY_EXECUTABLE) -> bool:
-    return _resolve_graphify(executable) is not None
+    return _graphify_launch_prefix(executable) is not None
 
 
 def get_graphify_version(
@@ -184,9 +195,9 @@ def _run_graphify(
     timeout: int,
     check: bool = True,
 ) -> GraphifyCommandResult:
-    resolved = _resolve_graphify(executable)
+    prefix = _graphify_launch_prefix(executable)
     display_command = [executable, *[str(arg) for arg in args]]
-    if resolved is None:
+    if prefix is None:
         raise GraphifyServiceError(
             GRAPHIFY_MISSING,
             "Graphify CLI is not installed or is not on PATH. Install it with `pip install graphifyy`.",
@@ -196,7 +207,7 @@ def _run_graphify(
 
     try:
         completed = subprocess.run(
-            [resolved, *[str(arg) for arg in args]],
+            [*prefix, *[str(arg) for arg in args]],
             cwd=str(cwd) if cwd is not None else None,
             capture_output=True,
             text=True,
@@ -218,6 +229,19 @@ def _run_graphify(
             status_code=503,
             command=display_command,
         ) from exc
+    except OSError as exc:
+        # Windows Smart App Control / WDAC blocks unsigned binaries with
+        # WinError 4551 ("An Application Control policy has blocked this file").
+        # Surface an actionable, structured error instead of a raw OSError string.
+        raise GraphifyServiceError(
+            GRAPHIFY_BLOCKED,
+            "The OS blocked the Graphify process (e.g. Windows Smart App Control). "
+            "Graphify is launched through the signed Python interpreter to avoid this; "
+            "if it persists, confirm Graphify is installed in the backend virtualenv.",
+            status_code=503,
+            command=display_command,
+            stderr=str(exc),
+        ) from exc
 
     result = GraphifyCommandResult(
         command=display_command,
@@ -235,6 +259,29 @@ def _run_graphify(
             stdout=result.stdout,
         )
     return result
+
+
+def _graphify_module_available(module: str = GRAPHIFY_MODULE) -> bool:
+    """Report whether the active interpreter can import the Graphify package."""
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _graphify_launch_prefix(executable: str = GRAPHIFY_EXECUTABLE) -> list[str] | None:
+    """Return the argv prefix used to launch Graphify, or None if unavailable.
+
+    Prefer running Graphify through the signed Python interpreter
+    (``python -m graphify``) so Windows Smart App Control / WDAC does not block
+    the unsigned pip console-script shim (which raises WinError 4551). Fall back
+    to the resolved console script when the module cannot be imported by the
+    active interpreter.
+    """
+    if _graphify_module_available():
+        return [sys.executable, "-m", GRAPHIFY_MODULE]
+    resolved = _resolve_graphify(executable)
+    return [resolved] if resolved is not None else None
 
 
 def _resolve_graphify(executable: str = GRAPHIFY_EXECUTABLE) -> str | None:
