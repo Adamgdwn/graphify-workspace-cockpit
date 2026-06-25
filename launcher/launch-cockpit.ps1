@@ -96,8 +96,60 @@ function Add-PathPrefix([string]$path) {
     }
 }
 
+function Get-DefaultBrowserExe {
+    # Resolve the user's default browser executable from the URL association.
+    # Returns the full path to the browser .exe, or $null if it can't be read.
+    try {
+        $progId = $null
+        foreach ($scheme in @('https', 'http')) {
+            $userChoice = "HKCU:\SOFTWARE\Microsoft\Windows\Shell\Associations\UrlAssociations\$scheme\UserChoice"
+            $entry = Get-ItemProperty -Path $userChoice -ErrorAction SilentlyContinue
+            if ($entry -and $entry.ProgId) { $progId = $entry.ProgId; break }
+        }
+        if (-not $progId) { return $null }
+
+        # The shell\open\command default value looks like:
+        #   "C:\...\msedge.exe" --single-argument %1
+        $commandKey = "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command"
+        $command = (Get-ItemProperty -Path $commandKey -ErrorAction SilentlyContinue).'(default)'
+        if (-not $command) { return $null }
+
+        if ($command -match '^\s*"([^"]+)"') {
+            $exe = $matches[1]
+        } elseif ($command -match '^\s*(\S+)') {
+            $exe = $matches[1]
+        } else {
+            return $null
+        }
+        if (Test-Path -LiteralPath $exe) { return $exe }
+        return $null
+    } catch {
+        return $null
+    }
+}
+
 function Open-Cockpit {
     if ($NoBrowser) { return }
+
+    # Prefer an app-mode window in the user's DEFAULT browser. A Chromium "--app="
+    # window is a standalone window that the browser does not background-discard
+    # and throttles far less than a tab, so long-running graph generation stays
+    # live instead of stalling/resetting when the window loses focus.
+    # Falls back to a normal default-browser tab (e.g. for Firefox).
+    $browserExe = Get-DefaultBrowserExe
+    if ($browserExe) {
+        $chromiumBrowsers = @('msedge.exe', 'chrome.exe', 'brave.exe', 'vivaldi.exe')
+        $leaf = (Split-Path -Leaf $browserExe).ToLower()
+        if ($chromiumBrowsers -contains $leaf) {
+            try {
+                Start-Process -FilePath $browserExe -ArgumentList "--app=$FrontendUrl" | Out-Null
+                return
+            } catch {
+                # Fall through to the default-tab path below.
+            }
+        }
+    }
+
     Start-Process -FilePath 'explorer.exe' -ArgumentList $FrontendUrl | Out-Null
 }
 

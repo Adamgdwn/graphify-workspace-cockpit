@@ -15,7 +15,7 @@ Neither process connects to the internet unless Supabase (`STORAGE_BACKEND=supab
 
 ## Starting the Cockpit
 
-**Via Windows launcher:** double-click `launcher\launch-cockpit.bat`. The launcher script starts both processes if not already running, waits for health checks, and opens the browser.
+**Via Windows launcher:** double-click `launcher\launch-cockpit.bat`. The launcher script starts both processes if not already running, waits for health checks, and opens the cockpit. When the default browser is Chromium-based (Edge, Chrome, Brave, Vivaldi) it opens a standalone **app-mode window** (`--app=`) rather than a browser tab. App-mode windows are not background-discarded and are throttled far less than tabs, so long-running graph generation keeps running and stays visible even when the window loses focus. Other default browsers (e.g. Firefox) open a normal tab.
 
 After pulling updates or changing local cockpit code, double-click `launcher\restart-cockpit.bat` or run:
 
@@ -131,6 +131,7 @@ source "$HOME/.nvm/nvm.sh" && API_URL=https://cockpit.example.com/api FRONTEND_U
 | Supabase sync failing | `SUPABASE_URL` or `SUPABASE_KEY` wrong, or migration 002 not applied | Check `.env`; inspect `storage` in `/health`; apply `db/migrations/002_recommendation_action_plans.sql` only with owner approval |
 | Cloud sync failing | MSAL token expired or wrong tenant | Re-run `POST /connectors/{connector_id}/sync` or re-authenticate from Settings |
 | Frontend won't load | Port 5173 in use or Vite didn't start | Check `launcher/frontend.log`; kill stale process on that port |
+| Graph generation appears to stall/reset when the window is backgrounded | Browser background-tab timer throttling and tab discarding — the rebuild itself keeps running in a backend daemon thread; only the UI's view of it was affected | Use the launcher's app-mode window (default for Chromium browsers). The Map tab also re-attaches to an in-flight rebuild on load and catches up immediately on `visibilitychange`, so progress reconnects when you return |
 | `GRAPHIFY_MISSING` in Ask or rebuild | Graphify CLI is not installed or not on `PATH` | Run `pip install graphifyy`, rebuild Docker if applicable, then confirm `graphify --version` |
 | `GRAPHIFY_TIMEOUT` in Ask or rebuild | Graphify CLI exceeded the route timeout | Retry on a smaller graph or inspect the configured scan directories |
 | Rebuild never elevates | `GRAPH_ESCALATION_ENABLED` is false or no `GRAPH_ESCALATION_BACKEND` is configured | Set both env vars, configure the provider key expected by Graphify, restart the backend, then check `/graph/rebuild/status` |
