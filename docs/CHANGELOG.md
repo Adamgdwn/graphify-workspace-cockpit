@@ -6,6 +6,51 @@ changed, or fixed in that chunk.
 
 ---
 
+## Semantic Analyzer Cold-Start Speed & Insight Diversity (2026-06-26)
+
+### Added
+- The embedding cache now **persists to disk** (`workspace/state/embedding-cache.json`).
+  The previous in-process cache only sped up re-runs within one backend session;
+  the first pass after a restart still re-embedded the whole graph. The cache is
+  warmed from disk at startup and saved after any pass that embedded new nodes, so
+  a restarted backend reuses unchanged embeddings instead of paying the full cold
+  cost. It is rewritten only when a pass adds vectors (a fully-cached re-run skips
+  the write).
+- `SEMANTIC_EMBED_CONCURRENCY` setting (default `4`, clamped 1–16). Embedding
+  batches are now sent to Ollama concurrently instead of strictly serially, so the
+  cold first run overlaps inference when Ollama is configured for parallelism
+  (`OLLAMA_NUM_PARALLEL`). Cache access is locked; the Ollama call runs unlocked so
+  batches genuinely overlap.
+
+### Changed
+- Rebalanced the semantic overlap **insight classifier** so `drift_risk` is no
+  longer a catch-all. Previously any sparse cross-cluster group containing a single
+  high-similarity pair was labelled drift — and because the embedding model's
+  baseline cosine similarity is high, nearly everything collapsed to drift. Drift is
+  now reserved for its actual meaning: a **same-named artifact** that exists in two
+  places and is similar but no longer near-identical (the copies have diverged).
+  Sparse high-similarity groups without a same-name signal now distribute across
+  `shared_pattern` / `gap_missing_bridge` / `cross_app_similarity` / `low_value` by
+  structure (link count and density) rather than raw similarity. Both the heuristic
+  summary classifier and the LLM-fallback heuristic were updated consistently.
+
+## Semantic Analyzer Speed (2026-06-26)
+
+### Added
+- In-process embedding cache for the semantic similarity pass, keyed by
+  `(model, sha256(text))`. Re-runs, threshold/neighbor tweaks, and overlapping
+  scopes reuse vectors instead of re-calling Ollama, so only changed nodes are
+  re-embedded — the dominant cost of a pass. The status payload now reports
+  `embedded_via_model` and `embedded_from_cache`.
+
+### Changed
+- The semantic pass resolves source roots once per run and caches each file's
+  source window, instead of re-resolving roots and re-reading files for every
+  node (many nodes share a file). Cuts the pre-embedding overhead on large graphs.
+- `numpy` is now a pinned backend dependency. It was only present transitively;
+  without it the similarity step silently fell back to an O(n²) pure-Python
+  cosine loop. Pinning guarantees the fast vectorized path on every install.
+
 ## CPU-Tier Local Model Tuning (2026-06-24)
 
 ### Added

@@ -4,6 +4,7 @@ python-multipart>=0.0.9
 supabase>=2.0.0
 msal>=1.28.0
 requests>=2.31.0
+numpy>=1.26
 slowapi>=0.1.9
 httpx2>=0.1.0
 pytest>=8.2.0

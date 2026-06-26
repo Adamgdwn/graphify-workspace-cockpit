@@ -8,7 +8,7 @@ import fnmatch
 import os
 import re
 import uuid
-from collections import Counter, defaultdict
+from collections import Counter, OrderedDict, defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -3498,8 +3498,18 @@ def remove_scan_dir(body: ScanDirBody) -> dict:
 # Semantic similarity pass
 # ---------------------------------------------------------------------------
 
-def _read_source_window(source_file: str, source_root: str = "", n_lines: int = 35) -> str:
-    """Read up to n_lines from a node's source file, preferring that node's root."""
+def _read_source_window(
+    source_file: str,
+    source_root: str = "",
+    n_lines: int = 35,
+    configured_roots: list[Path] | None = None,
+) -> str:
+    """Read up to n_lines from a node's source file, preferring that node's root.
+
+    Pass ``configured_roots`` (from a single ``_configured_source_roots()`` call)
+    when reading windows for many nodes in a loop, so the saved-scope lookup and
+    path resolution are not repeated per node.
+    """
     if not source_file:
         return ""
 
@@ -3515,7 +3525,7 @@ def _read_source_window(source_file: str, source_root: str = "", n_lines: int = 
 
     if str(source_root or "").strip():
         add_root(source_root)
-    for root in _configured_source_roots():
+    for root in (configured_roots if configured_roots is not None else _configured_source_roots()):
         add_root(root)
 
     raw_path = Path(source_file).expanduser()
@@ -3595,6 +3605,121 @@ def _embed_text_batch_ollama(model: str, texts: list[str], ollama_base: str) -> 
         except Exception:
             vectors.append([])
     return vectors
+
+
+# Embedding cache. Embeddings are deterministic for a given (model, text), so
+# re-runs, threshold tweaks, and overlapping scopes reuse vectors instead of
+# paying for Ollama inference again. Keyed by text hash so a changed label or
+# source window naturally invalidates only the affected node. The cache is
+# persisted to disk so the first pass after a backend restart reuses unchanged
+# embeddings instead of re-embedding the whole graph (the slow cold path).
+_EMBED_CACHE: "OrderedDict[str, list[float]]" = OrderedDict()
+_EMBED_CACHE_MAX = 50_000
+_EMBED_CACHE_VERSION = 1
+# Guards the cache for concurrent embedding batches (see _run_semantic_pass).
+_EMBED_CACHE_LOCK = _threading.Lock()
+EMBED_CACHE_FILE = WORKSPACE_STATE / "embedding-cache.json"
+
+
+def _embed_cache_key(model: str, text: str) -> str:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return f"{model}\x00{digest}"
+
+
+def _embed_cache_store(model: str, text: str, vector: list[float]) -> None:
+    if not vector:
+        return
+    key = _embed_cache_key(model, text)
+    with _EMBED_CACHE_LOCK:
+        cache = _EMBED_CACHE
+        if key in cache:
+            cache.move_to_end(key)
+        cache[key] = vector
+        while len(cache) > _EMBED_CACHE_MAX:
+            cache.popitem(last=False)
+
+
+def _embed_cache_load() -> None:
+    """Warm the in-process cache from disk so a fresh process reuses vectors."""
+    try:
+        raw = json.loads(EMBED_CACHE_FILE.read_text())
+    except (FileNotFoundError, ValueError, OSError):
+        return
+    except Exception:
+        return
+    if not isinstance(raw, dict) or raw.get("version") != _EMBED_CACHE_VERSION:
+        return
+    entries = raw.get("entries")
+    if not isinstance(entries, dict):
+        return
+    with _EMBED_CACHE_LOCK:
+        for key, vector in entries.items():
+            if len(_EMBED_CACHE) >= _EMBED_CACHE_MAX:
+                break
+            if isinstance(key, str) and isinstance(vector, list) and vector:
+                _EMBED_CACHE[key] = vector
+
+
+def _embed_cache_save() -> None:
+    """Persist the cache atomically so embeddings survive a backend restart."""
+    with _EMBED_CACHE_LOCK:
+        snapshot = dict(_EMBED_CACHE)
+    try:
+        write_json_atomic(
+            EMBED_CACHE_FILE,
+            {"version": _EMBED_CACHE_VERSION, "entries": snapshot},
+        )
+    except Exception:
+        # Persistence is a best-effort speed optimization; never fail a pass on it.
+        pass
+
+
+def _embed_texts_cached(
+    model: str,
+    texts: list[str],
+    ollama_base: str,
+) -> tuple[list[list[float]], int]:
+    """Embed ``texts`` reusing cached vectors; only cache misses hit Ollama.
+
+    Returns the vectors aligned with ``texts`` and the number of texts that
+    actually required an embedding call (for progress/telemetry). Safe to call
+    from several threads at once: cache reads/writes are locked, but the Ollama
+    call runs unlocked so concurrent batches overlap.
+    """
+    vectors: list[list[float]] = [[] for _ in texts]
+    miss_texts: list[str] = []
+    miss_positions: list[int] = []
+    with _EMBED_CACHE_LOCK:
+        for position, text in enumerate(texts):
+            key = _embed_cache_key(model, text)
+            cached = _EMBED_CACHE.get(key)
+            if cached is not None:
+                _EMBED_CACHE.move_to_end(key)
+                vectors[position] = cached
+            else:
+                miss_texts.append(text)
+                miss_positions.append(position)
+
+    if miss_texts:
+        fresh = _embed_text_batch_ollama(model, miss_texts, ollama_base)
+        for position, text, vector in zip(miss_positions, miss_texts, fresh):
+            vectors[position] = vector
+            _embed_cache_store(model, text, vector)
+
+    return vectors, len(miss_texts)
+
+
+def _semantic_embed_concurrency() -> int:
+    """Number of embedding batches to send to Ollama at once (1-16)."""
+    try:
+        value = int(os.environ.get("SEMANTIC_EMBED_CONCURRENCY", "4"))
+    except (TypeError, ValueError):
+        value = 4
+    return max(1, min(16, value))
+
+
+# Warm the cache from the last run's persisted vectors at import time.
+_embed_cache_load()
 
 
 def _semantic_edge_policy_stale(payload: dict) -> bool:
@@ -3908,27 +4033,73 @@ def _run_semantic_pass(
         _SEMANTIC_STATUS["scope_node_count"] = len(nodes)
 
         _ollama_base = os.environ.get("OLLAMA_URL", "http://localhost:11434")
+        # Resolve source roots once for the whole pass and reuse each file's
+        # window across the (often many) nodes that share it, instead of
+        # re-reading the file and re-resolving roots per node.
+        configured_roots = _configured_source_roots()
+        window_cache: dict[tuple[str, str], str] = {}
         embed_inputs: list[tuple[str, str]] = []
         for node in nodes:
             nid = str(node["id"])
             label = node.get("label", nid)
             ftype = node.get("file_type", "code")
-            window = _read_source_window(
-                node.get("source_file", ""),
-                str(node.get("source_root") or ""),
-            )
+            source_file = node.get("source_file", "")
+            source_root = str(node.get("source_root") or "")
+            window_key = (source_file, source_root)
+            window = window_cache.get(window_key)
+            if window is None:
+                window = _read_source_window(
+                    source_file,
+                    source_root,
+                    configured_roots=configured_roots,
+                )
+                window_cache[window_key] = window
             text = f"{ftype}: {label}\n{window}".strip()[:2000]
             embed_inputs.append((nid, text))
 
-        embeddings: list[tuple[str, list[float]]] = []
+        # Embed in batches, several batches in flight at once. Cache hits cost
+        # nothing; the slow part is Ollama inference on cache misses, so we
+        # overlap those requests (bounded by SEMANTIC_EMBED_CONCURRENCY).
+        import concurrent.futures as _futures
+
         batch_size = 32
-        for start in range(0, len(embed_inputs), batch_size):
-            batch = embed_inputs[start:start + batch_size]
-            vectors = _embed_text_batch_ollama(model, [text for _, text in batch], _ollama_base)
-            for (nid, _text), vector in zip(batch, vectors):
-                if vector:
-                    embeddings.append((nid, vector))
-            _SEMANTIC_STATUS["progress"] = min(len(nodes), start + len(batch))
+        batches = [
+            embed_inputs[start:start + batch_size]
+            for start in range(0, len(embed_inputs), batch_size)
+        ]
+        batch_results: list[list[tuple[str, list[float]]]] = [[] for _ in batches]
+        embedded_via_model = 0
+        processed = 0
+
+        def _embed_one_batch(batch: list[tuple[str, str]]) -> tuple[list[tuple[str, list[float]]], int]:
+            vectors, miss_count = _embed_texts_cached(
+                model, [text for _, text in batch], _ollama_base
+            )
+            pairs = [(nid, vector) for (nid, _text), vector in zip(batch, vectors) if vector]
+            return pairs, miss_count
+
+        with _futures.ThreadPoolExecutor(max_workers=_semantic_embed_concurrency()) as executor:
+            future_to_index = {
+                executor.submit(_embed_one_batch, batch): index
+                for index, batch in enumerate(batches)
+            }
+            for future in _futures.as_completed(future_to_index):
+                index = future_to_index[future]
+                pairs, miss_count = future.result()
+                batch_results[index] = pairs
+                embedded_via_model += miss_count
+                processed += len(batches[index])
+                _SEMANTIC_STATUS["progress"] = min(len(nodes), processed)
+
+        embeddings: list[tuple[str, list[float]]] = [
+            pair for pairs in batch_results for pair in pairs
+        ]
+        _SEMANTIC_STATUS["embedded_via_model"] = embedded_via_model
+        _SEMANTIC_STATUS["embedded_from_cache"] = max(0, len(embeddings) - embedded_via_model)
+        # Persist the cache only when this pass added vectors, so a fully-cached
+        # re-run doesn't rewrite the (potentially large) cache file for nothing.
+        if embedded_via_model > 0:
+            _embed_cache_save()
 
         semantic_edges = _semantic_edges_from_embeddings(
             embeddings,
@@ -4047,15 +4218,23 @@ def _summary_overlap_insight(edge_count: int, avg_similarity: float, max_similar
     if edge_count >= 8:
         signals.append(f"{edge_count} related links")
 
-    if same_name_count > 0 and max_similarity >= 0.84:
-        return "waste_duplicate", signals or ["same-name overlap"]
-    if edge_count >= 18 and avg_similarity >= 0.86:
+    # Same-name pairs across clusters are the canonical-duplication signal: the
+    # two sides are "the same thing" living in different places.
+    if same_name_count > 0:
+        if max_similarity >= 0.90:
+            return "waste_duplicate", signals or ["same-name near-duplicate"]
+        # Same name but no longer near-identical: the copies have drifted apart.
+        # This is the one place drift belongs — a known-shared artifact diverging,
+        # not any sparse high-similarity pair.
+        return "drift_risk", signals or ["same-name pair drifting apart"]
+    # No canonical/same-name signal. High cosine is this embedding model's
+    # baseline, so distinguish by structure (how many links, how dense) rather
+    # than raw similarity, instead of collapsing every strong pair into "drift".
+    if edge_count >= 18 and avg_similarity >= 0.88:
         return "cross_app_similarity", signals or ["dense cross-area similarity"]
     if edge_count >= 8:
         return "gap_missing_bridge", signals or ["related areas lack one clear bridge"]
-    if max_similarity >= 0.94:
-        return "drift_risk", signals or ["near-duplicate content"]
-    if edge_count >= 4:
+    if edge_count >= 3:
         return "shared_pattern", signals or ["repeated semantic pattern"]
     return "low_value", signals or ["single weak candidate"]
 
@@ -4425,9 +4604,12 @@ def _heuristic_overlap_insight(req: TriageOverlapRequest, verdict: str = "relate
     elif req.edge_count >= 8 and same_name_count == 0 and avg >= 0.80:
         insight_kind = "gap_missing_bridge"
         decision_impact = "Possible gap: related areas are close semantically but need an explicit bridge, owner, or integration decision."
-    elif max_similarity >= 0.92:
+    elif same_name_count:
+        # Same-named material that wasn't strong enough for waste_duplicate is the
+        # genuine drift case: shared artifact, copies diverging. Reserve drift for
+        # this rather than firing on any sparse high-similarity pair.
         insight_kind = "drift_risk"
-        decision_impact = "Drift risk: similar knowledge may diverge unless one side owns the canonical wording or behavior."
+        decision_impact = "Drift risk: same-named material in different places is similar but not identical and may diverge unless one side owns the canonical wording or behavior."
     elif req.edge_count >= 4:
         insight_kind = "shared_pattern"
         decision_impact = "Shared pattern: likely reusable vocabulary or design that should be named if it matters across apps."
