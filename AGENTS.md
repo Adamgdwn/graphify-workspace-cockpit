@@ -1,5 +1,35 @@
 # Agent Instructions
 
+## CNS Role (Guided AI Labs Agentic OS — 2026-06-25)
+
+**Layer:** Graphify — Connectome / Relationship Intelligence
+**Function:** Graph nodes/edges, dependency maps, research ingestion, context routing, relationship intelligence for all CNS layers
+**In the CNS loop:** `OS evidence → Graphify updates → Freedom learns (via graph context queries)`
+
+Graphify is the CNS connectome. It is not a developer tool and not a product spoke. Without Graphify, Freedom reasons over isolated facts. The architecture requires relationship intelligence at the core.
+
+**Current state:** FastAPI + React, "second video ready" as of 2026-06-21. Primary API and visualization surface on Linux. This is the canonical Graphify instance.
+
+**Cross-machine role:** Linux cockpit = primary (query API, visualization, decision surface). Windows Enhanced Graphify = extraction node for Windows repos (GAIL OS Rev 2, M365 Foundation) that Linux cannot run natively. Single `graph.json` as source of truth, synced via GitHub. (DEC-005)
+
+**Phase 2 work (next):**
+- Extend graph schema for CNS entity domains (Mission, Action, AuthorityEnvelope, EvidencePacket as GraphNode types)
+- Add ResearchClaim and EvidencePacket node types
+- Expose HTTP graph query API for external callers (Freedom, GAIL OS)
+- Ensure Windows Enhanced Graphify extraction output validates against this repo's schema as canonical
+
+**Integration contracts:**
+- Provides: `POST /api/graph/query` — graph context queries from Freedom and GAIL OS
+- Consumes: EvidencePacket summaries from GAIL OS (as new GraphNodes after Phase 2+)
+- Consumes: ResearchClaim ingestion from build agent research mandate
+
+**Authority boundary:** Graphify provides read-only context. Graphify recommendations are mission candidates, not execution approval. Graphify may not approve or execute actions — that is GAIL OS jurisdiction.
+
+For cross-repo coordination state, see `agentic-multi-agent-agent-builder/docs/build-control/`.
+
+---
+
+
 ## Normal Startup
 
 For ordinary scoped work:
