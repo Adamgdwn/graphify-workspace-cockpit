@@ -9,7 +9,7 @@ Owner: Adam Goodwin
 The Graphify Workspace Cockpit runs two local processes:
 
 - **Backend** — FastAPI on `http://localhost:8000`. Reads `graph.json`, runs Graphify through the backend service wrapper, calls Ollama for inference, writes workspace state to `workspace/state/`.
-- **Frontend** — Vite/React dev server on `http://localhost:5173`. Talks only to the backend.
+- **Frontend** — React app on `http://localhost:5173`. The Windows launcher builds an optimized production bundle and serves it with `vite preview` (minified, code-split, cached chunks — much faster to load than the dev server, and the heavy Map/cytoscape code is deferred until the Map tab is opened). It rebuilds only when frontend sources changed. Pass `-Dev` to `launch-cockpit.ps1` to fall back to the hot-reload dev server while editing the frontend. Talks only to the backend.
 
 Neither process connects to the internet unless Supabase (`STORAGE_BACKEND=supabase`) or Cloud Connectors (SharePoint/OneNote) are configured.
 

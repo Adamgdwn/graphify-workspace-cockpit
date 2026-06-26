@@ -1,20 +1,23 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api/client";
 import { AICopilot } from "./components/AICopilot";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { HelpModal } from "./components/HelpModal";
 import { ToastProvider } from "./components/Toast";
-import { Ask } from "./tabs/Ask";
 import { Dashboard } from "./tabs/Dashboard";
 import type { DashboardDestination } from "./tabs/Dashboard";
-import { Decisions } from "./tabs/Decisions";
-import { FileImportance } from "./tabs/FileImportance";
-import { Map } from "./tabs/Map";
-import { Recommendations } from "./tabs/Recommendations";
-import { Settings } from "./tabs/Settings";
-import { WorkspaceScope } from "./tabs/WorkspaceScope";
-import { WorkQueue } from "./tabs/WorkQueue";
 import type { ActiveCockpitContext } from "./domain/cockpitContext";
+
+// Heavy tabs are code-split so the initial load (Dashboard) does not pull in
+// cytoscape or the large Map module until those tabs are actually opened.
+const Ask = lazy(() => import("./tabs/Ask").then((m) => ({ default: m.Ask })));
+const Decisions = lazy(() => import("./tabs/Decisions").then((m) => ({ default: m.Decisions })));
+const FileImportance = lazy(() => import("./tabs/FileImportance").then((m) => ({ default: m.FileImportance })));
+const Map = lazy(() => import("./tabs/Map").then((m) => ({ default: m.Map })));
+const Recommendations = lazy(() => import("./tabs/Recommendations").then((m) => ({ default: m.Recommendations })));
+const Settings = lazy(() => import("./tabs/Settings").then((m) => ({ default: m.Settings })));
+const WorkspaceScope = lazy(() => import("./tabs/WorkspaceScope").then((m) => ({ default: m.WorkspaceScope })));
+const WorkQueue = lazy(() => import("./tabs/WorkQueue").then((m) => ({ default: m.WorkQueue })));
 
 type Tab = "dashboard" | "ask" | "scope" | "importance" | "map" | "decisions" | "recommendations" | "work-queue" | "settings";
 
@@ -155,15 +158,17 @@ export default function App() {
           ))}
         </nav>
         <main className="cockpit-content">
-          {active === "dashboard" && <ErrorBoundary tabName="Command Center"><Dashboard onNavigate={navigateFromDashboard} onNavigateMapContext={navigateToMapContext} /></ErrorBoundary>}
-          {active === "ask" && <ErrorBoundary tabName="Ask"><Ask focusTrigger={focusTrigger} askRef={askRef} onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
-          {active === "scope" && <ErrorBoundary tabName="Workspace Scope"><WorkspaceScope onGenerated={() => setActive("map")} /></ErrorBoundary>}
-          {active === "importance" && <ErrorBoundary tabName="Importance Criteria Table"><FileImportance /></ErrorBoundary>}
-          {active === "map" && <ErrorBoundary tabName="Map"><Map activeContext={activeContext} onNavigateScope={() => setActive("scope")} onActiveContextChange={setActiveContext} /></ErrorBoundary>}
-          {active === "decisions" && <ErrorBoundary tabName="Decisions"><Decisions onActiveContextChange={setActiveContext} /></ErrorBoundary>}
-          {active === "recommendations" && <ErrorBoundary tabName="Recommendations"><Recommendations onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
-          {active === "work-queue" && <ErrorBoundary tabName="Work Queue"><WorkQueue /></ErrorBoundary>}
-          {active === "settings" && <ErrorBoundary tabName="Settings"><Settings onNavigateScope={() => setActive("scope")} /></ErrorBoundary>}
+          <Suspense fallback={<div className="tab-loading">Loading…</div>}>
+            {active === "dashboard" && <ErrorBoundary tabName="Command Center"><Dashboard onNavigate={navigateFromDashboard} onNavigateMapContext={navigateToMapContext} /></ErrorBoundary>}
+            {active === "ask" && <ErrorBoundary tabName="Ask"><Ask focusTrigger={focusTrigger} askRef={askRef} onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
+            {active === "scope" && <ErrorBoundary tabName="Workspace Scope"><WorkspaceScope onGenerated={() => setActive("map")} /></ErrorBoundary>}
+            {active === "importance" && <ErrorBoundary tabName="Importance Criteria Table"><FileImportance /></ErrorBoundary>}
+            {active === "map" && <ErrorBoundary tabName="Map"><Map activeContext={activeContext} onNavigateScope={() => setActive("scope")} onActiveContextChange={setActiveContext} /></ErrorBoundary>}
+            {active === "decisions" && <ErrorBoundary tabName="Decisions"><Decisions onActiveContextChange={setActiveContext} /></ErrorBoundary>}
+            {active === "recommendations" && <ErrorBoundary tabName="Recommendations"><Recommendations onEvidenceNavigate={navigateToMapContext} /></ErrorBoundary>}
+            {active === "work-queue" && <ErrorBoundary tabName="Work Queue"><WorkQueue /></ErrorBoundary>}
+            {active === "settings" && <ErrorBoundary tabName="Settings"><Settings onNavigateScope={() => setActive("scope")} /></ErrorBoundary>}
+          </Suspense>
         </main>
         <AICopilot activeContext={activeContext} onNavigateSettings={() => setActive("settings")} />
       </div>

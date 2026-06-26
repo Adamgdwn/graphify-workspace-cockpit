@@ -4,12 +4,18 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File launcher\launch-cockpit.ps1
 #
 # The launcher bootstraps a Python virtual environment, keeps backend/frontend
-# dependencies in sync, loads optional backend/frontend .env files, starts both
-# local services, waits for health checks, and opens the browser.
+# dependencies in sync, loads optional backend/frontend .env files, builds the
+# frontend into an optimized production bundle (only when sources changed), then
+# starts both local services, waits for health checks, and opens the browser.
+#
+# Serving the built bundle (vite preview) instead of the dev server is what keeps
+# the UI fast to load: minified, pre-bundled, cached chunks rather than hundreds
+# of on-demand dev transforms. Use -Dev to fall back to hot-reload while editing.
 
 param(
     [switch]$NoBrowser,
-    [switch]$Restart
+    [switch]$Restart,
+    [switch]$Dev
 )
 
 $ErrorActionPreference = 'Stop'
@@ -218,6 +224,54 @@ function Install-FrontendDeps {
     }
 }
 
+function Get-NewestSourceTime {
+    # Newest modification time across the frontend source + build config. Used to
+    # decide whether the production bundle in dist\ is stale and needs rebuilding.
+    $paths = @(
+        (Join-Path $FrontendDir 'src'),
+        (Join-Path $FrontendDir 'index.html'),
+        (Join-Path $FrontendDir 'vite.config.ts'),
+        (Join-Path $FrontendDir 'tsconfig.json'),
+        (Join-Path $FrontendDir 'package.json'),
+        (Join-Path $FrontendDir 'package-lock.json')
+    )
+    $newest = [datetime]::MinValue
+    foreach ($path in $paths) {
+        if (-not (Test-Path $path)) { continue }
+        foreach ($item in Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue) {
+            if ($item.LastWriteTimeUtc -gt $newest) { $newest = $item.LastWriteTimeUtc }
+        }
+    }
+    return $newest
+}
+
+function Update-FrontendBuild {
+    # Build the optimized production bundle, but skip the build when the existing
+    # dist\ output is already newer than every frontend source file.
+    Push-Location $FrontendDir
+    try {
+        $distIndex = Join-Path $FrontendDir 'dist\index.html'
+        $needsBuild = $true
+        if (Test-Path $distIndex) {
+            $distTime = (Get-Item -LiteralPath $distIndex).LastWriteTimeUtc
+            if ((Get-NewestSourceTime) -le $distTime) { $needsBuild = $false }
+        }
+
+        if ($needsBuild) {
+            Write-Host '==> Building frontend (production bundle)...'
+            & $NpmCmd run build:fast
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error 'Frontend build failed - check the output above.'
+                exit 1
+            }
+        } else {
+            Write-Host '==> Frontend bundle is up to date.'
+        }
+    } finally {
+        Pop-Location
+    }
+}
+
 # -- already running? ---------------------------------------------------------
 
 if ($Restart) {
@@ -263,10 +317,18 @@ if (-not (Test-Up "$BackendUrl/health")) {
 
 if (-not (Test-Up $FrontendUrl)) {
     Install-FrontendDeps
-    Write-Host '==> Starting frontend...'
-    Start-Bg -workdir $FrontendDir -filePath $NpmCmd `
-        -arguments @('run', 'dev') `
-        -stdoutLog $FrontendLog -stderrLog $FrontendErr
+    if ($Dev) {
+        Write-Host '==> Starting frontend (dev server, hot-reload)...'
+        Start-Bg -workdir $FrontendDir -filePath $NpmCmd `
+            -arguments @('run', 'dev') `
+            -stdoutLog $FrontendLog -stderrLog $FrontendErr
+    } else {
+        Update-FrontendBuild
+        Write-Host '==> Starting frontend (production bundle)...'
+        Start-Bg -workdir $FrontendDir -filePath $NpmCmd `
+            -arguments @('run', 'preview', '--', '--port', '5173', '--strictPort') `
+            -stdoutLog $FrontendLog -stderrLog $FrontendErr
+    }
 }
 
 # -- wait and open ------------------------------------------------------------

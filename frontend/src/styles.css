@@ -109,6 +109,12 @@ body {
   max-width: 560px;
 }
 
+.tab-loading {
+  padding: 48px 8px;
+  color: #6b7a99;
+  font-size: 14px;
+}
+
 .tab-placeholder h2 {
   margin: 0 0 8px;
   font-size: 1.25rem;

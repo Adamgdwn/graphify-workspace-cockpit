@@ -6,6 +6,23 @@ changed, or fixed in that chunk.
 
 ---
 
+## Frontend Production Bundle Serving (2026-06-26)
+
+### Changed
+- The Windows launcher now serves an **optimized production bundle** (`vite preview`)
+  instead of the Vite dev server. The bundle is minified, pre-bundled, and split
+  into cached chunks, so the cockpit loads far faster than the dev server's
+  hundreds of on-demand transforms. `launch-cockpit.ps1` rebuilds the bundle only
+  when frontend sources are newer than `dist/`, and accepts `-Dev` to fall back to
+  the hot-reload dev server while editing the frontend.
+- Heavy tabs (Map/cytoscape, Ask, Decisions, Recommendations, Settings, etc.) are
+  now **code-split with `React.lazy` + `Suspense`**, so the initial Dashboard load
+  no longer pulls in the large Map/cytoscape modules until those tabs are opened.
+
+### Added
+- `build:fast` and `preview` npm scripts in `frontend/package.json` for the
+  launcher's bundle build/serve path.
+
 ## Semantic Analyzer Cold-Start Speed & Insight Diversity (2026-06-26)
 
 ### Added
