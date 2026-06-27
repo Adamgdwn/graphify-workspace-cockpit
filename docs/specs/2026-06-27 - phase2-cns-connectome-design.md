@@ -56,6 +56,20 @@ The analogy the user named is right: the human brain doesn't have a filing syste
 
 These aren't aspirational — they're the SLA GAIL OS needs to evaluate an action without adding decision latency. Sub-100ms on a local SQLite store with proper indexing is straightforward. The semantic store adds latency only for queries that need it.
 
+**Benchmark results — 2026-06-27 (Chunk 2.8):**
+Graph: 12,687 entities, 19,477 relationships (real workspace, 15.9 MB JSON).
+
+| Query | p50 | p95 | p99 | SLA | Result |
+|-------|-----|-----|-----|-----|--------|
+| entity_context | 0.2ms | 0.2ms | 0.2ms | <100ms | PASS |
+| domain_mapping | 0.1ms | 0.2ms | 0.2ms | <100ms | PASS |
+| recent_mission_context | 0.1ms | 0.2ms | 0.2ms | <100ms | PASS |
+| authority_chain | 0.2ms | 0.3ms | 0.3ms | <100ms | PASS |
+| entity_neighborhood | 0.2ms | 0.2ms | 0.2ms | <250ms | PASS |
+| validate_connector | 0.2ms | 0.2ms | 0.2ms | <100ms | PASS |
+
+All SLAs satisfied at 30 reps each on the real workspace graph. Headroom: ~330–500× within SLA bounds.
+
 ---
 
 ## What GAIL OS Needs to Query at Decision Time
@@ -115,6 +129,9 @@ Freedom's role in the cognitive cycle is "Observe → Propose." Before proposing
 3. **HTTP API** — FastAPI (same stack as GAIL OS Chunk 21 for consistency). Endpoints covering the 3 GAIL OS queries and 3 Freedom queries above. Returns structured JSON.
 4. **Performance validation** — query benchmarks against a realistic graph size (estimate: 500–2000 entities for current workspace).
 5. **BLK-002 resolved** — Graphify becomes externally callable; Freedom can query it.
+   *Resolved 2026-06-27:* CNS API service exposes 6 HTTP endpoints on port 8001. Any external
+   caller (Freedom, GAIL OS, or remote cloud worker) can query the graph via HTTP without running
+   the Graphify CLI locally. All 6 endpoints tested, speed SLAs confirmed.*
 
 ---
 
