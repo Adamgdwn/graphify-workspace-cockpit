@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install CNS API dependencies
+COPY cns_api/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Copy application code
+COPY cns_store/ ./cns_store/
+COPY cns_api/ ./cns_api/
+
+# CNS_STORE_PATH must be supplied at runtime via environment variable.
+# No default path is baked in — the store is expected on a mounted volume.
+ENV CNS_API_PORT=8001
+ENV CNS_API_HOST=0.0.0.0
+
+EXPOSE 8001
+
+CMD ["python", "-m", "uvicorn", "cns_api.main:app", \
+     "--host", "0.0.0.0", "--port", "8001"]
