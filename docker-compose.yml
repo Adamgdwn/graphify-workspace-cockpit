@@ -47,6 +47,23 @@ services:
     depends_on:
       - backend
 
+  # CNS API — Graphify Phase 2 query service for GAIL OS and Freedom.
+  # CNS_STORE_PATH must point to the SQLite store on a shared volume.
+  # Start: docker compose up cns-api
+  cns-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.cns-api
+    ports:
+      - "8001:8001"
+    volumes:
+      - cns_store:/data
+    environment:
+      CNS_STORE_PATH: /data/cns.db
+      CNS_API_PORT: 8001
+      CNS_API_HOST: 0.0.0.0
+      CNS_API_KEY: ${CNS_API_KEY:-}
+
   # Optional HTTPS via Caddy.  Start with: docker-compose --profile https up --build
   # Requires DOMAIN env var for Let's Encrypt; falls back to localhost (self-signed).
   # When using Caddy set VITE_API_URL=/api and rebuild the frontend image so the
@@ -71,3 +88,4 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+  cns_store:

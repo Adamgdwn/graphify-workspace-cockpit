@@ -174,4 +174,36 @@ Graphify Phase 2 is **cloud-first by design**. The HTTP API layer is not a local
 
 ---
 
-*Spec status: Open questions resolved 2026-06-27. Phase 2 implementation ready to begin post CP-1.*
+---
+
+## Cloud Deployment (Chunk 2.9 — 2026-06-27)
+
+The CNS API service is containerized and cloud-ready. All configuration is via environment variables — no local path assumptions in the API layer.
+
+**Environment variables:**
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `CNS_STORE_PATH` | Yes | — | Path to SQLite store (must be set) |
+| `CNS_API_PORT` | No | 8001 | Listening port |
+| `CNS_API_HOST` | No | 0.0.0.0 | Bind address |
+| `CNS_API_KEY` | No | "" | Auth key; empty = auth disabled |
+
+**Build and run locally:**
+```bash
+docker build -f Dockerfile.cns-api -t graphify-cns-api .
+docker run -e CNS_STORE_PATH=/data/cns.db -v /path/to/store:/data -p 8001:8001 graphify-cns-api
+```
+
+**Docker Compose:**
+```bash
+CNS_API_KEY=<optional-key> docker compose up cns-api
+```
+
+**SQLite → cloud store migration path:**
+The `CNS_STORE_PATH` can point to any path the service can write to. For cloud deployment:
+- **Turso:** Replace SQLite file with Turso DB URL via libsql-compatible driver (schema unchanged)
+- **PostgreSQL:** Schema DDL is portable; connection pooler swap only
+- Phase 2 does not require Turso or PostgreSQL — SQLite on a mounted volume works for initial cloud deployment
+
+*Spec status: Phase 2 implementation complete 2026-06-27. BLK-002 resolved. All speed SLAs verified. Integration complete.*

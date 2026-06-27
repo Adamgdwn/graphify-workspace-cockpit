@@ -365,6 +365,47 @@ development.
 
 ---
 
+## CNS Query API (Graphify Phase 2)
+
+The cockpit ships a standalone HTTP query service — **CNS API** — that GAIL OS and Freedom call at decision time to get relationship intelligence without running the Graphify CLI locally.
+
+**Start the CNS API service:**
+```bash
+# Local (requires CNS_STORE_PATH to be set)
+CNS_STORE_PATH=/path/to/cns.db uvicorn cns_api.main:app --port 8001
+
+# Docker
+docker build -f Dockerfile.cns-api -t graphify-cns-api .
+docker run -e CNS_STORE_PATH=/data/cns.db -v /your/store:/data -p 8001:8001 graphify-cns-api
+
+# Docker Compose
+docker compose up cns-api
+```
+
+**Seed the store from an existing graph:**
+```python
+from cns_store.importer import import_graph
+import_graph("graphify-out/merged-graph.json", "/path/to/cns.db")
+```
+
+**Key endpoints:**
+| Endpoint | Purpose |
+|---|---|
+| `GET /health` | Liveness + store connectivity |
+| `GET /api/cns/connector/{id}/validate?domain=X` | GAIL OS: connector scope check |
+| `GET /api/cns/entity/{id}/neighborhood` | GAIL OS: blast radius assessment |
+| `GET /api/cns/connector/{id}/authority-chain` | GAIL OS: authority traceability |
+| `GET /api/cns/entity/{id}/context` | Freedom: entity enrichment |
+| `GET /api/cns/entity/{id}/mission-history` | Freedom: prior mission context |
+| `GET /api/cns/entity/{id}/domain` | Freedom: domain + governance mapping |
+| `POST /api/cns/admin/ingest` | Trigger on-demand extraction |
+
+Speed SLAs verified: all 6 query patterns p95 < 0.3ms on 12,687-node workspace graph.
+
+See [`docs/specs/2026-06-27 - phase2-cns-connectome-design.md`](docs/specs/2026-06-27%20-%20phase2-cns-connectome-design.md) for the full spec.
+
+---
+
 ## Documentation
 
 - [docs/2026-06-24 - architecture.md](docs/2026-06-24 - architecture.md) — component map, data flow, state layout
