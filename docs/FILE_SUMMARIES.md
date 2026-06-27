@@ -83,13 +83,13 @@ target file only when the current task needs its details.
 | `docs/workspace-scope-and-signal-plan.md` | Completed workspace scope and signal plan; load only for scope/filter history or regressions. |
 | `docs/stabilization-plan.md` | Completed hosted-beta stabilization plan and chunk evidence; load only for stabilization history or regressions. |
 | `docs/current-build-pathway.md` | Archived 0-to-1 build history; load only for old evidence or regressions. |
-| `docs/architecture.md` | Full architecture overview and data flow narrative. |
+| `docs/2026-06-24 - architecture.md` | Full architecture overview and data flow narrative. |
 | `docs/ARCHITECTURE_MAP.md` | Concise source routing map for implementation work. |
 | `docs/FILE_SUMMARIES.md` | This context-saving guide to important files and generated/local-only paths. |
 | `docs/KNOWN_ISSUES.md` | Current known limitations, owner-review gates, and post-stabilization notes. |
-| `docs/deployment-guide.md` | Hosted deployment and environment guidance. |
-| `docs/runbook.md` | Operator procedures and smoke checks. |
-| `docs/manual.md` | User/operator manual. |
+| `docs/2026-06-24 - deployment-guide.md` | Hosted deployment and environment guidance. |
+| `docs/2026-06-26 - runbook.md` | Operator procedures and smoke checks. |
+| `docs/2026-06-24 - manual.md` | User/operator manual. |
 | `docs/standards/` | Local engineering, governance, context-hygiene, and ship-ready standards. |
 
 ## Generated Or Local-Only

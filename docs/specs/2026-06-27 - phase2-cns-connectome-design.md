@@ -1,9 +1,8 @@
 # Graphify Phase 2 — CNS Connectome Design
 
 **Date:** 2026-06-27
-**Status:** Design intent — pre-implementation spec
-**Context:** Written after Phase 0/1 complete, before Adam's independent Graphify work begins.
-**Resumes at:** Deep dive into all 3 core repos + plan revision after Graphify work done.
+**Status:** Architecture decisions locked — ready for Phase 2 implementation post CP-1
+**Context:** Written after Phase 0/1 complete. Decisions resolved 2026-06-27 (store, extraction frequency, graph size, cloud-first scope).
 
 ---
 
@@ -127,13 +126,35 @@ After CP-1, Phase 2 Graphify and Phase 3 (Freedom ↔ OS + Graphify full integra
 
 ---
 
-## Open Questions for Adam's Graphify Work
+## Decisions — Phase 2 Architecture (2026-06-27)
 
-Before writing Phase 2 code, the following should be answered:
+The four open questions are resolved. These decisions are locked for Phase 2 implementation.
 
-1. **Store choice:** SQLite only, or SQLite + Chroma from the start? If the semantic query need is clear now, add Chroma in Phase 2. If uncertain, SQLite-only is a safe start with a migration path.
-2. **Extraction frequency:** On-demand (triggered by extraction run), scheduled (cron), or file-watcher? The answer affects how stale the store can be at decision time.
-3. **Graph size estimate:** How many entities does the current workspace graph contain? This sets the performance baseline.
-4. **Windows extraction:** BLK-004 (Windows Enhanced Graphify hasn't run) — does the Phase 2 store need to include Windows repo entities from the start, or is Linux-only acceptable for CP-1?
+**1. Store choice: SQLite-only, Chroma migration path in schema**
+SQLite-only for Phase 2. Chroma migration path is designed into the schema from day one — embedding columns are reserved and the table structure anticipates a vector store, but Chroma is not a Phase 2 dependency. Add Chroma when semantic query patterns are proven in production.
 
-These four answers should be in hand before Phase 2 spec is finalized.
+**2. Extraction frequency: On-demand + scheduled, no file-watcher**
+Extraction triggers on explicit runs (CLI command or API trigger) and on a scheduled interval. No file-watcher. Resource conservation is the constraint: the store can be minutes to hours stale at decision time. GAIL OS and Freedom need relationship context, not real-time file state.
+
+**3. Graph size: Nimble, evolve with the system**
+No ceiling constraint for Phase 2. Current workspace graph (~1,700 nodes, ~3,400 edges) is the performance baseline. As CNS entity domains expand, the store grows — continuous evolution, not a fixed target. The speed SLA is the correct constraint, not node count.
+
+**4. Cloud scope: Cloud-first API design from day one**
+Graphify Phase 2 is **cloud-first by design**. The HTTP API layer is not a local-only service — it will be deployed to a shared cloud endpoint soon after the Linux-local launch, and Graphify must reach across all platforms: Linux, Windows, cloud workers, and future enterprise client environments.
+
+*Architecture implications of cloud-first:*
+- HTTP API designed for cloud deployment from the start: containerized, env-var configured, no local path assumptions in the API layer
+- SQLite store has an explicit migration path to a cloud-accessible store (Turso, PostgreSQL, or equivalent) — Phase 2 SQLite is the starting point, not the ceiling
+- Extraction pipeline runs on any extraction node (Linux, Windows, cloud worker) and writes to the store via the same schema; extraction is platform-agnostic by design
+- The cockpit is the visualization and admin layer; the Phase 2 API is the shared service Freedom and GAIL OS call
+- BLK-004 (Windows Enhanced Graphify extraction) is resolved architecturally: any extraction node uses the same schema and writes to the same store — no separate Windows artifact
+
+*What cloud-first does NOT change in Phase 2:*
+- Phase 2 starts with a Linux-local SQLite deployment — cloud deployment follows, it does not precede
+- No write path through the API in Phase 2
+- No real-time extraction in Phase 2
+- Batch/scheduled extraction remains correct
+
+---
+
+*Spec status: Open questions resolved 2026-06-27. Phase 2 implementation ready to begin post CP-1.*

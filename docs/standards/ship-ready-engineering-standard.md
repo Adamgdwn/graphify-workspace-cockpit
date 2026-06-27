@@ -39,7 +39,7 @@ This standard does not replace:
 
 - `docs/policy/durable-development-engineering-policy.md`
 - `docs/standards/engineering-governance-by-use-case.md`
-- `docs/domain-language.md`
+- `docs/2026-06-15 - domain-language.md`
 - `project-control.yaml`
 
 Use the durable development policy for long-term code health, engineering practice, test discipline, review, security, and maintainability. Use the use-case standard to scale controls by project type and risk signal. Use this standard as the practical ship-readiness gate before merging, releasing, handing off, or declaring a product increment complete.

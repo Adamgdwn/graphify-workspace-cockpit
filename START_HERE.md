@@ -323,12 +323,12 @@ summary inspection, `git diff --check`, and `graphify update . --no-cluster`.
 
 Documentation routing cleanup is task complete as of
 2026-06-17T17:12:02-06:00: `AGENTS.md`, `README.md`,
-`docs/current-build-pathway.md`, `docs/handover.md`, `docs/FILE_SUMMARIES.md`,
-`docs/KNOWN_ISSUES.md`, `docs/vision.md`, and
+`docs/current-build-pathway.md`, `docs/2026-06-24 - handover.md`, `docs/FILE_SUMMARIES.md`,
+`docs/KNOWN_ISSUES.md`, `docs/2026-06-26 - vision.md`, and
 `docs/standards/context-hygiene-standard.md` now point active continuation to
 `docs/workspace-scope-and-signal-plan.md`. `docs/stabilization-plan.md` remains
 completed stabilization evidence, and `docs/current-build-pathway.md` plus
-`docs/handover.md` remain historical 0-to-1 build evidence unless Adam
+`docs/2026-06-24 - handover.md` remain historical 0-to-1 build evidence unless Adam
 explicitly reopens them.
 
 Relationship-map plan split is task complete as of
@@ -361,11 +361,11 @@ Open owner-review flags before future implementation:
 | Completed workspace scope + signal history | `docs/workspace-scope-and-signal-plan.md` |
 | Completed stabilization plan | `docs/stabilization-plan.md` |
 | Archived build history | `docs/current-build-pathway.md` — superseded for startup |
-| Architecture + ADRs | `docs/architecture.md` |
-| Roadmap and non-goals | `docs/roadmap.md` |
-| Full 0→1 build record | `docs/handover.md` |
-| Operator manual | `docs/manual.md` |
-| Operational runbook | `docs/runbook.md` |
+| Architecture + ADRs | `docs/2026-06-24 - architecture.md` |
+| Roadmap and non-goals | `docs/2026-06-15 - roadmap.md` |
+| Full 0→1 build record | `docs/2026-06-24 - handover.md` |
+| Operator manual | `docs/2026-06-24 - manual.md` |
+| Operational runbook | `docs/2026-06-26 - runbook.md` |
 | Context routing map | `docs/context-map.md` |
 
 ## To Resume

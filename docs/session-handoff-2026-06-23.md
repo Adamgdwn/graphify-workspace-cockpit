@@ -74,14 +74,14 @@ Files directly changed by the escalation/handoff work:
 - `backend/.env.example`
 - `docker-compose.yml`
 - `README.md`
-- `docs/adr-009-automatic-graph-escalation.md`
-- `docs/agent-inventory.md`
-- `docs/architecture.md`
-- `docs/handover.md`
-- `docs/model-registry.md`
+- `docs/2026-06-24 - adr-009-automatic-graph-escalation.md`
+- `docs/2026-06-24 - agent-inventory.md`
+- `docs/2026-06-24 - architecture.md`
+- `docs/2026-06-24 - handover.md`
+- `docs/2026-06-24 - model-registry.md`
 - `docs/relationship-map-plan.md`
-- `docs/runbook.md`
-- `docs/tool-permission-matrix.md`
+- `docs/2026-06-26 - runbook.md`
+- `docs/2026-06-24 - tool-permission-matrix.md`
 - `START_HERE.md`
 - `AGENT_QUICKSTART.md`
 - `docs/session-handoff-2026-06-23.md`

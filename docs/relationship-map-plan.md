@@ -198,7 +198,7 @@ scope-filter, merge, activation, and semantic-cache clearing path is preserved.
 Default behavior remains local-only.
 
 Closeout note 2026-06-23T09:57:48-06:00: the escalation work is boxed up in
-`docs/session-handoff-2026-06-23.md`, `docs/handover.md`, ADR-009, and the
+`docs/session-handoff-2026-06-23.md`, `docs/2026-06-24 - handover.md`, ADR-009, and the
 Windows `01 Work Tracking` ledger. Validation passed for backend tests,
 backend compile, frontend typecheck/build, diff whitespace, and
 `graphify update . --no-cluster` (1,765 nodes, 3,400 edges). Live elevated
@@ -265,7 +265,7 @@ Completed foundations:
 Historical evidence lives in `docs/workspace-scope-and-signal-plan.md`.
 Completed stabilization evidence lives in `docs/stabilization-plan.md`.
 Original 0-to-1 build history lives in `docs/current-build-pathway.md` and
-`docs/handover.md`.
+`docs/2026-06-24 - handover.md`.
 
 ## Product Intent
 
@@ -791,4 +791,4 @@ Avoid loading the long historical plans unless investigating a regression:
 - `docs/workspace-scope-and-signal-plan.md`
 - `docs/stabilization-plan.md`
 - `docs/current-build-pathway.md`
-- `docs/handover.md`
+- `docs/2026-06-24 - handover.md`

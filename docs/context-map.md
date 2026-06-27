@@ -36,10 +36,10 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 | Durable implementation, design quality, testing discipline, or AI coding fundamentals | `docs/policy/durable-development-engineering-policy.md` |
 | Use-case controls, risk tier, governance level, or owner decisions | `docs/standards/engineering-governance-by-use-case.md` |
 | Completion labels, Definition of Shipped, release evidence, or finish reports | `docs/standards/ship-ready-engineering-standard.md` |
-| Architecture decisions or system shape | `docs/architecture.md` and relevant ADRs |
-| Domain terms or naming | `docs/domain-language.md` |
-| Deployment, release, rollback, or environment changes | `docs/deployment-guide.md`, `docs/runbook.md`, and release standards |
-| Agent autonomy, tools, prompts, models, or permissions | `docs/agent-inventory.md`, `docs/model-registry.md`, `docs/prompt-register.md`, and `docs/tool-permission-matrix.md` |
+| Architecture decisions or system shape | `docs/2026-06-24 - architecture.md` and relevant ADRs |
+| Domain terms or naming | `docs/2026-06-15 - domain-language.md` |
+| Deployment, release, rollback, or environment changes | `docs/2026-06-24 - deployment-guide.md`, `docs/2026-06-26 - runbook.md`, and release standards |
+| Agent autonomy, tools, prompts, models, or permissions | `docs/2026-06-24 - agent-inventory.md`, `docs/2026-06-24 - model-registry.md`, `docs/2026-06-14 - prompt-register.md`, and `docs/2026-06-24 - tool-permission-matrix.md` |
 
 ## Search Before Loading
 

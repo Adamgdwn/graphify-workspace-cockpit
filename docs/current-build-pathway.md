@@ -97,7 +97,7 @@ Non-goals:
 Context hygiene:
 
 - Start each chunk with `git status --short`, `AGENTS.md`, and this section only.
-- Load `docs/domain-language.md` for vocabulary work.
+- Load `docs/2026-06-15 - domain-language.md` for vocabulary work.
 - Load the specific tab file being changed and any directly connected backend endpoint.
 - Avoid loading full `backend/main.py` unless changing or validating an endpoint.
 - Avoid broad Graphify exploration unless adding new graph traversal behavior.
@@ -127,7 +127,7 @@ Objective: Establish the shared product language and minimal active-context foun
 
 Context to load:
 
-- `docs/domain-language.md`
+- `docs/2026-06-15 - domain-language.md`
 - `frontend/src/App.tsx`
 - `frontend/src/tabs/Decisions.tsx`
 - `frontend/src/tabs/Map.tsx`
@@ -144,7 +144,7 @@ Outputs:
 
 Acceptance criteria:
 
-- [x] Decision vocabulary no longer conflicts between `docs/domain-language.md`, `docs/manual.md`, `docs/video-script-prompt.md`, backend decision route types, and `Decisions.tsx`
+- [x] Decision vocabulary no longer conflicts between `docs/2026-06-15 - domain-language.md`, `docs/2026-06-24 - manual.md`, `docs/2026-06-19 - video-script-prompt.md`, backend decision route types, and `Decisions.tsx`
 - [x] Existing saved decisions still render safely or have a documented compatibility path
 - [x] App can store and clear active context without breaking tab navigation
 - [x] No changes to action execution permissions
@@ -372,21 +372,21 @@ Context to load:
 
 - Existing frontend package/test setup
 - Only the tabs covered by the demo path
-- `docs/video-script-prompt.md` for demo expectations
-- `docs/runbook.md` if operational instructions change
+- `docs/2026-06-19 - video-script-prompt.md` for demo expectations
+- `docs/2026-06-26 - runbook.md` if operational instructions change
 
 Outputs:
 
 - Added `scripts/demo-path-smoke.mjs`, a dependency-free live smoke check for backend health, graph summary, Ask evidence, readable decision/recommendation/action queues, overlap report, and rendered Command shell labels
-- Added `docs/demo-path-checklist.md` for the Ask -> Evidence -> Map -> Decision -> Recommendation -> Work Queue manual walkthrough
-- Updated `docs/video-script-prompt.md` for the current seven-tab workflow, Command-first demo path, overlap review workflow, regenerated graph stats, and smoke evidence command
-- Updated `docs/runbook.md` with the demo readiness check
+- Added `docs/2026-06-24 - demo-path-checklist.md` for the Ask -> Evidence -> Map -> Decision -> Recommendation -> Work Queue manual walkthrough
+- Updated `docs/2026-06-19 - video-script-prompt.md` for the current seven-tab workflow, Command-first demo path, overlap review workflow, regenerated graph stats, and smoke evidence command
+- Updated `docs/2026-06-26 - runbook.md` with the demo readiness check
 
 Acceptance criteria:
 
 - [x] Automated coverage protects the live backend/frontend contract for the main demo path and documents why full click coverage remains a manual temporary gate
 - [x] Demo checklist matches actual UI labels and behavior
-- [x] `docs/video-script-prompt.md` remains accurate after UX changes
+- [x] `docs/2026-06-19 - video-script-prompt.md` remains accurate after UX changes
 - [x] Final validation commands are recorded in the handoff or pathway
 
 Validation:
@@ -407,7 +407,7 @@ Validation:
   - Existing Vite warning remains: main bundle is larger than 500 kB after minification
 - Passed: `git diff --check`
 - Passed: `graphify update . --no-cluster` rebuilt local repo graph with 903 nodes and 4,284 links
-- Manual full click-through gate: documented in `docs/demo-path-checklist.md`; not automated because the frontend has no browser test framework installed
+- Manual full click-through gate: documented in `docs/2026-06-24 - demo-path-checklist.md`; not automated because the frontend has no browser test framework installed
 
 Stop condition: stop when the decision-flow path is validated and documented. Further polish becomes a new planned path.
 
@@ -424,7 +424,7 @@ Objective: Close the decision-flow polish path without drifting into new scope: 
 Context to load:
 
 - The specific tab or component where Adam identifies a bug, if one is reported
-- `docs/demo-path-checklist.md` if the bug affects the demo path
+- `docs/2026-06-24 - demo-path-checklist.md` if the bug affects the demo path
 - Related backend endpoint only if the issue crosses the API boundary
 
 Outputs:
@@ -492,19 +492,19 @@ Files reviewed or updated:
 
 - `README.md`
 - `START_HERE.md`
-- `docs/manual.md`
-- `docs/architecture.md`
-- `docs/deployment-guide.md`
-- `docs/runbook.md`
-- `docs/roadmap.md`
-- `docs/handover.md`
+- `docs/2026-06-24 - manual.md`
+- `docs/2026-06-24 - architecture.md`
+- `docs/2026-06-24 - deployment-guide.md`
+- `docs/2026-06-26 - runbook.md`
+- `docs/2026-06-15 - roadmap.md`
+- `docs/2026-06-24 - handover.md`
 - `docs/CHANGELOG.md`
-- `docs/video-script-prompt.md`
-- `docs/video-script-obsidian-vs-cockpit.md`
+- `docs/2026-06-19 - video-script-prompt.md`
+- `docs/2026-06-24 - video-script-obsidian-vs-cockpit.md`
 - `docs/risks/risk-register.md`
-- `docs/integration-guide.md`
-- `docs/tool-permission-matrix.md`
-- `docs/vision.md`
+- `docs/2026-06-16 - integration-guide.md`
+- `docs/2026-06-24 - tool-permission-matrix.md`
+- `docs/2026-06-26 - vision.md`
 
 Outputs:
 
@@ -1025,7 +1025,7 @@ Context to load:
 - `docs/stabilization-plan.md`, Chunk 3
 - `backend/main.py` Ask and rebuild subprocess ranges
 - `Dockerfile`, `docker-compose.yml`, `backend/requirements.txt`
-- `README.md`, `docs/deployment-guide.md`, `docs/runbook.md`
+- `README.md`, `docs/2026-06-24 - deployment-guide.md`, `docs/2026-06-26 - runbook.md`
 
 Likely outputs:
 
@@ -1068,7 +1068,7 @@ Context to load:
 - `frontend/src/config.ts`
 - Direct frontend `fetch()` call sites under `frontend/src`
 - Backend API-key middleware range in `backend/main.py`
-- `docs/deployment-guide.md`, `README.md`
+- `docs/2026-06-24 - deployment-guide.md`, `README.md`
 
 Likely outputs:
 
@@ -1193,7 +1193,7 @@ Context to load:
 - `config/Caddyfile`
 - `docker-compose.yml`
 - `Dockerfile.frontend`, `config/nginx.conf`
-- `docs/deployment-guide.md`, `README.md`
+- `docs/2026-06-24 - deployment-guide.md`, `README.md`
 
 Likely outputs:
 
@@ -1273,7 +1273,7 @@ Context to load:
 - `docs/stabilization-plan.md`, Chunk 9
 - `db/migrations/001_initial.sql`
 - Supabase persistence ranges in `backend/main.py`
-- `docs/integration-guide.md`, `docs/deployment-guide.md`, `docs/runbook.md`
+- `docs/2026-06-16 - integration-guide.md`, `docs/2026-06-24 - deployment-guide.md`, `docs/2026-06-26 - runbook.md`
 
 Likely outputs:
 
@@ -1392,7 +1392,7 @@ Context to load:
 
 - `docs/stabilization-plan.md`, Chunk 12
 - `.gitignore`
-- `AGENTS.md`, `docs/context-map.md`, `docs/architecture.md`
+- `AGENTS.md`, `docs/context-map.md`, `docs/2026-06-24 - architecture.md`
 
 Likely outputs:
 
@@ -1472,12 +1472,12 @@ Objective: Fill the cockpit repo docs with the product boundary, architecture, a
 Acceptance criteria:
 
 - [x] `README.md` has product story and safety model
-- [x] `docs/architecture.md` has component map, data flow, dependencies, state layout
+- [x] `docs/2026-06-24 - architecture.md` has component map, data flow, dependencies, state layout
 - [x] `docs/current-build-pathway.md` has all 9 chunks
-- [x] `docs/agent-inventory.md` has AG-001 through AG-004 with autonomy levels
-- [x] `docs/model-registry.md` has M-001 (Ollama) and M-002 (Claude dev)
-- [x] `docs/prompt-register.md` has P-001 through P-007 with template paths
-- [x] `docs/tool-permission-matrix.md` has full read/write/execute boundaries
+- [x] `docs/2026-06-24 - agent-inventory.md` has AG-001 through AG-004 with autonomy levels
+- [x] `docs/2026-06-24 - model-registry.md` has M-001 (Ollama) and M-002 (Claude dev)
+- [x] `docs/2026-06-14 - prompt-register.md` has P-001 through P-007 with template paths
+- [x] `docs/2026-06-24 - tool-permission-matrix.md` has full read/write/execute boundaries
 - [x] `docs/risks/risk-register.md` has R-001 through R-008
 - [x] Plan (PLAN-GFY-001) updated to v0.2.0 with governance override noted
 - [x] Memory note saved: governance_level:1 / risk_tier:low are intentional owner overrides
@@ -1498,8 +1498,8 @@ Objective: Scaffold backend and frontend, confirm the app starts locally, create
 
 Inputs:
 
-- `docs/architecture.md`
-- `docs/tool-permission-matrix.md`
+- `docs/2026-06-24 - architecture.md`
+- `docs/2026-06-24 - tool-permission-matrix.md`
 - Graphify `graph.json` at `/home/adamgoodwin/code/Tools/graphify/workspace/out/graph.json`
 
 Outputs:
@@ -1547,8 +1547,8 @@ Objective: Wire real question-answering into the Ask tab using Graphify CLI.
 Inputs:
 
 - Loaded `graph.json`
-- `docs/prompt-register.md` (P-001)
-- `docs/agent-inventory.md` (AG-001)
+- `docs/2026-06-14 - prompt-register.md` (P-001)
+- `docs/2026-06-24 - agent-inventory.md` (AG-001)
 
 Outputs:
 
@@ -1618,8 +1618,8 @@ Objective: Let Adam classify workspace areas and persist decisions that influenc
 
 Inputs:
 
-- `docs/architecture.md` (Decision record schema)
-- `docs/tool-permission-matrix.md`
+- `docs/2026-06-24 - architecture.md` (Decision record schema)
+- `docs/2026-06-24 - tool-permission-matrix.md`
 
 Outputs:
 
@@ -1650,9 +1650,9 @@ Objective: Turn Ollama output into structured recommendation cards with evidence
 
 Inputs:
 
-- `docs/prompt-register.md` (P-002 through P-004)
-- `docs/agent-inventory.md` (AG-002)
-- `docs/model-registry.md` (M-001)
+- `docs/2026-06-14 - prompt-register.md` (P-002 through P-004)
+- `docs/2026-06-24 - agent-inventory.md` (AG-002)
+- `docs/2026-06-24 - model-registry.md` (M-001)
 - Decision records from Chunk Five
 
 Outputs:
@@ -1685,8 +1685,8 @@ Objective: Run bounded, non-destructive analysis missions in the background whil
 
 Inputs:
 
-- `docs/agent-inventory.md` (AG-003)
-- `docs/prompt-register.md` (P-005, P-006)
+- `docs/2026-06-24 - agent-inventory.md` (AG-003)
+- `docs/2026-06-14 - prompt-register.md` (P-005, P-006)
 - Recommendation queue from Chunk Six
 
 Outputs:
@@ -1719,9 +1719,9 @@ Objective: Create an approval-gated action queue where accepted recommendations 
 
 Inputs:
 
-- `docs/agent-inventory.md` (AG-004)
-- `docs/tool-permission-matrix.md`
-- `docs/architecture.md` (Action queue record schema)
+- `docs/2026-06-24 - agent-inventory.md` (AG-004)
+- `docs/2026-06-24 - tool-permission-matrix.md`
+- `docs/2026-06-24 - architecture.md` (Action queue record schema)
 - Accepted recommendations from Chunk Six
 
 Outputs:
@@ -1763,7 +1763,7 @@ company-wide source of truth described in
 Inputs:
 
 - Current codebase (all eight chunks complete)
-- `docs/architecture.md`
+- `docs/2026-06-24 - architecture.md`
 - `docs/risks/risk-register.md`
 - `user-ai-operating-system/docs/specs/graphify-workspace-cockpit-uaos-integration.md`
 
@@ -1785,7 +1785,7 @@ Outputs:
 - `.gitignore` reviewed — no private paths, graphs, secrets, or local state committed
 - `.github/workflows/ci.yml` — TypeScript typecheck (`tsc --noEmit`) + Python
   import check (`python -c "import main"`) on push
-- Architecture note added to `docs/architecture.md`: set `API_KEY` before
+- Architecture note added to `docs/2026-06-24 - architecture.md`: set `API_KEY` before
   exposing the backend to a non-local network; localhost-only mode may leave it
   unset for convenience.
 - All private workspace paths removed from committed files
@@ -1857,7 +1857,7 @@ Outputs:
 - **Responsive layout audit**: all six tabs are usable at
   >= 768px (Android tablet landscape) with no horizontal scroll and no
   truncated controls; buttons and inputs reflow correctly
-- **Windows setup guide** added to `docs/deployment-guide.md` — Docker
+- **Windows setup guide** added to `docs/2026-06-24 - deployment-guide.md` — Docker
   Desktop install, env var config, docker-compose up, browser access; tested
 - Tested from a second physical device (tablet or second laptop) on same
   network
@@ -1871,7 +1871,7 @@ Acceptance criteria:
 - [x] Graph upload via Settings panel works — no SSH or file copy to server required (POST /graph/upload)
 - [x] Settings panel shows Ollama status (connected/disconnected + model name) (GET /status/ollama)
 - [x] Ollama URL is configurable without a code change (OLLAMA_URL env var, existing since Chunk Nine)
-- [x] `docs/deployment-guide.md` has tested Windows + Docker instructions
+- [x] `docs/2026-06-24 - deployment-guide.md` has tested Windows + Docker instructions
 
 Stop condition: stop before adding multi-user identity or organization-level
 shared state. Each authenticated session still represents Adam only at this
@@ -1944,7 +1944,7 @@ Outputs:
   `source_recommendation_id`, evidence nodes, decision classification, confidence,
   risk, proposed mission title derived from the action description, and stop
   triggers inherited from the recommendation; read-only, no execution authority
-- Documentation in `docs/integration-guide.md` of how UAOS reads the handoff
+- Documentation in `docs/2026-06-16 - integration-guide.md` of how UAOS reads the handoff
   endpoint and what the consuming agent must validate before proposing a mission
 
 Acceptance criteria:
@@ -1960,7 +1960,7 @@ Acceptance criteria:
       all executed actions
 - [x] A UAOS agent can read the handoff endpoint, parse the payload, and
       propose a mission without any cockpit code changes
-- [x] `docs/integration-guide.md` covers the handoff contract, consumer
+- [x] `docs/2026-06-16 - integration-guide.md` covers the handoff contract, consumer
       validation requirements, and stop triggers
 
 Stop condition: stop before public launch, client workspace access, or granting
@@ -2205,7 +2205,7 @@ Outcomes — 2026-06-14:
 - `requirements.txt` + `msal>=1.28.0` + `requests>=2.31.0`
 - `.gitignore` explicit entry for `workspace/state/connector-tokens/` and
   `config/connectors.json` (real values)
-- `docs/integration-guide.md` — Cloud Connectors section with full setup guide,
+- `docs/2026-06-16 - integration-guide.md` — Cloud Connectors section with full setup guide,
   REQ-0051 stop triggers table, token security notes
 - `tsc --noEmit` zero errors; `python3 -c "import main"` clean
 
@@ -2225,7 +2225,7 @@ Acceptance criteria:
 - [x] No secrets or tokens committed to git
 - [x] `GET /connectors` returns consistent status whether or not a sync has
       run
-- [x] Stop triggers from REQ-0051 are documented in `docs/integration-guide.md`
+- [x] Stop triggers from REQ-0051 are documented in `docs/2026-06-16 - integration-guide.md`
       under a "Cloud Connectors" section
 - [x] `tsc --noEmit` zero errors; `python3 -c "import main"` clean
 

@@ -2,7 +2,7 @@
 
 Last Updated: 2026-06-15T16:30:47-06:00
 
-> Looking for a ready-to-record script? `docs/video-script-obsidian-vs-cockpit.md`
+> Looking for a ready-to-record script? `docs/2026-06-24 - video-script-obsidian-vs-cockpit.md`
 > is the finished walkthrough: Graphify's intent → one folder → the staged work to
 > connect many folders → the node-limit guardrail → the advanced features framed as
 > coding decisions → why Obsidian isn't needed. Use the prompt below only when you

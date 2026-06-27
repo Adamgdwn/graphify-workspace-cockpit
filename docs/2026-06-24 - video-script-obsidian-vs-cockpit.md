@@ -346,7 +346,7 @@ workspace root away from this.
   `node scripts/demo-path-smoke.mjs`; on Linux/macOS, run
   `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs`. This verifies
   backend health, graph summary, Ask evidence, and the core endpoints. Full demo
-  preconditions are in `docs/demo-path-checklist.md`.
+  preconditions are in `docs/2026-06-24 - demo-path-checklist.md`.
 - **What to narrate vs. show:** Sections 1–2 can be mostly narrated over a small
   graph. Section 3's staged build is strongest if the map visibly gains structure
   as you describe each stage — pre-stage the views. Section 6 (Obsidian) is a

@@ -423,11 +423,11 @@ runtime failure.
 
 Files to inspect first: `backend/main.py` Ask/Rebuild ranges,
 `backend/requirements.txt`, `Dockerfile`, `docker-compose.yml`, `README.md`,
-`docs/deployment-guide.md`, `docs/runbook.md`.
+`docs/2026-06-24 - deployment-guide.md`, `docs/2026-06-26 - runbook.md`.
 
 Files likely to change: `backend/services/graphify_service.py`, `backend/main.py`,
 `Dockerfile`, `backend/requirements.txt` only if packaging is accepted,
-`README.md`, `docs/deployment-guide.md`, `tests/test_graphify_service.py`.
+`README.md`, `docs/2026-06-24 - deployment-guide.md`, `tests/test_graphify_service.py`.
 
 Exact implementation steps:
 
@@ -498,7 +498,7 @@ Why this matters: With `API_KEY` set, the backend is protected but the frontend
 currently has no shared way to send credentials.
 
 Files to inspect first: `frontend/src/config.ts`, all `fetch(` call sites under
-`frontend/src`, `backend/main.py` API-key middleware, `docs/deployment-guide.md`,
+`frontend/src`, `backend/main.py` API-key middleware, `docs/2026-06-24 - deployment-guide.md`,
 `README.md`.
 
 Files likely to change: `frontend/src/api/client.ts`, `frontend/src/config.ts`,
@@ -536,7 +536,7 @@ Implementation completed:
 - Kept upload calls on `FormData` without forcing a JSON content type.
 - Updated `scripts/demo-path-smoke.mjs` to accept `SMOKE_API_KEY` or `API_KEY`
   without printing the secret value.
-- Updated hosted setup docs in `README.md` and `docs/deployment-guide.md`.
+- Updated hosted setup docs in `README.md` and `docs/2026-06-24 - deployment-guide.md`.
 
 Validation completed:
 
@@ -731,10 +731,10 @@ Why this matters: Hosted frontend can appear healthy while backend API requests
 are served by the SPA catch-all.
 
 Files to inspect first: `config/Caddyfile`, `docker-compose.yml`,
-`Dockerfile.frontend`, `config/nginx.conf`, `docs/deployment-guide.md`,
+`Dockerfile.frontend`, `config/nginx.conf`, `docs/2026-06-24 - deployment-guide.md`,
 `README.md`.
 
-Files likely to change: `config/Caddyfile`, `docs/deployment-guide.md`,
+Files likely to change: `config/Caddyfile`, `docs/2026-06-24 - deployment-guide.md`,
 `README.md`, `scripts/demo-path-smoke.mjs` only if adding API-prefix smoke.
 
 Exact implementation steps:
@@ -878,8 +878,8 @@ Why this matters: Current recommendation/action records use fields not present i
 the initial migration.
 
 Files to inspect first: `db/migrations/001_initial.sql`, Supabase persistence
-ranges in `backend/main.py`, `docs/integration-guide.md`,
-`docs/deployment-guide.md`, `docs/runbook.md`.
+ranges in `backend/main.py`, `docs/2026-06-16 - integration-guide.md`,
+`docs/2026-06-24 - deployment-guide.md`, `docs/2026-06-26 - runbook.md`.
 
 Files likely to change: `db/migrations/002_recommendation_action_plans.sql`,
 `backend/main.py` only for schema-version readiness, docs listed above,
@@ -1123,7 +1123,7 @@ Why this matters: Large generated output and missing file summaries increase
 context risk and make future changes slower.
 
 Files to inspect first: `.gitignore`, `AGENTS.md`, `docs/context-map.md`,
-`docs/architecture.md`, top-level file list.
+`docs/2026-06-24 - architecture.md`, top-level file list.
 
 Files likely to change: `.gitignore`, `AGENT_QUICKSTART.md`,
 `docs/ARCHITECTURE_MAP.md`, `docs/FILE_SUMMARIES.md`, `docs/KNOWN_ISSUES.md`,
@@ -1335,7 +1335,7 @@ implementation chunk is queued in this plan.
 | Clean state | `pytest tests/test_clean_state.py` | Empty state writes succeed |
 | Repo graph refresh | `graphify update . --no-cluster` | Local graph rebuild succeeds after code changes, or skipped reason is recorded |
 | Demo smoke | `source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs` | Core demo path still responds |
-| Manual demo checklist | `docs/demo-path-checklist.md` | Seven-tab workflow remains usable after UI-facing chunks |
+| Manual demo checklist | `docs/2026-06-24 - demo-path-checklist.md` | Seven-tab workflow remains usable after UI-facing chunks |
 | Docker backend | `docker compose build backend` | Build succeeds |
 | Hosted routing | `GET /api/health` through Caddy | Backend JSON response |
 

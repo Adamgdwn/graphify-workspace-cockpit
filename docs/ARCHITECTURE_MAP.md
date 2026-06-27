@@ -5,7 +5,7 @@ Status: current
 Owner: Adam Goodwin
 
 Use this file when you need the system shape without loading generated graphs or
-large source files. For the fuller narrative, read `docs/architecture.md`.
+large source files. For the fuller narrative, read `docs/2026-06-24 - architecture.md`.
 
 ## Runtime Components
 

@@ -159,11 +159,11 @@ changed, or fixed in that chunk.
 
 ### Added
 - `scripts/demo-path-smoke.mjs` — dependency-free live smoke check for backend health, graph summary, Ask evidence, decision/recommendation/action queues, overlap report, and rendered Command shell labels
-- `docs/demo-path-checklist.md` — manual demo path for Command → Ask → Evidence → Map → Decision → Recommendation → Work Queue
-- Demo readiness instructions in `docs/runbook.md`
+- `docs/2026-06-24 - demo-path-checklist.md` — manual demo path for Command → Ask → Evidence → Map → Decision → Recommendation → Work Queue
+- Demo readiness instructions in `docs/2026-06-26 - runbook.md`
 
 ### Changed
-- Updated `docs/video-script-prompt.md` for the seven-tab workflow, Command-first demo path, overlap review workflow, current graph facts, and smoke evidence command
+- Updated `docs/2026-06-19 - video-script-prompt.md` for the seven-tab workflow, Command-first demo path, overlap review workflow, current graph facts, and smoke evidence command
 
 ## Chunk Twenty-Four — Decision Command Center (2026-06-15)
 

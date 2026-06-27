@@ -109,7 +109,7 @@ All hardcoded paths and service URLs are configurable via environment variables.
 
 ## Authentication
 
-Set `API_KEY` in the backend environment to require `Authorization: Bearer <key>` or `X-API-Key: <key>` on all non-health endpoints. Without `API_KEY`, the backend is open — safe for `localhost` use, not safe for network exposure. See `docs/deployment-guide.md` for setup.
+Set `API_KEY` in the backend environment to require `Authorization: Bearer <key>` or `X-API-Key: <key>` on all non-health endpoints. Without `API_KEY`, the backend is open — safe for `localhost` use, not safe for network exposure. See `docs/2026-06-24 - deployment-guide.md` for setup.
 
 ## Key Decisions
 

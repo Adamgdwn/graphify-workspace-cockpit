@@ -58,7 +58,7 @@ Files touched in the final closeout:
 - `AGENT_QUICKSTART.md`
 - `docs/session-handoff-2026-06-20.md`
 - `docs/relationship-map-plan.md`
-- `docs/video-script-obsidian-vs-cockpit.md`
+- `docs/2026-06-24 - video-script-obsidian-vs-cockpit.md`
 - `/home/adamgoodwin/code/01 Work Tracking/graphify-workspace-cockpit/latest.md`
 - `/home/adamgoodwin/code/01 Work Tracking/graphify-workspace-cockpit/log/2026-06-20.md`
 - `/home/adamgoodwin/code/01 Work Tracking/01 Work Tracking/latest.md`

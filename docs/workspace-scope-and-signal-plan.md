@@ -164,8 +164,8 @@ Observed on 2026-06-16:
 - Documentation routing cleanup is task complete as of
   2026-06-17T17:12:02-06:00: active continuation now consistently routes
   through this plan. `AGENTS.md`, `README.md`, `docs/current-build-pathway.md`,
-  `docs/handover.md`, `docs/FILE_SUMMARIES.md`, `docs/KNOWN_ISSUES.md`,
-  `docs/vision.md`, and `docs/standards/context-hygiene-standard.md` were
+  `docs/2026-06-24 - handover.md`, `docs/FILE_SUMMARIES.md`, `docs/KNOWN_ISSUES.md`,
+  `docs/2026-06-26 - vision.md`, and `docs/standards/context-hygiene-standard.md` were
   updated so stabilization and 0-to-1 pathway material is marked as historical
   evidence unless Adam explicitly reopens it.
 

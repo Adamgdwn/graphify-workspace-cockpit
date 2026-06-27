@@ -141,7 +141,7 @@ docker-compose up --build
 ```
 
 Docker is the verified cross-platform option — see
-[docs/deployment-guide.md](docs/deployment-guide.md) for Windows Docker Desktop
+[docs/2026-06-24 - deployment-guide.md](docs/2026-06-24 - deployment-guide.md) for Windows Docker Desktop
 and Linux server instructions.
 
 > **Coming later:** a true double-click desktop app with native installers for
@@ -290,7 +290,7 @@ For the current demo-readiness gate, run:
 source "$HOME/.nvm/nvm.sh" && node scripts/demo-path-smoke.mjs
 ```
 
-Then follow `docs/demo-path-checklist.md` for the manual click path.
+Then follow `docs/2026-06-24 - demo-path-checklist.md` for the manual click path.
 
 ---
 
@@ -367,20 +367,20 @@ development.
 
 ## Documentation
 
-- [docs/architecture.md](docs/architecture.md) — component map, data flow, state layout
+- [docs/2026-06-24 - architecture.md](docs/2026-06-24 - architecture.md) — component map, data flow, state layout
 - [docs/relationship-map-plan.md](docs/relationship-map-plan.md) — active relationship-map plan
 - [docs/workspace-scope-and-signal-plan.md](docs/workspace-scope-and-signal-plan.md) — completed workspace scope and signal history
 - [docs/stabilization-plan.md](docs/stabilization-plan.md) — completed hosted-beta stabilization evidence
 - [docs/current-build-pathway.md](docs/current-build-pathway.md) — archived 0-to-1 build history and old validation evidence
-- [docs/manual.md](docs/manual.md) — operator and developer manual
-- [docs/runbook.md](docs/runbook.md) — operational startup, failure, and recovery notes
-- [docs/demo-path-checklist.md](docs/demo-path-checklist.md) — demo-readiness smoke and manual walkthrough
-- [docs/roadmap.md](docs/roadmap.md) — what's next
+- [docs/2026-06-24 - manual.md](docs/2026-06-24 - manual.md) — operator and developer manual
+- [docs/2026-06-26 - runbook.md](docs/2026-06-26 - runbook.md) — operational startup, failure, and recovery notes
+- [docs/2026-06-24 - demo-path-checklist.md](docs/2026-06-24 - demo-path-checklist.md) — demo-readiness smoke and manual walkthrough
+- [docs/2026-06-15 - roadmap.md](docs/2026-06-15 - roadmap.md) — what's next
 - [docs/CHANGELOG.md](docs/CHANGELOG.md) — chunk-by-chunk change history
-- [docs/agent-inventory.md](docs/agent-inventory.md) — agent definitions and autonomy levels
-- [docs/tool-permission-matrix.md](docs/tool-permission-matrix.md) — what the cockpit can and cannot do
+- [docs/2026-06-24 - agent-inventory.md](docs/2026-06-24 - agent-inventory.md) — agent definitions and autonomy levels
+- [docs/2026-06-24 - tool-permission-matrix.md](docs/2026-06-24 - tool-permission-matrix.md) — what the cockpit can and cannot do
 - [docs/risks/risk-register.md](docs/risks/risk-register.md) — known risks and controls
-- [docs/vision.md](docs/vision.md) — strategic direction and multi-device architecture
+- [docs/2026-06-26 - vision.md](docs/2026-06-26 - vision.md) — strategic direction and multi-device architecture
 
 ---
 

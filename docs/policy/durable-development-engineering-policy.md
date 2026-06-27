@@ -409,7 +409,7 @@ Every governed repo should move toward this golden-path structure as the project
 - `CHANGELOG.md`
 - `SECURITY.md`
 - `.env.example`
-- `docs/architecture.md`
+- `docs/2026-06-24 - architecture.md`
 - `docs/decisions/`
 - `docs/runbooks/`
 - `src/`

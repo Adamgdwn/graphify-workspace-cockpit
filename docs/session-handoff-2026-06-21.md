@@ -60,7 +60,7 @@ Files touched in this closeout:
 - `AGENT_QUICKSTART.md`
 - `docs/session-handoff-2026-06-21.md`
 - `docs/relationship-map-plan.md`
-- `docs/video-script-obsidian-vs-cockpit.md`
+- `docs/2026-06-24 - video-script-obsidian-vs-cockpit.md`
 - `docs/CHANGELOG.md`
 - `frontend/src/App.tsx`
 - `frontend/src/components/AICopilot.tsx`
