@@ -1,0 +1,29 @@
+{
+  "metadata": {
+    "generated_at": "2026-06-27T00:00:00",
+    "node_count": 10,
+    "link_count": 8
+  },
+  "nodes": [
+    {"id": "n1", "label": "main.py", "type": "file", "repo": "my-repo", "path": "src/main.py", "cluster": "core", "importance_tier": "anchor"},
+    {"id": "n2", "label": "MyClass", "type": "class", "repo": "my-repo", "path": "src/main.py", "cluster": "core", "importance_tier": "interface"},
+    {"id": "n3", "label": "helper.py", "type": "file", "repo": "my-repo", "path": "src/helper.py", "cluster": "utils", "importance_tier": "evidence"},
+    {"id": "n4", "label": "utils.py", "type": "file", "repo": "my-repo", "path": "src/utils.py", "cluster": "utils", "importance_tier": "evidence"},
+    {"id": "n5", "label": "ConnectorA", "type": "class", "repo": "my-repo", "path": "src/connectors/a.py", "cluster": "connectors", "importance_tier": "anchor"},
+    {"id": "n6", "label": "ConnectorB", "type": "class", "repo": "other-repo", "path": "src/connectors/b.py", "cluster": "connectors", "importance_tier": "anchor"},
+    {"id": "n7", "label": "config.json", "type": "config", "repo": "my-repo", "path": "config.json", "cluster": "core", "importance_tier": "anchor"},
+    {"id": "n8", "label": "test_main.py", "type": "test", "repo": "my-repo", "path": "tests/test_main.py", "cluster": "tests", "importance_tier": "evidence"},
+    {"id": "n9", "label": "R3-domain", "type": "domain", "repo": "my-repo", "path": "", "cluster": "authority", "importance_tier": "anchor"},
+    {"id": "n10", "label": "README.md", "type": "doc", "repo": "my-repo", "path": "README.md", "cluster": "docs", "importance_tier": "anchor"}
+  ],
+  "links": [
+    {"source": "n1", "target": "n2", "relation": "contains", "weight": 1.0},
+    {"source": "n1", "target": "n3", "relation": "imports", "weight": 1.0},
+    {"source": "n3", "target": "n4", "relation": "imports", "weight": 1.0},
+    {"source": "n2", "target": "n5", "relation": "uses", "weight": 0.8},
+    {"source": "n5", "target": "n9", "relation": "governed_by", "weight": 1.0},
+    {"source": "n6", "target": "n9", "relation": "governed_by", "weight": 1.0},
+    {"source": "n8", "target": "n2", "relation": "tests", "weight": 1.0},
+    {"source": "n7", "target": "n5", "relation": "configures", "weight": 1.0}
+  ]
+}
