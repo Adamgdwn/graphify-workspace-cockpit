@@ -7,6 +7,7 @@ from cns_api.routes.admin import router as admin_router
 from cns_api.routes.evidence import router as evidence_router
 from cns_api.routes.operating_knowledge import router as okp_router
 from cns_api.routes.charters import router as charters_router
+from cns_api.routes.charter_execute import router as charter_execute_router
 
 
 def create_app() -> FastAPI:
@@ -22,4 +23,5 @@ def create_app() -> FastAPI:
     app.include_router(evidence_router)
     app.include_router(okp_router)
     app.include_router(charters_router)
+    app.include_router(charter_execute_router)
     return app
