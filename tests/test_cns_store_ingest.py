@@ -22,17 +22,21 @@ def tmp_db(tmp_path):
 
 def _make_graphify_stub(graph_json_path: str, output_graph_path: str) -> str:
     """
-    Write a small shell script that acts as a graphify stub:
+    Write a small platform-native script that acts as a graphify stub:
     copies mini_graph.json to the expected output location.
     """
+    suffix = ".cmd" if os.name == "nt" else ".sh"
     script = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".sh", delete=False
+        mode="w", suffix=suffix, delete=False
     )
-    script.write("#!/bin/bash\n")
-    # graphify update <src> --no-cluster --output <out>
-    # The --output arg is at position $5 (0-indexed: graphify update src --no-cluster --output out)
-    script.write(f'cp "{graph_json_path}" "${{@: -1}}"\n')
-    script.write("exit 0\n")
+    if os.name == "nt":
+        script.write("@echo off\n")
+        script.write(f'copy /Y "{graph_json_path}" "%~5" >nul\n')
+        script.write("exit /b 0\n")
+    else:
+        script.write("#!/bin/bash\n")
+        script.write(f'cp "{graph_json_path}" "${{@: -1}}"\n')
+        script.write("exit 0\n")
     script.flush()
     os.chmod(script.name, 0o755)
     script.close()
@@ -45,10 +49,14 @@ class TestRunExtractionUnit:
             run_extraction("/does/not/exist", tmp_db)
 
     def test_raises_extraction_error_on_nonzero_exit(self, tmp_db, tmp_path):
+        suffix = ".cmd" if os.name == "nt" else ".sh"
         stub = tempfile.NamedTemporaryFile(
-            mode="w", suffix=".sh", delete=False
+            mode="w", suffix=suffix, delete=False
         )
-        stub.write("#!/bin/bash\nexit 1\n")
+        if os.name == "nt":
+            stub.write("@echo off\nexit /b 1\n")
+        else:
+            stub.write("#!/bin/bash\nexit 1\n")
         stub.flush()
         os.chmod(stub.name, 0o755)
         stub.close()
@@ -68,6 +76,14 @@ class TestRunExtractionUnit:
                 str(tmp_path), tmp_db,
                 graphify_cmd="/nonexistent/graphify",
             )
+
+    def test_raises_extraction_error_when_cmd_cannot_execute(self, tmp_db, tmp_path):
+        with patch(
+            "cns_store.ingest.subprocess.run",
+            side_effect=OSError("bad executable format"),
+        ):
+            with pytest.raises(ExtractionError, match="could not be executed"):
+                run_extraction(str(tmp_path), tmp_db, graphify_cmd="bad-graphify")
 
     def test_successful_extraction_via_stub(self, tmp_db, tmp_path):
         stub = _make_graphify_stub(MINI_GRAPH, "")

@@ -14,12 +14,18 @@ MINI_GRAPH = str(FIXTURES / "mini_graph.json")
 
 
 def _make_graphify_stub() -> str:
-    """Shell script that copies mini_graph.json to the --output argument."""
+    """Platform-native script that copies mini_graph.json to the --output argument."""
     import stat
-    stub = tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False)
-    stub.write("#!/bin/bash\n")
-    stub.write(f'cp "{MINI_GRAPH}" "${{@: -1}}"\n')
-    stub.write("exit 0\n")
+    suffix = ".cmd" if os.name == "nt" else ".sh"
+    stub = tempfile.NamedTemporaryFile(mode="w", suffix=suffix, delete=False)
+    if os.name == "nt":
+        stub.write("@echo off\n")
+        stub.write(f'copy /Y "{MINI_GRAPH}" "%~5" >nul\n')
+        stub.write("exit /b 0\n")
+    else:
+        stub.write("#!/bin/bash\n")
+        stub.write(f'cp "{MINI_GRAPH}" "${{@: -1}}"\n')
+        stub.write("exit 0\n")
     stub.flush()
     os.chmod(stub.name, stat.S_IRWXU)
     stub.close()

@@ -54,7 +54,7 @@ The analogy is a **rail system** or **electrical grid**: Freedom and GAIL OS are
 | Return authority chain traceability data | Execute actions |
 | Surface mission history (read from store) | Write to mission records |
 | Inform mission proposals (read-only input to Freedom) | Propose missions itself |
-| Feed the "Learn" cycle (Phase 3 — ingesting EvidencePackets) | Write evidence directly |
+| Ingest EvidencePackets submitted by GAIL OS / AG Operations (live — POST /api/cns/evidence) | Author or generate evidence records (Graphify is not the source; GAIL OS and AG Operations are) |
 
 The canonical statement from AGENTS.md:
 > "Graphify recommendations are mission candidates, not execution approval. Graphify may not approve or execute actions — that is GAIL OS jurisdiction."
@@ -70,13 +70,15 @@ Extraction pipeline  →  WRITES  →  CNS Store (SQLite)
 HTTP API             ←  READS   ←  CNS Store (SQLite)
 ```
 
-**No write path exists through the HTTP API in Phase 2.**
+**One narrow HTTP write path exists: `POST /api/cns/evidence` (EvidencePacket ingest — live as of feat/phase4/4.6).**
 
-The only actors that write to the store:
+The actors that write to the store:
 1. The extraction pipeline (CLI trigger or scheduled run)
-2. Phase 3 EvidencePacket ingestion lane (GAIL OS → Graphify, via extraction pipeline, not API)
+2. `POST /api/cns/evidence` — accepts EvidencePackets submitted by GAIL OS / AG Operations. API-key protected. Upsert semantics. Never creates placeholder entities. Relationship edges only to existing entities.
 
-Any PR or change that adds a `POST`, `PUT`, `PATCH`, or `DELETE` to `cns_api/routes/` is a **violation of this contract** and must be reviewed before merge.
+The GraphFact ingestion lane (GAIL OS telemetry → Graphify graph structure) remains extraction-pipeline only — no HTTP write path for GraphFact payloads.
+
+Any PR or change that adds a write endpoint beyond the EvidencePacket lane to `cns_api/routes/` is a **violation of this contract** and must be reviewed before merge.
 
 ---
 
@@ -146,7 +148,7 @@ Per 20D stop condition:
 - No live M365 graph queries (Phase 4)
 - No real-time extraction (batch/scheduled is Phase 2 design)
 - No Graphify approval authority added
-- No Phase 3 EvidencePacket ingestion lane activated (future, after CP-1)
+- EvidencePacket HTTP write lane is now live (`POST /api/cns/evidence` — feat/phase4/4.6). The GraphFact extraction pipeline (GAIL OS telemetry → graph structure) remains Phase 3 scope.
 
 ---
 
@@ -163,4 +165,4 @@ Build: `docker build -f Dockerfile.cns-api -t graphify-cns-api .`
 
 ---
 
-*Contract status: Task complete. Extraction-write / API-read boundary preserved. Authority boundary enforced. 0 new write paths added.*
+*Contract status: Updated 2026-06-28 post feat/phase4/4.6. EvidencePacket HTTP write lane live (POST /api/cns/evidence). GraphFact extraction boundary unchanged (extraction pipeline only). Authority boundary enforced.*

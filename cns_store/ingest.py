@@ -67,6 +67,11 @@ def run_extraction(
                 f"graphify command not found: {graphify_cmd!r}. "
                 "Ensure graphify is installed and on PATH."
             )
+        except OSError as exc:
+            raise ExtractionError(
+                f"graphify command could not be executed: {graphify_cmd!r}. "
+                f"{exc}"
+            )
 
         if result.returncode != 0:
             raise ExtractionError(
