@@ -36,6 +36,7 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 | Durable implementation, design quality, testing discipline, or AI coding fundamentals | `docs/policy/durable-development-engineering-policy.md` |
 | Use-case controls, risk tier, governance level, or owner decisions | `docs/standards/engineering-governance-by-use-case.md` |
 | Completion labels, Definition of Shipped, release evidence, or finish reports | `docs/standards/ship-ready-engineering-standard.md` |
+| Phase 3 planning, cross-repo integration, or next-phase builder briefing | `docs/2026-06-27 - next-phase-builder-wishlist.md` — read before planning any Phase 3 or multi-repo work |
 | Architecture decisions or system shape | `docs/2026-06-24 - architecture.md` and relevant ADRs |
 | Domain terms or naming | `docs/2026-06-15 - domain-language.md` |
 | Deployment, release, rollback, or environment changes | `docs/2026-06-24 - deployment-guide.md`, `docs/2026-06-26 - runbook.md`, and release standards |
