@@ -24,11 +24,11 @@ The analogy is a **rail system** or **electrical grid**: Freedom and GAIL OS are
 │     Observe → Propose → (Graphify enrichment) →       │
 │                    Submit to GAIL OS                   │
 └──────────────────────┬───────────────────────────────-┘
-                       │ queries (read-only)
+                       │ queries (read-only) + liveness check (/api/cns/health)
                        ▼
 ┌───────────────────────────────────────────────────────┐
 │           Graphify — Connectome / Relationship Field   │
-│   6 read-only HTTP endpoints on port 8001             │
+│   6 core read-only endpoints + 4 approved write lanes │
 │   SQLite store (12,687 entities, 19,477 relationships) │
 │   p50 per query: 0.1–0.2ms (all SLAs satisfied)       │
 └──────────────────────┬───────────────────────────────-┘
@@ -68,17 +68,21 @@ This is the fundamental Graphify design rule. It must be preserved as Phase 2 ev
 ```
 Extraction pipeline  →  WRITES  →  CNS Store (SQLite)
 HTTP API             ←  READS   ←  CNS Store (SQLite)
+                     ↑  WRITES (approved lanes only — see table below)
 ```
 
-**One narrow HTTP write path exists: `POST /api/cns/evidence` (EvidencePacket ingest — live as of feat/phase4/4.6).**
+**Four approved HTTP write lanes exist.** All are API-key protected (when `CNS_API_KEY` is set). All use upsert semantics. None create placeholder entities. Relationship edges only to existing entities.
 
-The actors that write to the store:
-1. The extraction pipeline (CLI trigger or scheduled run)
-2. `POST /api/cns/evidence` — accepts EvidencePackets submitted by GAIL OS / AG Operations. API-key protected. Upsert semantics. Never creates placeholder entities. Relationship edges only to existing entities.
+| Lane | Endpoint | Entity Kind | Introduced |
+|---|---|---|---|
+| EvidencePacket ingest | `POST /api/cns/evidence` | `EvidencePacket` | feat/phase4/4.6 |
+| OKP ingest + L2 gravity | `POST /api/cns/okp` | `OperatingKnowledgePacket` | Chunk 5.4 |
+| Charter storage | `POST /api/cns/charters` | `CharterProfile` | Chunk 6.2 |
+| Stale-claim executor | `POST /api/cns/charters/{id}/execute` | `StaleClaimCandidate` (status update) | Chunk 6.5 |
 
 The GraphFact ingestion lane (GAIL OS telemetry → Graphify graph structure) remains extraction-pipeline only — no HTTP write path for GraphFact payloads.
 
-Any PR or change that adds a write endpoint beyond the EvidencePacket lane to `cns_api/routes/` is a **violation of this contract** and must be reviewed before merge.
+Any PR or change that adds a write endpoint beyond these four lanes to `cns_api/routes/` is a **violation of this contract** and must be reviewed before merge.
 
 ---
 
@@ -141,14 +145,14 @@ All SLAs satisfied. Headroom: ~330–500× within SLA bounds.
 
 ## What This Contract Does NOT Cover
 
-Per 20D stop condition:
+Per 20D stop condition (updated to reflect Chunks 5.4, 5.7, 6.2, 6.5):
 
-- No new endpoints added (6 endpoints are the Phase 2 surface)
-- No write path through the API
+- No GraphFact write path through the HTTP API (extraction pipeline only — Phase 3 scope)
 - No live M365 graph queries (Phase 4)
 - No real-time extraction (batch/scheduled is Phase 2 design)
-- No Graphify approval authority added
-- EvidencePacket HTTP write lane is now live (`POST /api/cns/evidence` — feat/phase4/4.6). The GraphFact extraction pipeline (GAIL OS telemetry → graph structure) remains Phase 3 scope.
+- No Graphify approval authority (charter_execute is a dumb storage writer; GAIL OS holds all authority)
+- Freedom→Graphify integration seam now live: `/api/cns/health` liveness check wired and tested (fix commit, 300/300 tests pass)
+- CP-5 closed: OKP proof-chain `v1-l2` covering GAIL OS L1 → Graphify L2 → Freedom brief
 
 ---
 
@@ -165,4 +169,4 @@ Build: `docker build -f Dockerfile.cns-api -t graphify-cns-api .`
 
 ---
 
-*Contract status: Updated 2026-06-28 post feat/phase4/4.6. EvidencePacket HTTP write lane live (POST /api/cns/evidence). GraphFact extraction boundary unchanged (extraction pipeline only). Authority boundary enforced.*
+*Contract status: Updated 2026-06-28 post Chunks 5.4/5.7/6.2/6.5. Four approved write lanes documented (EvidencePacket, OKP, Charter, stale-claim executor). API key guard applied to all write lanes. GraphFact extraction boundary unchanged (extraction pipeline only). Authority boundary enforced. CP-5 closed.*
