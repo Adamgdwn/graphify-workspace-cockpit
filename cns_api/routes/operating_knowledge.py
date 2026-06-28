@@ -3,7 +3,7 @@ OperatingKnowledgePacket (OKP) ingest and retrieval endpoints for the CNS API.
 
 POST   /api/cns/okp                        — ingest OKP, run L2 gravity
 GET    /api/cns/okp/{okp_id}               — retrieve OKP entity
-GET    /api/cns/okp/{okp_id}/proof-chain   — Synaptic Proof Chain stub (L2)
+GET    /api/cns/okp/{okp_id}/proof-chain   — Synaptic Proof Chain (L2, v1)
 GET    /api/cns/okp/{okp_id}/neighborhood  — 1-hop neighborhood
 
 Requires X-Api-Key if CNS_API_KEY env var is set.
@@ -136,9 +136,14 @@ def get_okp_proof_chain(
     x_api_key: Optional[str] = Header(default=None),
 ) -> dict:
     """
-    Return a Synaptic Proof Chain stub (L2) for the OKP.
+    Return the Synaptic Proof Chain (Graphify L2 layer) for this OKP.
 
-    The Freedom layer will be appended in Chunk 5.6.
+    Full chain layers:
+      L1 — GAIL OS: GET /api/v1/okp/{okp_id}/proof-chain
+      L2 — Graphify: this endpoint
+      Brief — Freedom: generateOperatingKnowledgeBrief()
+
+    CP-5 closed. proof_chain_version: v1-l2.
     """
     _require_api_key(x_api_key)
     db_path = get_store_path()
@@ -158,12 +163,18 @@ def get_okp_proof_chain(
         "source_ref": meta.get("source_ref"),
         "record_type": meta.get("record_type"),
         "fingerprint": meta.get("fingerprint"),
+        "gravity_score_l1": meta.get("gravity_score_l1"),
         "gravity_score_l2": gravity["gravity_score_l2"],
         "factor_scores": gravity["factor_scores"],
+        "factor_weights_used": gravity["factor_weights_used"],
         "edge_count": len(neighborhood.get("neighbors", [])),
         "relationships": neighborhood.get("neighbors", []),
-        "proof_chain_version": "stub-l2",
-        "note": "Freedom layer not yet appended. See Chunk 5.6.",
+        "proof_chain_version": "v1-l2",
+        "note": (
+            "Full chain: GAIL OS L1 via GET /api/v1/okp/{okp_id}/proof-chain, "
+            "Graphify L2 here, Freedom brief via generateOperatingKnowledgeBrief(). "
+            "CP-5 closed."
+        ),
     }
 
 
