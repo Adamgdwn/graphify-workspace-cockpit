@@ -4,6 +4,7 @@ from cns_api.routes.health import router as health_router
 from cns_api.routes.gail_os import router as gail_os_router
 from cns_api.routes.freedom import router as freedom_router
 from cns_api.routes.admin import router as admin_router
+from cns_api.routes.evidence import router as evidence_router
 
 
 def create_app() -> FastAPI:
@@ -16,4 +17,5 @@ def create_app() -> FastAPI:
     app.include_router(gail_os_router)
     app.include_router(freedom_router)
     app.include_router(admin_router)
+    app.include_router(evidence_router)
     return app
