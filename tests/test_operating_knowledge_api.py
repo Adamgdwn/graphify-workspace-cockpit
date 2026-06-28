@@ -90,7 +90,7 @@ class TestOKPProofChainRoute:
         resp = c.get(f"/api/cns/okp/{VALID_OKP_BODY['okp_id']}/proof-chain")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["proof_chain_version"] == "stub-l2"
+        assert data["proof_chain_version"] == "v1-l2"
         assert data["okp_id"] == VALID_OKP_BODY["okp_id"]
         assert "gravity_score_l2" in data
         assert "factor_scores" in data

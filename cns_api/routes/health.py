@@ -14,6 +14,7 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
+@router.get("/api/cns/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     """
     Returns service liveness and store connectivity.
