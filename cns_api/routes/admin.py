@@ -15,7 +15,9 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 from typing import Optional
-from cns_api.config import get_store_path, get_api_key
+from cns_api.auth import require_api_key
+from cns_api.config import get_store_path
+from cns_store.db import get_connection
 from cns_store.ingest import run_extraction, ExtractionError
 
 router = APIRouter(prefix="/api/cns/admin", tags=["admin"])
@@ -24,15 +26,6 @@ router = APIRouter(prefix="/api/cns/admin", tags=["admin"])
 # Phase 3 should move this to the SQLite store or a proper job queue.
 _jobs: dict[str, dict] = {}
 _jobs_lock = threading.Lock()
-
-
-def _require_api_key(x_api_key: Optional[str]) -> None:
-    """Enforce API key auth when CNS_API_KEY is configured."""
-    configured_key = get_api_key()
-    if not configured_key:
-        return  # auth disabled
-    if not x_api_key or x_api_key != configured_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Api-Key header")
 
 
 class IngestRequest(BaseModel):
@@ -89,7 +82,7 @@ def trigger_ingest(
     to check completion. Accepts one job per source_path at a time — a second
     request for the same source_path while one is running starts a new job.
     """
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
 
     job_id = str(uuid.uuid4())
     started_at = datetime.now(timezone.utc).isoformat()
@@ -124,7 +117,7 @@ def get_ingest_status(
     x_api_key: Optional[str] = Header(default=None),
 ) -> IngestJobResponse:
     """Poll the status of an ingest job."""
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
 
     with _jobs_lock:
         job = _jobs.get(job_id)
@@ -133,3 +126,40 @@ def get_ingest_status(
         raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
 
     return IngestJobResponse(**job)
+
+
+class StoreInfoResponse(BaseModel):
+    store_path: str
+    entity_count: int
+    relationship_count: int
+    store_size_bytes: Optional[int] = None
+    retrieved_at: str
+
+
+@router.get("/store-info", response_model=StoreInfoResponse)
+def get_store_info(
+    x_api_key: Optional[str] = Header(default=None),
+) -> StoreInfoResponse:
+    """Return entity count, relationship count, and store metadata."""
+    require_api_key(x_api_key)
+    db_path = get_store_path()
+
+    import os
+    try:
+        conn = get_connection(db_path)
+        entity_count = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+        rel_count = conn.execute("SELECT COUNT(*) FROM relationships").fetchone()[0]
+        conn.close()
+        size = os.path.getsize(db_path) if db_path and os.path.exists(db_path) else None
+    except Exception:
+        entity_count = 0
+        rel_count = 0
+        size = None
+
+    return StoreInfoResponse(
+        store_path=db_path or "",
+        entity_count=entity_count,
+        relationship_count=rel_count,
+        store_size_bytes=size,
+        retrieved_at=datetime.now(timezone.utc).isoformat(),
+    )

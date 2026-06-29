@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-23T09:57:48-06:00
-Status: automatic graph escalation drafted and documentation boxed up; owner verification next
+Last Updated: 2026-06-28
+Status: Phase 2 CNS complete — 331 tests, CNS API live, GraphFact extraction pipeline shipped
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,26 +12,33 @@ historical build log by default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/session-handoff-2026-06-23.md` for the latest shutdown note.
-4. Read `docs/relationship-map-plan.md`.
-5. Start with owner verification of automatic graph escalation or post-review tuning unless Adam redirects.
+3. Read `docs/2026-06-27 - next-phase-builder-wishlist.md` for Phase 3 briefing and current priorities.
+4. For CNS contract or integration work, read `docs/specs/2026-06-28 - Graphify CNS Connectome Contract.md` (20D).
+5. For cockpit Map/UI or original backend work, read `docs/relationship-map-plan.md`.
 6. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
 7. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
 8. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
 
-## State at Pause
+## State at Pause (2026-06-28)
 
-Handoff 2026-06-23T09:57:48-06:00: automatic graph escalation is implemented
+Phase 2 CNS substrate is complete:
+- `cns_store/` — SQLite store: entities, relationships, EvidencePackets, OKPs, CharterProfiles, StaleClaimCandidates, GAIL OS GraphFacts
+- `cns_api/` — FastAPI HTTP API on port 8001: 6 read endpoints + 5 write lanes
+- GraphFact extraction pipeline: `cns_store/gail_os_fact_importer.py` (20E spec)
+- 331 tests passing. All p95 SLAs < 0.3ms (SLA: <100ms). CP-5 closed.
+- 20D contract: five approved write lanes documented. Extraction-write / API-read boundary enforced.
+
+CP-1 confirmed done (Freedom → GAIL OS POST /api/v1/actions). Next priority per wishlist:
+- P1: AG Operations base-stable (2 chunks remaining; blocked on M365 sign-in/auth)
+- P2: EvidencePacket feedback loop (wire runtime evidence back to Graphify)
+- P3: M365 entity ingestion into Graphify (after P1 stable)
+- P4: CNS repo migration (tracked debt, not blocking)
+
+Handoff 2026-06-23T09:57:48-06:00 (pre-Phase 2): automatic graph escalation is implemented
 behind explicit environment configuration. Map generation now routes through a
-local Ollama decision (`local` vs `elevated`) with heuristic fallback, then runs
-either `graphify update --no-cluster` or configured `graphify extract --backend
-... --no-cluster`. Default behavior remains local-only. Docs/control records
-were updated, including ADR-009, model registry, tool matrix, architecture,
-runbook, README/env examples, and Windows work tracking. Validation passed:
-focused graph service tests, full backend tests, backend compile, frontend
-typecheck, frontend build, and `git diff --check`. Live elevated provider
-execution remains unverified until credentials are configured.
+local Ollama decision (`local` vs `elevated`) with heuristic fallback. The
+cockpit Map/UI and relationship-map plan work from June 2026 is preserved below.
 
 Night closeout 2026-06-20: Adam shot the video and likes the project direction.
 The day focused on relationship-map polish, not a rebuild. Pushed commits on
@@ -357,7 +364,11 @@ Open owner-review flags before future implementation:
 
 | What | Where |
 |------|-------|
-| Active relationship map plan | `docs/relationship-map-plan.md` |
+| Phase 3 briefing and current priorities | `docs/2026-06-27 - next-phase-builder-wishlist.md` |
+| CNS API contract and approved write lanes | `docs/specs/2026-06-28 - Graphify CNS Connectome Contract.md` (20D) |
+| GAIL OS GraphFact extraction boundary | `docs/specs/2026-06-28 - GAIL Graph Fact Import Boundary.md` (20E) |
+| CNS endpoint family map | `docs/specs/2026-06-28 - Graphify Endpoint Family Map.md` |
+| Active relationship map plan (Map/UI) | `docs/relationship-map-plan.md` |
 | Completed workspace scope + signal history | `docs/workspace-scope-and-signal-plan.md` |
 | Completed stabilization plan | `docs/stabilization-plan.md` |
 | Archived build history | `docs/current-build-pathway.md` — superseded for startup |
@@ -371,10 +382,10 @@ Open owner-review flags before future implementation:
 ## To Resume
 
 1. `git status --short` — preserve unrelated work.
-2. Confirm this file still names the active plan.
-3. Read `docs/relationship-map-plan.md`.
-4. Start with Slice 5 decision overlay unless Adam redirects.
-5. Load only the files named in that chunk.
+2. Read `AGENTS.md` for current integration contracts.
+3. Read `docs/2026-06-27 - next-phase-builder-wishlist.md` for Phase 3 priority order.
+4. For CNS/integration work: load the relevant 20D or 20E spec from `docs/specs/`.
+5. For Map/UI work: read `docs/relationship-map-plan.md`.
 6. Use `docs/context-map.md` if routing is still unclear.
 
 ## Work Patterns

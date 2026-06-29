@@ -71,18 +71,19 @@ HTTP API             ←  READS   ←  CNS Store (SQLite)
                      ↑  WRITES (approved lanes only — see table below)
 ```
 
-**Four approved HTTP write lanes exist.** All are API-key protected (when `CNS_API_KEY` is set). All use upsert semantics. None create placeholder entities. Relationship edges only to existing entities.
+**Five approved write lanes exist.** Four are HTTP endpoints (all API-key protected when `CNS_API_KEY` is set, all upsert semantics, no placeholder entities, relationship edges only to existing entities). One is the extraction pipeline only — no HTTP path.
 
-| Lane | Endpoint | Entity Kind | Introduced |
+| Lane | Endpoint / Path | Entity Kind | Notes |
 |---|---|---|---|
 | EvidencePacket ingest | `POST /api/cns/evidence` | `EvidencePacket` | feat/phase4/4.6 |
 | OKP ingest + L2 gravity | `POST /api/cns/okp` | `OperatingKnowledgePacket` | Chunk 5.4 |
 | Charter storage | `POST /api/cns/charters` | `CharterProfile` | Chunk 6.2 |
 | Stale-claim executor | `POST /api/cns/charters/{id}/execute` | `StaleClaimCandidate` (status update) | Chunk 6.5 |
+| Graph extraction (admin) | `POST /api/cns/admin/ingest` | bulk entities + relationships | Triggers external `graphify` CLI extraction; no raw graph data accepted from callers. API-key protected. |
 
 The GraphFact ingestion lane (GAIL OS telemetry → Graphify graph structure) remains extraction-pipeline only — no HTTP write path for GraphFact payloads.
 
-Any PR or change that adds a write endpoint beyond these four lanes to `cns_api/routes/` is a **violation of this contract** and must be reviewed before merge.
+Any PR or change that adds a write endpoint beyond these five lanes to `cns_api/routes/` is a **violation of this contract** and must be reviewed before merge.
 
 ---
 

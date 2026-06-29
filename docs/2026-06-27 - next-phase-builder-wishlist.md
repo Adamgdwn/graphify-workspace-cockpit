@@ -44,7 +44,7 @@ flat list of services. It is the layer that makes all other services coherent.
 ### 1. Graphify — The Foundational Substrate
 **Repo:** `/home/adamgoodwin/code/Tools/graphify/`
 **Cockpit (admin/vis UI):** `/home/adamgoodwin/code/agents/graphify-workspace-cockpit/`
-**Phase 2 status:** Complete. CNS API live on port 8001. 217 tests passing.
+**Phase 2 status:** Complete. CNS API live on port 8001. 331 tests passing.
 
 What Phase 2 delivered:
 - SQLite store (`cns_store/`) — entities, relationships, metadata, fully indexed
@@ -182,7 +182,7 @@ higher than migration cost.
 |------|-------|
 | CNS API port | 8001 |
 | CNS store engine | SQLite (WAL mode, FK enforcement) |
-| Total tests passing | 217 |
+| Total tests passing | 331 |
 | Real graph benchmark | 12,687 nodes / 19,477 relationships |
 | p95 latency (all queries) | < 0.3ms (SLA: <100ms single, <250ms neighborhood) |
 | BLK-002 | Resolved 2026-06-27 |

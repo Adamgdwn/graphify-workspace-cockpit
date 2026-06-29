@@ -22,15 +22,20 @@ from cns_store.models import (
 # Relationship kinds that indicate a node acts as a connector/integration point
 _CONNECTOR_KINDS = frozenset({"connector", "integration", "adapter", "service", "api"})
 
-# Relationship kinds that indicate governance/authority chains
+# Relationship kinds that indicate governance/authority chains.
+# Includes both lowercase (workspace graph JSON) and uppercase (GAIL OS extraction pipeline).
 _AUTHORITY_REL_KINDS = frozenset({
-    "governed_by", "authorized_by", "authority", "domain", "governs", "enforces"
+    "governed_by", "authorized_by", "authority", "domain", "governs", "enforces",
+    "GOVERNS", "AUTHORIZED_BY",
 })
 
-# Relationship kinds used as mission/action evidence
+# Relationship kinds used as mission/action evidence.
+# Covers: GAIL OS extraction pipeline (uppercase), evidence_writer.py, and workspace graph.
 _MISSION_REL_KINDS = frozenset({
+    "EVIDENCED_BY", "ACTED_ON", "PRODUCED_EVIDENCE",
+    "produced_by_mission",
     "mission_target", "action_target", "evidence_for", "resulted_in",
-    "executed_on", "observed"
+    "executed_on", "observed",
 })
 
 
@@ -101,7 +106,8 @@ def entity_neighborhood(
     """
     What entities are adjacent to action target [entity_id]?
 
-    Returns direct neighbors (depth=1). depth>1 not yet supported.
+    depth=1: direct neighbors only.
+    depth=2: adds second-hop entities for extended blast-radius assessment.
     """
     conn = get_connection(db_path)
     try:
@@ -120,46 +126,48 @@ def entity_neighborhood(
             )
 
         neighbors = []
+        seen_ids: set[str] = {entity_id}
 
-        # Outbound: source_id = entity_id
-        out_rows = conn.execute(
-            """SELECT r.kind AS rel_kind, r.weight, e.id, e.label, e.kind, e.repo, e.path
-               FROM relationships r
-               JOIN entities e ON e.id = r.target_id
-               WHERE r.source_id = ?""",
-            (entity_id,),
-        ).fetchall()
-        for r in out_rows:
-            neighbors.append(NeighborhoodNode(
-                id=r["id"],
-                label=r["label"],
-                kind=r["kind"],
-                repo=r["repo"],
-                path=r["path"],
-                relation_kind=r["rel_kind"],
-                direction="outbound",
-                weight=r["weight"],
-            ))
+        def _add_neighbors_of(src_id: str) -> None:
+            out_rows = conn.execute(
+                """SELECT r.kind AS rel_kind, r.weight, e.id, e.label, e.kind, e.repo, e.path
+                   FROM relationships r
+                   JOIN entities e ON e.id = r.target_id
+                   WHERE r.source_id = ?""",
+                (src_id,),
+            ).fetchall()
+            for r in out_rows:
+                if r["id"] not in seen_ids:
+                    seen_ids.add(r["id"])
+                    neighbors.append(NeighborhoodNode(
+                        id=r["id"], label=r["label"], kind=r["kind"],
+                        repo=r["repo"], path=r["path"],
+                        relation_kind=r["rel_kind"], direction="outbound",
+                        weight=r["weight"],
+                    ))
+            in_rows = conn.execute(
+                """SELECT r.kind AS rel_kind, r.weight, e.id, e.label, e.kind, e.repo, e.path
+                   FROM relationships r
+                   JOIN entities e ON e.id = r.source_id
+                   WHERE r.target_id = ?""",
+                (src_id,),
+            ).fetchall()
+            for r in in_rows:
+                if r["id"] not in seen_ids:
+                    seen_ids.add(r["id"])
+                    neighbors.append(NeighborhoodNode(
+                        id=r["id"], label=r["label"], kind=r["kind"],
+                        repo=r["repo"], path=r["path"],
+                        relation_kind=r["rel_kind"], direction="inbound",
+                        weight=r["weight"],
+                    ))
 
-        # Inbound: target_id = entity_id
-        in_rows = conn.execute(
-            """SELECT r.kind AS rel_kind, r.weight, e.id, e.label, e.kind, e.repo, e.path
-               FROM relationships r
-               JOIN entities e ON e.id = r.source_id
-               WHERE r.target_id = ?""",
-            (entity_id,),
-        ).fetchall()
-        for r in in_rows:
-            neighbors.append(NeighborhoodNode(
-                id=r["id"],
-                label=r["label"],
-                kind=r["kind"],
-                repo=r["repo"],
-                path=r["path"],
-                relation_kind=r["rel_kind"],
-                direction="inbound",
-                weight=r["weight"],
-            ))
+        _add_neighbors_of(entity_id)
+
+        if depth >= 2:
+            hop1_ids = list(seen_ids - {entity_id})
+            for hop1_id in hop1_ids:
+                _add_neighbors_of(hop1_id)
 
         return NeighborhoodResult(
             entity_id=entity_id,

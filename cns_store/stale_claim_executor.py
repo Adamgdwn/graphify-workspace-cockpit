@@ -10,6 +10,7 @@ authority from GAIL OS. This module is a dumb storage executor only.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from cns_store.db import get_connection, init_db
 
@@ -27,7 +28,7 @@ def seed_stale_claim_candidates(
     Returns list of entity IDs seeded.
     """
     init_db(db_path)
-    ts = seed_timestamp if seed_timestamp is not None else "2026-06-28T00:00:00Z"
+    ts = seed_timestamp if seed_timestamp is not None else datetime.now(timezone.utc).isoformat()
     conn = get_connection(db_path)
     entity_ids: list[str] = []
     try:
@@ -110,7 +111,7 @@ def execute_r4_stale_claim_review(
     Reads candidates, updates their metadata_json in place (Python-side JSON
     merge), and returns a result dict with rollback_data for safe reversion.
     """
-    ts = execution_timestamp if execution_timestamp is not None else "2026-06-28T00:00:00Z"
+    ts = execution_timestamp if execution_timestamp is not None else datetime.now(timezone.utc).isoformat()
     candidates = get_stale_claim_candidates(db_path, max_candidates)
 
     if not candidates:

@@ -17,7 +17,8 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
-from cns_api.config import get_api_key, get_store_path
+from cns_api.auth import require_api_key
+from cns_api.config import get_store_path
 from cns_store.charter_writer import (
     get_charter_entity,
     ingest_charter_entity,
@@ -25,14 +26,6 @@ from cns_store.charter_writer import (
 )
 
 router = APIRouter(prefix="/api/cns", tags=["charters"])
-
-
-def _require_api_key(x_api_key: Optional[str]) -> None:
-    configured_key = get_api_key()
-    if not configured_key:
-        return
-    if not x_api_key or x_api_key != configured_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Api-Key header")
 
 
 class CharterIngestRequest(BaseModel):
@@ -107,7 +100,7 @@ def ingest_charter(
     Graphify stores the charter data only — it does NOT validate authority,
     approve charters, or execute chartered actions.
     """
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     summary = ingest_charter_entity(
         db_path,
@@ -148,7 +141,7 @@ def get_charter(
     x_api_key: Optional[str] = Header(default=None),
 ) -> CharterEntityResponse:
     """Retrieve a CharterProfile entity from the graph by charter_id."""
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     entity = get_charter_entity(db_path, charter_id)
     if entity is None:
@@ -172,7 +165,7 @@ def list_charters(
     - authority_level: filter by authority level (e.g. R0, R1, R2, R3, R4)
     - charter_status: filter by charter status (e.g. active, expired, revoked)
     """
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     charters = list_charter_entities(
         db_path,

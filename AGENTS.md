@@ -12,16 +12,21 @@ Graphify is the CNS connectome. It is not a developer tool and not a product spo
 
 **Cross-machine role:** Linux cockpit = primary (query API, visualization, decision surface). Windows Enhanced Graphify = extraction node for Windows repos (GAIL OS Rev 2, M365 Foundation) that Linux cannot run natively. Single `graph.json` as source of truth, synced via GitHub. (DEC-005)
 
-**Phase 2 work (next):**
-- Extend graph schema for CNS entity domains (Mission, Action, AuthorityEnvelope, EvidencePacket as GraphNode types)
-- Add ResearchClaim and EvidencePacket node types
-- Expose HTTP graph query API for external callers (Freedom, GAIL OS)
-- Ensure Windows Enhanced Graphify extraction output validates against this repo's schema as canonical
+**Phase 2 complete (2026-06-28).** CNS API live on port 8001. 331 tests passing.
 
-**Integration contracts:**
-- Provides: `POST /api/graph/query` — graph context queries from Freedom and GAIL OS
-- Consumes: EvidencePacket summaries from GAIL OS (as new GraphNodes after Phase 2+)
-- Consumes: ResearchClaim ingestion from build agent research mandate
+What Phase 2 delivered:
+- `cns_store/` — SQLite store: entities, relationships, EvidencePackets, OKPs, CharterProfiles, StaleClaimCandidates
+- `cns_api/` — FastAPI HTTP API: 6 core read endpoints + 5 approved write lanes
+- GAIL OS GraphFact extraction pipeline (`cns_store/gail_os_fact_importer.py` — 20E)
+- Speed SLAs verified: all p95 < 0.3ms on 12,687-node real graph (SLA: <100ms)
+- CP-5 closed: OKP proof-chain `v1-l2` covering GAIL OS L1 → Graphify L2 → Freedom brief
+
+**Integration contracts (live):**
+- Provides (GAIL OS): `GET /api/cns/validate-connector`, `GET /api/cns/entity-neighborhood`, `GET /api/cns/authority-chain`
+- Provides (Freedom): `GET /api/cns/entity-context`, `GET /api/cns/recent-mission-context`, `GET /api/cns/domain-mapping`
+- Provides (write, API-key guarded): `/api/cns/evidence`, `/api/cns/okp`, `/api/cns/charters`, `/api/cns/charters/{id}/execute`, `/api/cns/admin/ingest`
+- Provides (admin): `GET /api/cns/admin/store-info`, `GET /api/cns/admin/ingest/{job_id}`
+- Consumes (extraction): GAIL OS GraphFacts via `cns_store/gail_os_fact_importer.run_extraction()` — no HTTP path for GraphFact payloads
 
 **Authority boundary:** Graphify provides read-only context. Graphify recommendations are mission candidates, not execution approval. Graphify may not approve or execute actions — that is GAIL OS jurisdiction.
 

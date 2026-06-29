@@ -13,18 +13,11 @@ from typing import Optional
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from cns_api.config import get_api_key, get_store_path
+from cns_api.auth import require_api_key
+from cns_api.config import get_store_path
 from cns_store.evidence_writer import get_evidence_entity, ingest_evidence_entity
 
 router = APIRouter(prefix="/api/cns", tags=["evidence"])
-
-
-def _require_api_key(x_api_key: Optional[str]) -> None:
-    configured_key = get_api_key()
-    if not configured_key:
-        return
-    if not x_api_key or x_api_key != configured_key:
-        raise HTTPException(status_code=401, detail="Invalid or missing X-Api-Key header")
 
 
 class EvidenceIngestRequest(BaseModel):
@@ -68,7 +61,7 @@ def ingest_evidence(
     Creates an EvidencePacket entity (upsert). Creates relationship edges
     to Mission and Connector entities only when they exist in the store.
     """
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     summary = ingest_evidence_entity(
         db_path,
@@ -98,7 +91,7 @@ def get_evidence(
     x_api_key: Optional[str] = Header(default=None),
 ) -> EvidenceEntityResponse:
     """Retrieve an EvidencePacket entity from the graph by evidence_id."""
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     entity = get_evidence_entity(db_path, evidence_id)
     if entity is None:

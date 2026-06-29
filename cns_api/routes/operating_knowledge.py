@@ -15,7 +15,8 @@ from typing import Any, Optional
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
-from cns_api.config import get_api_key, get_store_path
+from cns_api.auth import require_api_key
+from cns_api.config import get_store_path
 from cns_store.operating_knowledge_writer import (
     SignalGravityL2Enricher,
     get_okp_entity,
@@ -24,16 +25,6 @@ from cns_store.operating_knowledge_writer import (
 )
 
 router = APIRouter(prefix="/api/cns", tags=["operating_knowledge"])
-
-
-def _require_api_key(x_api_key: Optional[str]) -> None:
-    configured_key = get_api_key()
-    if not configured_key:
-        return
-    if not x_api_key or x_api_key != configured_key:
-        raise HTTPException(
-            status_code=401, detail="Invalid or missing X-Api-Key header"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +90,7 @@ def ingest_okp(
     Action, Connector, and Agent entities only when they exist. Then runs
     Signal Gravity L2 enrichment and returns the combined result.
     """
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     summary = ingest_okp_entity(db_path, okp_data=req.model_dump())
     gravity = SignalGravityL2Enricher.enrich(db_path, req.okp_id)
@@ -119,7 +110,7 @@ def get_okp(
     x_api_key: Optional[str] = Header(default=None),
 ) -> OKPEntityResponse:
     """Retrieve an OKP entity from the graph by okp_id."""
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     entity = get_okp_entity(db_path, okp_id)
     if entity is None:
@@ -145,7 +136,7 @@ def get_okp_proof_chain(
 
     CP-5 closed. proof_chain_version: v1-l2.
     """
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     entity = get_okp_entity(db_path, okp_id)
     if entity is None:
@@ -184,7 +175,7 @@ def get_okp_neighborhood_route(
     x_api_key: Optional[str] = Header(default=None),
 ) -> dict:
     """Return the OKP entity and all 1-hop neighbors (both directions)."""
-    _require_api_key(x_api_key)
+    require_api_key(x_api_key)
     db_path = get_store_path()
     result = get_okp_neighborhood(db_path, okp_id)
     if result.get("found") is False:

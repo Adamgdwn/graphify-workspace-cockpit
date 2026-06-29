@@ -11,6 +11,7 @@ Schema: gail-ai-operating-system-rev-2/contracts/json-schema/graph-fact.schema.j
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from typing import Any
 
 from cns_store.db import get_connection, init_db
@@ -361,7 +362,7 @@ def ingest_graph_fact(
     Returns a result dict:
       fact_id, status ("ingested" | "rejected"), ingestion_notes
     """
-    ts = ingest_timestamp or "2026-06-28T00:00:00Z"
+    ts = ingest_timestamp or datetime.now(timezone.utc).isoformat()
 
     ok, reason = validate_graph_fact(fact)
     if not ok:
@@ -400,7 +401,7 @@ def run_extraction(
     Initializes the store if needed. Returns a summary dict:
       total, ingested, rejected, results (per-fact list)
     """
-    ts = ingest_timestamp or "2026-06-28T00:00:00Z"
+    ts = ingest_timestamp or datetime.now(timezone.utc).isoformat()
     init_db(db_path)
 
     results: list[dict] = []

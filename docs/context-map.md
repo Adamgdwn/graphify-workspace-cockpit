@@ -25,6 +25,9 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 
 | Task | Load First |
 |---|---|
+| CNS API contract, write lanes, or Graphify integration boundaries | `docs/specs/2026-06-28 - Graphify CNS Connectome Contract.md` (20D) |
+| GAIL OS GraphFact extraction pipeline spec or accepted emitters | `docs/specs/2026-06-28 - GAIL Graph Fact Import Boundary.md` (20E) |
+| CNS endpoint list, query patterns, or SLA table | `docs/specs/2026-06-28 - Graphify Endpoint Family Map.md` |
 | Current plan, chunking, validation, or handoff | `docs/relationship-map-plan.md`; use `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence; use `docs/stabilization-plan.md` only for completed stabilization evidence; use `docs/current-build-pathway.md` only for archived build history |
 | Relationship map, physical connections, overlap, gaps, and decision overlay | `docs/relationship-map-plan.md` |
 | Workspace scope, folder tree selection, repo inclusion/exclusion, low-signal filtering, token-saving graph context | `docs/workspace-scope-and-signal-plan.md` |
