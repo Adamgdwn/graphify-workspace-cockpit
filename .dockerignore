@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.env
+.env.*
+workspace/
+graphify-out/
+tests/
+frontend/
+*.egg-info/
+node_modules/
+*.db
+*.sqlite
+archive/
