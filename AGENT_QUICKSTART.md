@@ -8,8 +8,8 @@ generated output or old pathway history.
 1. `git status --short`
 2. `AGENTS.md`
 3. `START_HERE.md` for material work or active-plan continuation
-4. `docs/session-handoff-2026-06-23.md` for the latest shutdown note
-5. `docs/relationship-map-plan.md` for the current slice
+4. `docs/session-handoff-2026-06-28.md` for the latest shutdown note
+5. `docs/2026-06-27 - next-phase-builder-wishlist.md` for Phase 3 priorities
 6. Only the files named by the selected chunk
 
 Use `docs/context-map.md` when routing is unclear. Use
@@ -42,18 +42,16 @@ checks.
 - Demo graph: committed fixture at `workspace/demo/graph.json`.
 - Generated repo graph: local-only `graphify-out/`, rebuilt with
   `graphify update . --no-cluster` when needed.
-- Current relationship-map state: Slices 1-5 are complete; the latest active
-  work is owner review and targeted UX tuning after the June 20 video shoot,
-  semantic actionability tightening, map-specific recommendations, scoped count
-  fixes, two-repo label/source metadata polish, and Map-local Semantic Analysis
-  run/rerun UX. Same-session polish fixed Workspace Scope Profile estimates so
-  default-ignored bulk no longer consumes the bounded file-count budget, raised
-  the Evidence cap to 15,000 visible nodes, and fixed excluded-parent scope
-  selections cancelling explicitly included child folders. Automatic graph
-  escalation is now drafted behind explicit env configuration: local Ollama
-  chooses `local` or `elevated`, then rebuild runs either `graphify update
-  --no-cluster` or configured `graphify extract --backend ... --no-cluster`.
-  Next useful step is owner verification against a broad real workspace scope.
+- Phase 2 CNS complete as of 2026-06-28: `cns_store/` + `cns_api/` live on
+  port 8001, GAIL OS GraphFact extraction pipeline (20E), 331/331 tests, all
+  SLAs satisfied. 5 critical bugs fixed in final sweep (depth=2 traversal,
+  store-info endpoint, mission/authority kind mismatches, undocumented 5th write
+  lane, hardcoded timestamps). `cns_api/auth.py` is now the shared auth module.
+- Next priorities (P1–P4): see `docs/2026-06-27 - next-phase-builder-wishlist.md`.
+  P1 (AG Operations base) is blocked on M365 sign-in/auth. P2 (EvidencePacket
+  feedback loop) can start independently.
+- Relationship-map (Map/UI): Slices 1-5 complete, owner-reviewed, video-ready.
+  Automatic graph escalation drafted behind explicit env configuration.
 
 ## Validation Defaults
 
