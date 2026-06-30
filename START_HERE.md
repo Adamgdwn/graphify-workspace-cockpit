@@ -1,7 +1,7 @@
 # Start Here
 
-Last Updated: 2026-06-28
-Status: Phase 2 CNS complete — 331 tests, CNS API live, GraphFact extraction pipeline shipped
+Last Updated: 2026-06-29
+Status: Graphify function acceleration plan active — Phase 2 CNS complete, speed/boundary reset documented
 Owner: Adam Goodwin
 
 ## Fast Startup
@@ -12,13 +12,35 @@ historical build log by default.
 
 1. Run `git status --short`.
 2. Read `AGENTS.md`.
-3. Read `docs/2026-06-27 - next-phase-builder-wishlist.md` for Phase 3 briefing and current priorities.
-4. For CNS contract or integration work, read `docs/specs/2026-06-28 - Graphify CNS Connectome Contract.md` (20D).
+3. For Graphify CNS/API/store/speed work, read `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`.
+4. Read `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md` before changing CNS boundaries, write lanes, context packets, or latency guarantees.
 5. For cockpit Map/UI or original backend work, read `docs/relationship-map-plan.md`.
-6. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
-7. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
-8. Open `docs/current-build-pathway.md` only when investigating old chunk
+6. Use `docs/2026-06-27 - next-phase-builder-wishlist.md` only as historical strategic framing; its pre-implementation write-path and gate statements are superseded by 2026-06-29 docs.
+7. Open `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence.
+8. Open `docs/stabilization-plan.md` only for completed stabilization evidence.
+9. Open `docs/current-build-pathway.md` only when investigating old chunk
    history, validation evidence, or regressions from the original 0-to-1 build.
+
+## State at Pause (2026-06-29)
+
+2026-06-29 Graphify function reset:
+- Graphify is the CNS relationship-transfer function: facts in, bounded
+  relationship memory, context packets out.
+- Graphify may write its own relationship memory through approved lanes, but it
+  may not approve, authorize, or execute actions.
+- Hot-path Graphify work must serve bounded packets, not full graphs,
+  extraction jobs, or LLM calls.
+- Active plan: `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`.
+- Boundary doctrine: `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`.
+
+Next priority for this repo:
+- GQ-0: land the planning reset and stale-doc routing cleanup.
+- GQ-1: align implemented endpoint/write-lane docs with current code.
+- GQ-2: design and implement the bounded hot context packet API for Freedom.
+
+Pre-existing governance note: `bash scripts/governance-preflight.sh` currently
+fails because required canonical docs are present with date-prefixed filenames
+while the validator expects undated aliases.
 
 ## State at Pause (2026-06-28)
 
@@ -31,7 +53,8 @@ Phase 2 CNS substrate is complete:
 
 CP-1 confirmed done (Freedom → GAIL OS POST /api/v1/actions). Next priority per wishlist:
 - P1: AG Operations base-stable (2 chunks remaining; blocked on M365 sign-in/auth)
-- P2: EvidencePacket feedback loop (wire runtime evidence back to Graphify)
+- P2: EvidencePacket and GraphFact feedback loop (now partially implemented;
+  use the 2026-06-29 plan before adding or widening write lanes)
 - P3: M365 entity ingestion into Graphify (after P1 stable)
 - P4: CNS repo migration (tracked debt, not blocking)
 
@@ -364,7 +387,9 @@ Open owner-review flags before future implementation:
 
 | What | Where |
 |------|-------|
-| Phase 3 briefing and current priorities | `docs/2026-06-27 - next-phase-builder-wishlist.md` |
+| Active Graphify CNS speed/function plan | `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` |
+| Graphify CNS function boundary doctrine | `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md` |
+| Historical Phase 3 briefing | `docs/2026-06-27 - next-phase-builder-wishlist.md` |
 | CNS API contract and approved write lanes | `docs/specs/2026-06-28 - Graphify CNS Connectome Contract.md` (20D) |
 | GAIL OS GraphFact extraction boundary | `docs/specs/2026-06-28 - GAIL Graph Fact Import Boundary.md` (20E) |
 | CNS endpoint family map | `docs/specs/2026-06-28 - Graphify Endpoint Family Map.md` |
@@ -383,8 +408,8 @@ Open owner-review flags before future implementation:
 
 1. `git status --short` — preserve unrelated work.
 2. Read `AGENTS.md` for current integration contracts.
-3. Read `docs/2026-06-27 - next-phase-builder-wishlist.md` for Phase 3 priority order.
-4. For CNS/integration work: load the relevant 20D or 20E spec from `docs/specs/`.
+3. For Graphify CNS/API/store/speed work: read `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`.
+4. For CNS boundary work: read `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`, then load the relevant 20D or 20E spec from `docs/specs/`.
 5. For Map/UI work: read `docs/relationship-map-plan.md`.
 6. Use `docs/context-map.md` if routing is still unclear.
 

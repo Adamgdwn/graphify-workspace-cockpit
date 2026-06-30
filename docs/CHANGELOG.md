@@ -6,6 +6,19 @@ changed, or fixed in that chunk.
 
 ---
 
+## Graphify Function Boundary And Speed Plan (2026-06-29)
+
+### Added
+- Active Graphify CNS speed/function plan:
+  `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`.
+- Boundary doctrine:
+  `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`.
+
+### Changed
+- Startup routing now sends CNS/API/store/speed work to the 2026-06-29 plan.
+- Older Phase 2/Phase 3 docs are marked as historical when they conflict with
+  implemented write lanes, GraphFact importer status, or the authority boundary.
+
 ## Frontend Production Bundle Serving (2026-06-26)
 
 ### Changed

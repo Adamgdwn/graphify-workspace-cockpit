@@ -1,8 +1,13 @@
 # Graphify Phase 2 — CNS Connectome Design
 
 **Date:** 2026-06-27
-**Status:** Architecture decisions locked — ready for Phase 2 implementation post CP-1
+**Status:** Historical Phase 2 design — implemented and superseded for active planning by 2026-06-29 docs
 **Context:** Written after Phase 0/1 complete. Decisions resolved 2026-06-27 (store, extraction frequency, graph size, cloud-first scope).
+
+> 2026-06-29 supersession note: this design remains useful architecture
+> evidence. Active Graphify CNS/API/store/speed planning now lives in
+> `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` and
+> `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`.
 
 ---
 
@@ -42,9 +47,15 @@ The analogy the user named is right: the human brain doesn't have a filing syste
 └─────────────────────┘
 ```
 
-**Design rule:** Extraction writes. API reads. No write path through the API in Phase 2. The only write path in Phase 2 is the extraction pipeline.
+**Historical Phase 2 design rule:** Extraction writes. API reads. No write path
+through the API in Phase 2. The only write path in Phase 2 was the extraction
+pipeline. Later approved relationship-memory write lanes are governed by the
+2026-06-29 doctrine and active plan.
 
-**Phase 3 addition (learning loop):** EvidencePackets feed back into the store — this is where the system becomes self-referential. After an action completes and an EvidencePacket is written, Graphify ingests the evidence and updates relationship weights / context. This is the "Learn" step in the CNS cycle.
+**Learning loop direction:** EvidencePackets and GraphFacts feed back into the
+store so the system becomes self-referential. After a governed event completes,
+Graphify can ingest the evidence and update relationship weights/context within
+its approved memory lanes. This is the "Learn" step in the CNS cycle.
 
 ---
 

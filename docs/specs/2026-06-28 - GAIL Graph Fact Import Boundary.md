@@ -2,9 +2,16 @@
 
 **Date:** 2026-06-28
 **Chunk:** 20E — GAIL OS + Graphify Safe Graph-Fact Extraction Lane
-**Status:** Boundary defined — import lane scoped for Phase 3 implementation
+**Status:** Boundary defined — importer implemented, extraction-only boundary still active
 **GAIL OS schema:** `gail-ai-operating-system-rev-2/contracts/json-schema/graph-fact.schema.json`
 **GAIL OS contract:** `gail-ai-operating-system-rev-2/docs/contracts/2026-06-28 - Graphify Fact Export Contract.md`
+
+> 2026-06-29 implementation note: `cns_store/gail_os_fact_importer.py` and
+> `tests/test_gail_os_fact_importer.py` now exist. This document remains the
+> boundary authority: GraphFact ingestion is extraction-pipeline only, not an
+> HTTP GraphFact write path. Use
+> `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` before changing
+> this lane.
 
 ---
 
@@ -82,9 +89,10 @@ Facts from any other source are rejected at the extraction boundary.
 
 ---
 
-## Ingestion Pipeline (Phase 3 Scope)
+## Ingestion Pipeline (Implemented After This Boundary)
 
-The Phase 3 implementation will add a Graphify extraction source for GAIL OS GraphFacts. The pipeline will:
+The implemented Graphify extraction source for GAIL OS GraphFacts follows this
+shape. Future changes should preserve the extraction-only boundary:
 
 1. Read `GraphFact` records from a GAIL OS output directory or queue (path to be defined in Phase 3)
 2. Validate each record against `graph-fact.schema.json`
@@ -112,7 +120,7 @@ Two CP-1 schemas from 20C are relevant to GraphFact ingestion:
 
 The 6 HTTP endpoints documented in `docs/specs/2026-06-28 - Graphify Endpoint Family Map.md` are all reads. None of them accept GraphFact records. The GraphFact import boundary is strictly an extraction pipeline concern.
 
-After Phase 3 ingestion runs:
+After GraphFact ingestion runs:
 - `GET /api/cns/entity/{entity_id}/mission-history` will return mission events ingested from GAIL OS GraphFacts
 - `GET /api/cns/entity/{entity_id}/neighborhood` will reflect relationships created by `relationship_observed` and `connector_registered` facts
 - `GET /api/cns/connector/{connector_id}/authority-chain` will reflect `authority_granted` facts
@@ -127,17 +135,20 @@ This document opens the path to G3-GPHY (see `agentic-multi-agent-agent-builder/
 
 **G3-GPHY is now OPEN** — both conditions satisfied by 20E.
 
-Phase 3 implementation still requires:
-- GAIL OS HTTP API live (G2-GAIL — Chunk 21) to trigger extraction from GAIL OS
-- Phase 3 extraction pipeline code in Graphify (`extraction/gail_os_facts.py` or equivalent)
-- Adam authorization for Phase 3 scope
+Current implementation note:
+- Graphify importer code exists in `cns_store/gail_os_fact_importer.py`.
+- Tests exist in `tests/test_gail_os_fact_importer.py`.
+- GraphFacts still have no HTTP payload write path.
+- Future changes still require active-plan authorization before widening the lane.
 
 ---
 
 ## Stop Condition (Confirmed)
 
-This document defines the import boundary only. No implementation code was added to Graphify by this document. No new endpoints added. No new write paths. Extraction-write / API-read rule preserved.
+This document defined the import boundary first. Implementation code was added
+later, but no HTTP GraphFact endpoint was added. Extraction-write / API-read
+for GraphFact payloads remains preserved.
 
 ---
 
-*Boundary status: Task complete. G3-GPHY gate opened by this document + GAIL OS graph-fact.schema.json. No live ingestion active. Phase 3 implementation is future scope.*
+*Boundary status: Task complete. G3-GPHY gate opened by this document + GAIL OS graph-fact.schema.json. Importer code now exists; GraphFact ingestion remains extraction-only.*

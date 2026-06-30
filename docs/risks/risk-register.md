@@ -2,13 +2,13 @@
 
 Document ID: RSK-REG-001
 Status: current
-Last Updated: 2026-06-15
+Last Updated: 2026-06-29
 
 ## Current Risk Classification
 
 - Tier: low (intentional owner override — governance_level:1 confirmed 2026-06-14)
 - Owner: Adam Goodwin
-- Last reviewed: 2026-06-15
+- Last reviewed: 2026-06-29
 
 ## Key Risks
 
@@ -22,3 +22,5 @@ Last Updated: 2026-06-15
 | R-006 | Token overlap causing redundant findings | High | Low | Ranking model weights build direction and decision value over raw token overlap; decision ledger suppresses already-classified items | Adam Goodwin | Open |
 | R-007 | Large graph freezing the frontend | Medium | Medium | Map renders at project/cluster level by default; file-level expansion on demand only; Cytoscape.js virtualization if needed | Adam Goodwin | Open |
 | R-008 | Secret committed to graph or state file | Low | High | .env and secret files excluded from graph indexing and workspace reads; no secret content in state files; use presence-only credential checks; pre-commit scan remains a recommended follow-up | Adam Goodwin | Open |
+| R-009 | Graphify boundary drift: either passive viewer or hidden authority layer | Medium | High | 2026-06-29 boundary doctrine; Graphify may write approved relationship memory but cannot approve, authorize, or execute actions; candidates must stay labelled as candidates | Adam Goodwin | Open |
+| R-010 | Graphify hot path becomes runtime ballast | Medium | High | Hot read plane forbids extraction, LLM calls, unbounded payloads, and full graph reads; active speed plan requires bounded context packets, freshness flags, and p95/payload validation | Adam Goodwin | Open |
