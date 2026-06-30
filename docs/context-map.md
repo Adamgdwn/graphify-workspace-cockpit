@@ -25,10 +25,11 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 
 | Task | Load First |
 |---|---|
-| CNS API contract, write lanes, or Graphify integration boundaries | `docs/specs/2026-06-28 - Graphify CNS Connectome Contract.md` (20D) |
+| Graphify CNS speed/function planning, hot-path context packets, or next chunks | `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` |
+| CNS API contract, write lanes, or Graphify integration boundaries | `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`, then `docs/specs/2026-06-28 - Graphify CNS Connectome Contract.md` (20D) |
 | GAIL OS GraphFact extraction pipeline spec or accepted emitters | `docs/specs/2026-06-28 - GAIL Graph Fact Import Boundary.md` (20E) |
 | CNS endpoint list, query patterns, or SLA table | `docs/specs/2026-06-28 - Graphify Endpoint Family Map.md` |
-| Current plan, chunking, validation, or handoff | `docs/relationship-map-plan.md`; use `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence; use `docs/stabilization-plan.md` only for completed stabilization evidence; use `docs/current-build-pathway.md` only for archived build history |
+| Current plan, chunking, validation, or handoff | `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` for CNS/API/store/speed work; `docs/relationship-map-plan.md` for Map/UI work; use `docs/workspace-scope-and-signal-plan.md` only for completed scope/signal evidence; use `docs/stabilization-plan.md` only for completed stabilization evidence; use `docs/current-build-pathway.md` only for archived build history |
 | Relationship map, physical connections, overlap, gaps, and decision overlay | `docs/relationship-map-plan.md` |
 | Workspace scope, folder tree selection, repo inclusion/exclusion, low-signal filtering, token-saving graph context | `docs/workspace-scope-and-signal-plan.md` |
 | Fast restart after clearing or compaction | `AGENT_QUICKSTART.md` |
@@ -39,7 +40,7 @@ Keep these files compact. They should route to durable docs, not duplicate them.
 | Durable implementation, design quality, testing discipline, or AI coding fundamentals | `docs/policy/durable-development-engineering-policy.md` |
 | Use-case controls, risk tier, governance level, or owner decisions | `docs/standards/engineering-governance-by-use-case.md` |
 | Completion labels, Definition of Shipped, release evidence, or finish reports | `docs/standards/ship-ready-engineering-standard.md` |
-| Phase 3 planning, cross-repo integration, or next-phase builder briefing | `docs/2026-06-27 - next-phase-builder-wishlist.md` — read before planning any Phase 3 or multi-repo work |
+| Historical Phase 3 framing or cross-repo integration background | `docs/2026-06-27 - next-phase-builder-wishlist.md` — historical after the 2026-06-29 boundary/speed reset |
 | Architecture decisions or system shape | `docs/2026-06-24 - architecture.md` and relevant ADRs |
 | Domain terms or naming | `docs/2026-06-15 - domain-language.md` |
 | Deployment, release, rollback, or environment changes | `docs/2026-06-24 - deployment-guide.md`, `docs/2026-06-26 - runbook.md`, and release standards |

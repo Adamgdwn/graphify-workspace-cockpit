@@ -13,6 +13,12 @@ Graphify is the CNS connectome. It is not a developer tool and not a product spo
 **Cross-machine role:** Linux cockpit = primary (query API, visualization, decision surface). Windows Enhanced Graphify = extraction node for Windows repos (GAIL OS Rev 2, M365 Foundation) that Linux cannot run natively. Single `graph.json` as source of truth, synced via GitHub. (DEC-005)
 
 **Phase 2 complete (2026-06-28).** CNS API live on port 8001. 331 tests passing.
+**2026-06-29 boundary reset:** Graphify is the relationship-transfer function
+for the CNS. It may write Graphify-owned relationship memory through approved
+lanes, but it must not become an authority, approval, or external execution
+layer. Read `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`
+and `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` before CNS
+API/store/speed work.
 
 What Phase 2 delivered:
 - `cns_store/` — SQLite store: entities, relationships, EvidencePackets, OKPs, CharterProfiles, StaleClaimCandidates
@@ -22,13 +28,18 @@ What Phase 2 delivered:
 - CP-5 closed: OKP proof-chain `v1-l2` covering GAIL OS L1 → Graphify L2 → Freedom brief
 
 **Integration contracts (live):**
-- Provides (GAIL OS): `GET /api/cns/validate-connector`, `GET /api/cns/entity-neighborhood`, `GET /api/cns/authority-chain`
-- Provides (Freedom): `GET /api/cns/entity-context`, `GET /api/cns/recent-mission-context`, `GET /api/cns/domain-mapping`
+- Provides (GAIL OS): `GET /api/cns/connector/{connector_id}/validate`, `GET /api/cns/entity/{entity_id}/neighborhood`, `GET /api/cns/connector/{connector_id}/authority-chain`
+- Provides (Freedom): `GET /api/cns/entity/{entity_id}/context`, `GET /api/cns/entity/{entity_id}/mission-history`, `GET /api/cns/entity/{entity_id}/domain`
 - Provides (write, API-key guarded): `/api/cns/evidence`, `/api/cns/okp`, `/api/cns/charters`, `/api/cns/charters/{id}/execute`, `/api/cns/admin/ingest`
 - Provides (admin): `GET /api/cns/admin/store-info`, `GET /api/cns/admin/ingest/{job_id}`
 - Consumes (extraction): GAIL OS GraphFacts via `cns_store/gail_os_fact_importer.run_extraction()` — no HTTP path for GraphFact payloads
 
-**Authority boundary:** Graphify provides read-only context. Graphify recommendations are mission candidates, not execution approval. Graphify may not approve or execute actions — that is GAIL OS jurisdiction.
+**Authority boundary:** Graphify provides bounded relationship intelligence.
+It is read-only with respect to CNS authority and external side effects, but it
+is allowed to update its own graph memory through the approved write lanes
+above. Graphify recommendations and stale-claim outputs are candidates, not
+execution approval. Graphify may not approve or execute actions — that is GAIL
+OS jurisdiction.
 
 For cross-repo coordination state, see `agentic-multi-agent-agent-builder/docs/build-control/`.
 
@@ -56,7 +67,7 @@ Do not turn `START_HERE.md`, pathway docs, governance standards, Graphify, plugi
 Before making material or risk-triggering code or configuration changes in this repository:
 
 1. read `START_HERE.md`
-2. review the active plan named in `START_HERE.md` (currently `docs/relationship-map-plan.md`; `docs/workspace-scope-and-signal-plan.md`, `docs/stabilization-plan.md`, and `docs/current-build-pathway.md` are archived)
+2. review the active plan named in `START_HERE.md` (for Graphify CNS/API/store/speed work, `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`; for Map/UI relationship-map work, `docs/relationship-map-plan.md`; `docs/workspace-scope-and-signal-plan.md`, `docs/stabilization-plan.md`, and `docs/current-build-pathway.md` are archived)
 3. review `docs/standards/README.md`
 4. review `docs/standards/engineering-governance-by-use-case.md`
 5. review `docs/policy/durable-development-engineering-policy.md`

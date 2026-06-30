@@ -8,9 +8,10 @@ generated output or old pathway history.
 1. `git status --short`
 2. `AGENTS.md`
 3. `START_HERE.md` for material work or active-plan continuation
-4. `docs/session-handoff-2026-06-28.md` for the latest shutdown note
-5. `docs/2026-06-27 - next-phase-builder-wishlist.md` for Phase 3 priorities
-6. Only the files named by the selected chunk
+4. `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` for CNS/API/store/speed work
+5. `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md` for boundary or write-lane work
+6. `docs/session-handoff-2026-06-28.md` only when investigating that shutdown note
+7. Only the files named by the selected chunk
 
 Use `docs/context-map.md` when routing is unclear. Use
 `docs/workspace-scope-and-signal-plan.md` only for completed workspace scope
@@ -47,9 +48,10 @@ checks.
   SLAs satisfied. 5 critical bugs fixed in final sweep (depth=2 traversal,
   store-info endpoint, mission/authority kind mismatches, undocumented 5th write
   lane, hardcoded timestamps). `cns_api/auth.py` is now the shared auth module.
-- Next priorities (P1–P4): see `docs/2026-06-27 - next-phase-builder-wishlist.md`.
-  P1 (AG Operations base) is blocked on M365 sign-in/auth. P2 (EvidencePacket
-  feedback loop) can start independently.
+- Active CNS/API/store/speed priorities: see
+  `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`.
+  The older next-phase wishlist is historical strategic framing and should not
+  override the 2026-06-29 boundary/speed reset.
 - Relationship-map (Map/UI): Slices 1-5 complete, owner-reviewed, video-ready.
   Automatic graph escalation drafted behind explicit env configuration.
 

@@ -402,6 +402,11 @@ import_graph("graphify-out/merged-graph.json", "/path/to/cns.db")
 
 Speed SLAs verified: all 6 query patterns p95 < 0.3ms on 12,687-node workspace graph.
 
+For current CNS boundary and speed planning, start with
+[`docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`](docs/2026-06-29%20-%20Graphify%20Quantum%20Speed%20Execution%20Plan.md)
+and
+[`docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`](docs/specs/2026-06-29%20-%20Graphify%20Function%20Boundary%20And%20Speed%20Doctrine.md).
+
 See [`docs/specs/2026-06-27 - phase2-cns-connectome-design.md`](docs/specs/2026-06-27%20-%20phase2-cns-connectome-design.md) for the full spec.
 
 ---
@@ -409,6 +414,8 @@ See [`docs/specs/2026-06-27 - phase2-cns-connectome-design.md`](docs/specs/2026-
 ## Documentation
 
 - [docs/2026-06-24 - architecture.md](docs/2026-06-24 - architecture.md) — component map, data flow, state layout
+- [docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md](docs/2026-06-29%20-%20Graphify%20Quantum%20Speed%20Execution%20Plan.md) — active CNS/API/store/speed plan
+- [docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md](docs/specs/2026-06-29%20-%20Graphify%20Function%20Boundary%20And%20Speed%20Doctrine.md) — current Graphify CNS function boundary and hot-path speed doctrine
 - [docs/relationship-map-plan.md](docs/relationship-map-plan.md) — active relationship-map plan
 - [docs/workspace-scope-and-signal-plan.md](docs/workspace-scope-and-signal-plan.md) — completed workspace scope and signal history
 - [docs/stabilization-plan.md](docs/stabilization-plan.md) — completed hosted-beta stabilization evidence

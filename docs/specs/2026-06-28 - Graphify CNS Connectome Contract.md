@@ -2,9 +2,17 @@
 
 **Date:** 2026-06-28
 **Chunk:** 20D — Graphify CNS Connectome Contract Normalization
-**Status:** Contract complete — Phase 2 implementation active
+**Status:** Contract complete — updated by 2026-06-29 boundary/speed doctrine
 **Port:** 8001 (configurable via `CNS_API_PORT`)
 **Related schemas:** `graph-context-ref.schema.json`, `source-ref.schema.json` (GAIL OS `contracts/json-schema/`)
+
+> 2026-06-29 boundary note: Graphify is allowed to write Graphify-owned
+> relationship memory through approved lanes, but it remains non-authoritative
+> for approval and external execution. "Read-only context" means read-only with
+> respect to CNS authority and external side effects, not that the Graphify
+> store is passive. For active planning, read
+> `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`
+> and `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`.
 
 ---
 
@@ -28,7 +36,7 @@ The analogy is a **rail system** or **electrical grid**: Freedom and GAIL OS are
                        ▼
 ┌───────────────────────────────────────────────────────┐
 │           Graphify — Connectome / Relationship Field   │
-│   6 core read-only endpoints + 4 approved write lanes │
+│   6 core read endpoints + 5 approved HTTP write lanes │
 │   SQLite store (12,687 entities, 19,477 relationships) │
 │   p50 per query: 0.1–0.2ms (all SLAs satisfied)       │
 └──────────────────────┬───────────────────────────────-┘
@@ -45,7 +53,7 @@ The analogy is a **rail system** or **electrical grid**: Freedom and GAIL OS are
 
 ## Authority Boundary (Hard Rule)
 
-**Graphify provides read-only context. Graphify has no approval authority. Graphify has no execution authority.**
+**Graphify provides bounded relationship intelligence. Graphify has no approval authority. Graphify has no external execution authority.**
 
 | What Graphify CAN do | What Graphify CANNOT do |
 |---|---|
@@ -61,17 +69,23 @@ The canonical statement from AGENTS.md:
 
 ---
 
-## Extraction-Write / API-Read Boundary
+## Hot Read / Guarded Memory Write Boundary
 
-This is the fundamental Graphify design rule. It must be preserved as Phase 2 evolves into Phase 3.
+This is the fundamental Graphify design rule after the approved write lanes:
+hot relationship reads stay bounded and fast; store-internal writes happen only
+through named, guarded lanes.
 
 ```
-Extraction pipeline  →  WRITES  →  CNS Store (SQLite)
-HTTP API             ←  READS   ←  CNS Store (SQLite)
-                     ↑  WRITES (approved lanes only — see table below)
+Extraction pipeline      -> WRITES  -> CNS Store (SQLite)
+HTTP hot read endpoints  <- READS   <- CNS Store (SQLite)
+HTTP approved lanes      -> WRITES  -> CNS Store (SQLite)
 ```
 
-**Five approved write lanes exist.** Four are HTTP endpoints (all API-key protected when `CNS_API_KEY` is set, all upsert semantics, no placeholder entities, relationship edges only to existing entities). One is the extraction pipeline only — no HTTP path.
+**Five approved HTTP write lanes exist.** They are API-key protected when
+`CNS_API_KEY` is set. Entity/event lanes use upsert semantics, do not create
+placeholder target entities, and create relationship edges only to existing
+entities. GraphFact ingestion remains extraction-pipeline only — no HTTP
+GraphFact payload path.
 
 | Lane | Endpoint / Path | Entity Kind | Notes |
 |---|---|---|---|
@@ -170,4 +184,4 @@ Build: `docker build -f Dockerfile.cns-api -t graphify-cns-api .`
 
 ---
 
-*Contract status: Updated 2026-06-28 post Chunks 5.4/5.7/6.2/6.5. Four approved write lanes documented (EvidencePacket, OKP, Charter, stale-claim executor). API key guard applied to all write lanes. GraphFact extraction boundary unchanged (extraction pipeline only). Authority boundary enforced. CP-5 closed.*
+*Contract status: Updated 2026-06-29 for boundary/speed doctrine. Five approved HTTP write lanes documented (EvidencePacket, OKP, Charter, stale-claim executor, admin ingest). API key guard applies when `CNS_API_KEY` is set. GraphFact extraction boundary unchanged (extraction pipeline only). Authority boundary enforced. CP-5 closed.*

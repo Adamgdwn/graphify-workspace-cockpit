@@ -2,9 +2,17 @@
 
 **Date:** 2026-06-28
 **Chunk:** 20D — Graphify CNS Connectome Contract Normalization
-**Status:** Map complete — Phase 2 surface locked
+**Status:** Historical Phase 2 read-family map — superseded for current write-lane planning by 2026-06-29 docs
 **Base URL:** `http://localhost:8001` (or `$CNS_API_HOST:$CNS_API_PORT`)
-**All endpoints:** GET (read-only). No POST, PUT, PATCH, DELETE in Phase 2.
+**Original Phase 2 note:** all six read-family endpoints are GET.
+
+> 2026-06-29 supersession note: this document remains the read-family map for
+> the six hot query endpoints. It is not the full current CNS API surface.
+> Approved guarded write lanes now exist for Graphify-owned relationship memory:
+> EvidencePacket, OKP, CharterProfile, stale-claim execution, and admin ingest.
+> GraphFact payloads remain extraction-only. Use
+> `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` for active
+> endpoint planning.
 
 ---
 
@@ -18,7 +26,9 @@ The 6 CNS API endpoints on port 8001 map into three families:
 | **Freedom Context Family** | 3 | Freedom | Pre-proposal context enrichment |
 | **Shared Infrastructure** | Health + Admin | Both | Service health and store info |
 
-All 6 endpoints are read-only. The CNS store is written only by the extraction pipeline.
+All 6 read-family endpoints are read-only. The CNS store also has approved,
+guarded write lanes documented in the 2026-06-29 plan and the updated 20D
+contract notes.
 
 ---
 
@@ -315,17 +325,20 @@ Returns store statistics: entity count, relationship count, last extraction time
 
 ---
 
-## Write Boundary Enforcement
+## Write Boundary Enforcement For This Read-Family Map
 
-No endpoint in this map creates or modifies store records. The one-writer rule applies:
+No endpoint in the six-endpoint read family creates or modifies store records.
+That statement is about this map, not the full current CNS API surface.
 
 | Write surface | Writer |
 |---|---|
-| CNS store (entities + relationships) | Extraction pipeline only |
-| EvidencePacket ingestion (Phase 3) | GAIL OS → extraction pipeline (not API) |
+| Six read-family endpoints | No writes |
+| GraphFact payloads | Extraction pipeline only |
+| Approved store-internal relationship-memory lanes | See 2026-06-29 plan |
 
-Any code change that adds a write path through the HTTP API violates the Graphify extraction-write / API-read contract and must be reviewed as an architectural exception.
+Any code change that adds a new write path beyond the approved lanes must be
+reviewed as an architectural exception.
 
 ---
 
-*Map status: Task complete. 6 endpoints in 2 consumer families + shared infrastructure. No new write paths. Extraction-write / API-read rule preserved.*
+*Map status: Task complete. 6 read endpoints in 2 consumer families + shared infrastructure. Full current API surface is governed by the 2026-06-29 plan.*

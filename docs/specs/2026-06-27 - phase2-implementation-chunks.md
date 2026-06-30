@@ -1,9 +1,13 @@
 # Graphify Phase 2 — Implementation Chunk Plan
 
 **Date:** 2026-06-27
-**Status:** Execution ready — loop begins at Chunk P0
+**Status:** Historical Phase 2 implementation plan — completed/superseded for active planning
 **Parent spec:** `docs/specs/2026-06-27 - phase2-cns-connectome-design.md`
 **Loop discipline:** read → execute → update docs → hardness test → commit → compact → 10s pause → next chunk
+
+> 2026-06-29 supersession note: this file is retained as Phase 2 execution
+> history. Active Graphify CNS/API/store/speed planning lives in
+> `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md`.
 
 ---
 

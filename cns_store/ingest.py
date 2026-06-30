@@ -2,7 +2,8 @@
 Extraction write path for the CNS store.
 
 Runs graphify extraction on a source path and imports the resulting graph
-into the SQLite store. This is the only write path in Phase 2.
+into the SQLite store. This was the only write path in Phase 2 and remains the
+admin extraction lane after later approved relationship-memory write lanes.
 
 Caller is responsible for not running concurrent extractions on the same
 db_path — SQLite WAL mode is safe for concurrent reads but extraction is

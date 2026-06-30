@@ -1,16 +1,24 @@
 # Next-Phase Builder Wish List
 **Date:** 2026-06-27
 **For:** Agentic multi-agent agent builder — first probe of this repo post Phase 2
-**Status:** Standing brief — read before planning Phase 3 or any cross-repo work
+**Status:** Historical strategic brief — superseded for active Graphify CNS execution by 2026-06-29 plan
+
+> 2026-06-29 supersession note: keep this document's core framing that Graphify
+> is foundational relationship infrastructure. Do not use its pre-implementation
+> statements about CP-1, first write paths, or future GraphFact ingestion as
+> current truth. For active Graphify CNS/API/store/speed work, read
+> `docs/2026-06-29 - Graphify Quantum Speed Execution Plan.md` and
+> `docs/specs/2026-06-29 - Graphify Function Boundary And Speed Doctrine.md`.
 
 ---
 
 ## Read This First
 
 This document is a wish list and strategic brief from the architect who completed
-Phase 2. Before you plan or execute any Phase 3 work, internalize the framing
-here. Getting Graphify's role wrong at the start of Phase 3 planning will
-propagate incorrect assumptions into every subsequent chunk.
+Phase 2. Before you plan or execute new CNS work, use the 2026-06-29 plan as
+the active route and use this file only for strategic background. Getting
+Graphify's role wrong at planning time will propagate incorrect assumptions
+into every subsequent chunk.
 
 ---
 
@@ -136,11 +144,14 @@ Complete the 2 remaining AG Operations chunks. Only then plan M365 integration
 inputs/outputs. Do not guess the interface before the base is stable.
 
 ### P2 — Phase 3 EvidencePacket Feedback Loop
-After CP-1 is closed, wire EvidencePackets back into the Graphify store. This
-is the "Learn" step. The write path through the API (explicitly excluded in
-Phase 2) opens here. Design it carefully — this is the first write path in
-the API layer and the first place the store grows from runtime behavior, not
-just extraction.
+Historical 2026-06-27 wording: after CP-1 is closed, wire EvidencePackets back
+into the Graphify store as the "Learn" step.
+
+2026-06-29 correction: EvidencePacket, OKP, charter, stale-claim, and admin
+ingest write lanes now exist, and the GraphFact importer is implemented as an
+extraction-only lane. Future work should not "open the first write path." It
+should tighten the approved relationship-memory lanes, preserve authority
+boundaries, and keep writes out of the hot context read plane.
 
 ### P3 — M365 Entity Ingestion into Graphify
 After AG Operations is base-stable, extend Graphify's extraction to reach M365
